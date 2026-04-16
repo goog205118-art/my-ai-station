@@ -182,12 +182,10 @@
         .img-slot span { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
         .img-slot .material-symbols-outlined { font-size: 18px; color: var(--text-sub); }
         
-        /* 聚合卡片外观调整：溢出隐藏移除，以显示重叠边缘 */
         .img-slot.has-img { border: none; background: transparent; }
         .img-slot img { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; z-index: 1; display: none; border-radius: 8px;}
         .img-slot.has-img img { display: block; border: 1px solid var(--border); }
         
-        /* 数量角标 */
         .count-badge { 
             position: absolute; bottom: -6px; right: -6px; 
             background: white; color: black; border-radius: 50%; 
@@ -204,7 +202,6 @@
         }
         .img-slot.has-img .remove-badge { display: flex; }
 
-        /* 隐藏的原生 input */
         .hidden-input { display: none; }
 
         /* ==========================================
@@ -251,7 +248,6 @@
         }
         .ref-add-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-main); }
 
-        /* 文本输入域 */
         .prompt-input {
             flex: 1;
             background: transparent;
@@ -265,7 +261,7 @@
         .prompt-input:focus { outline: none; }
         .prompt-input::placeholder { color: #666; }
 
-        /* 底部操作栏 (药丸菜单 + 发送按钮) */
+        /* 底部操作栏 */
         .console-actions-row { display: flex; justify-content: space-between; align-items: center; padding-top: 4px;}
         
         .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -285,6 +281,14 @@
         }
         .action-pill:hover { background: rgba(255,255,255,0.15); }
         .action-pill select { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        
+        /* 针对 Seed 输入框的特殊去除默认上下箭头样式 */
+        .seed-input-field::-webkit-outer-spin-button,
+        .seed-input-field::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .seed-input-field[type=number] { -moz-appearance: textfield; }
 
         .submit-btn {
             background: var(--text-main);
@@ -402,6 +406,11 @@
                         <option value="zoom_in">推进</option>
                     </select>
                 </div>
+
+                <div class="action-pill" style="cursor: text; padding-right: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">tag</span>
+                    <input type="number" id="seed-input" class="seed-input-field" placeholder="随机种子 (0 为随机)" style="background:transparent; border:none; color:var(--text-main); width: 110px; font-size: 12px; outline:none;">
+                </div>
             </div>
 
             <button class="submit-btn" id="generate-btn" onclick="submitTask()">
@@ -415,9 +424,9 @@
         // ⚙️ API 与状态管理
         // ==========================================
         
-        // 替换为你最新的 ngrok 公网地址
-        const API_SUBMIT = 'https://assessments-utc-action-valley.trycloudflare.com/webhook/proxy-submit'; 
-        const API_POLL = 'https://assessments-utc-action-valley.trycloudflare.com/webhook/proxy-poll';     
+        // ✨ 已自动替换为你最新的 Cloudflare 穿透地址 (端口 5679)
+        const API_SUBMIT = 'https://jack-neil-lewis-sharing.trycloudflare.com/webhook/proxy-submit'; 
+        const API_POLL = 'https://jack-neil-lewis-sharing.trycloudflare.com/webhook/proxy-poll';     
 
         let payloadState = {
             aspectRatio: '9:16', 
@@ -599,6 +608,7 @@
         // ==========================================
         async function submitTask() {
             const prompt = document.getElementById('prompt-input').value.trim();
+            const seedInput = document.getElementById('seed-input').value.trim();
             const btn = document.getElementById('generate-btn');
 
             if (!prompt) return alert('请填写提示词');
@@ -617,26 +627,25 @@
                 submitLast = payloadState.lastFrame;
             }
 
+            // 处理 Seed 逻辑 (如果为空或者 0，则传 null 让大模型自己随机)
+            const seedValue = (seedInput && seedInput !== '0') ? parseInt(seedInput, 10) : null;
+
             const payload = {
                 prompt: prompt,
                 model: payloadState.model,
                 aspectRatio: payloadState.aspectRatio,
                 duration: '8s', 
                 cameraMotion: payloadState.cameraMotion,
-                seed: null,     
+                seed: seedValue,     
                 firstFrame: submitFirst,
                 lastFrame: submitLast,
                 references: submitRef
             };
 
             try {
-                // 加入了 ngrok-skip-browser-warning 请求头以绕过免费版 ngrok 拦截
                 const response = await fetch(API_SUBMIT, { 
                     method: 'POST', 
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'ngrok-skip-browser-warning': 'true'
-                    }, 
+                    headers: { 'Content-Type': 'application/json' }, 
                     body: JSON.stringify(payload) 
                 });
                 const data = await response.json();
@@ -660,13 +669,7 @@
             const poll = async () => {
                 attempts++;
                 try {
-                    // 加入了 ngrok-skip-browser-warning 请求头以绕过免费版 ngrok 拦截
-                    const response = await fetch(`${API_POLL}?taskId=${taskId}`, {
-                        method: 'GET',
-                        headers: {
-                            'ngrok-skip-browser-warning': 'true'
-                        }
-                    });
+                    const response = await fetch(`${API_POLL}?taskId=${taskId}`);
                     const data = await response.json();
                     if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
                     if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);

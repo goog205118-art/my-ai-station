@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 视频创作台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            --google-blue: #0b57d0;
+            --google-blue-hover: #0842a0;
+            --google-blue-bg: #d3e3fd;
+            --surface: #ffffff;
+            --bg: #f3f6fc;
+            --border: #c4c7c5;
+            --text-main: #1f1f1f;
+            --text-sub: #444746;
+            --radius: 16px;
+            --radius-sm: 8px;
+            --shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Google Sans', -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 24px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-left: 8px;
+        }
+
+        .top-bar .logo-icon {
+            font-size: 32px;
+            color: var(--google-blue);
+        }
+
+        .top-bar h1 {
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--text-sub);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 24px;
+            height: calc(100vh - 100px);
+        }
+
+        @media (max-width: 1024px) {
+            .layout {
+                grid-template-columns: 1fr;
+                height: auto;
+                overflow-y: auto;
+            }
+
+            body {
+                overflow: auto;
+            }
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .card::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .card::-webkit-scrollbar-thumb {
+            background: #dadce0;
+            border-radius: 4px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+        }
+
+        .section-title .material-symbols-outlined {
+            font-size: 20px;
+            color: var(--google-blue);
+        }
+
+        /* Material 3 表单控件 */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-main);
+        }
+
+        .md-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 15px;
+            background: var(--surface);
+            transition: all 0.2s;
+            color: var(--text-main);
+        }
+
+        .md-input:focus {
+            outline: none;
+            border-color: var(--google-blue);
+            border-width: 2px;
+            padding: 13px 15px;
+        }
+
+        textarea.md-input {
+            resize: vertical;
+            min-height: 100px;
+            line-height: 1.6;
+        }
+
+        /* 药丸选择器 (Chips) */
+        .chip-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-sub);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .chip:hover {
+            background: #f0f4f9;
+        }
+
+        .chip.active {
+            background: var(--google-blue-bg);
+            color: var(--google-blue);
+            border-color: var(--google-blue-bg);
+        }
+
+        .chip .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        /* 单图上传区 (首尾帧) */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .upload-box {
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            background: #f8f9fa;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 110px;
+            overflow: hidden;
+        }
+
+        .upload-box:hover {
+            background: #f0f4f9;
+            border-color: var(--google-blue);
+        }
+
+        .upload-box .material-symbols-outlined {
+            font-size: 28px;
+            color: var(--text-sub);
+            margin-bottom: 4px;
+        }
+
+        .upload-box span {
+            font-size: 13px;
+            color: var(--text-sub);
+            font-weight: 500;
+            z-index: 2;
+            background: rgba(248, 249, 250, 0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .upload-box img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        .upload-box input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 3;
+        }
+
+        .img-actions {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 4;
+            display: none;
+        }
+
+        .upload-box.has-img .img-actions {
+            display: block;
+        }
+
+        .action-btn {
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+
+        .action-btn .material-symbols-outlined {
+            font-size: 16px;
+            color: white;
+            margin: 0;
+        }
+
+        /* 多图参考区 */
+        .ref-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .ref-item {
+            width: 72px;
+            height: 72px;
+            border-radius: var(--radius-sm);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .ref-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .ref-item .action-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 22px;
+            height: 22px;
+        }
+
+        .ref-item .action-btn .material-symbols-outlined {
+            font-size: 14px;
+        }
+
+        .add-ref-btn {
+            width: 72px;
+            height: 72px;
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: #f8f9fa;
+            color: var(--text-sub);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .add-ref-btn:hover {
+            background: #f0f4f9;
+            border-color: var(--google-blue);
+            color: var(--google-blue);
+        }
+
+        .add-ref-btn input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* FAB 主按钮 */
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--google-blue);
+            color: white;
+            border: none;
+            border-radius: 100px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            background: var(--google-blue-hover);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .submit-btn:disabled {
+            background: #e3e3e3;
+            color: #a8a8a8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* 右侧展示区 */
+        .stage-card {
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .player-wrapper {
+            width: 100%;
+            background: #000;
+            aspect-ratio: 16/9;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #main-player {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-sub);
+        }
+
+        .empty-state .material-symbols-outlined {
+            font-size: 64px;
+            font-weight: 200;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .dashboard-area {
+            padding: 24px;
+            flex: 1;
+            overflow-y: auto;
+            background: var(--surface);
+        }
+
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .task-item {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            display: flex;
+            gap: 16px;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: var(--surface);
+        }
+
+        .task-item:hover {
+            background: #f8f9fa;
+            border-color: #a8c7fa;
+        }
+
+        .task-thumb {
+            width: 90px;
+            height: 60px;
+            border-radius: 4px;
+            background: #e1e3e1;
+            object-fit: cover;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .task-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .task-prompt {
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+
+        .task-meta {
+            font-size: 12px;
+            color: var(--text-sub);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-pill {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-pill.processing {
+            background: #e8f0fe;
+            color: #1967d2;
+        }
+
+        .status-pill.processing::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #1967d2;
+            animation: blink 1s infinite;
+        }
+
+        .status-pill.success {
+            background: #e6f4ea;
+            color: #137333;
+        }
+
+        .status-pill.failed {
+            background: #fce8e6;
+            color: #c5221f;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        /* 折叠面板 (高级设置) */
+        .accordion {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-sub);
+            padding: 12px 0;
+            border-top: 1px solid var(--border);
+            margin-top: 12px;
+        }
+
+        .accordion-content {
+            display: none;
+            padding-top: 12px;
+        }
+
+        .accordion.active+.accordion-content {
+            display: block;
+        }
+
+        .floating-download {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: var(--surface);
+            color: var(--google-blue);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow);
+            transition: all 0.2s;
+            display: none;
+            cursor: pointer;
+        }
+
+        .floating-download:hover {
+            background: #f0f4f9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="top-bar">
+        <span class="material-symbols-outlined logo-icon">movie_edit</span>
+        <h1>AI 创作台</h1>
+    </div>
+
+    <div class="layout">
+        <div class="card">
+            <h2 class="section-title"><span class="material-symbols-outlined">tune</span> 生成设置</h2>
+
+            <div class="form-group">
+                <label class="label">模型配置</label>
+                <select id="model-select" class="md-input" style="padding: 12px 16px;">
+                    <option value="veo_3_1_fast">Veo 3.1 Fast </option>
+                    <option value="veo_3_1_hq">Veo 3.1 Fast 4K</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="label">画面描述 (Prompt)</label>
+                <textarea id="prompt-input" class="md-input" placeholder="请详细描述画面的主体、动作、环境光影及镜头质感..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="label" style="display: flex; justify-content: space-between;">
+                    <span>风格参考图 (最高支持 3 张)</span>
+                    <span style="font-size: 12px; color: var(--text-sub); font-weight: normal;">可选</span>
+                </label>
+                <div class="ref-container" id="ref-container">
+                    <div class="add-ref-btn" id="add-ref-label">
+                        <span class="material-symbols-outlined">add_photo_alternate</span>
+                        <input type="file" accept="image/*" multiple onchange="handleMultiImages(this)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="label">画面比例</label>
+                <div class="chip-group" id="ratio-group">
+                    <div class="chip active" data-val="16:9"><span class="material-symbols-outlined">crop_16_9</span>
+                        16:9 </div>
+                    <div class="chip" data-val="9:16"><span class="material-symbols-outlined">crop_portrait</span> 9:16
+                        </div>
+                    <div class="chip" data-val="1:1"><span class="material-symbols-outlined">crop_square</span> 1:1 
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="label">视频时长</label>
+                <div class="chip-group" id="duration-group">
+                    <div class="chip active" data-val="4s"><span class="material-symbols-outlined">timer</span> 4 秒
+                    </div>
+                    <div class="chip" data-val="8s"><span class="material-symbols-outlined">timer</span> 8 秒</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="label">结构控制帧 (首尾帧)</label>
+                <div class="upload-grid">
+                    <div class="upload-box" id="box-first">
+                        <span class="material-symbols-outlined">image</span>
+                        <span id="label-first">首帧画面</span>
+                        <input type="file" accept="image/*" onchange="handleImage(this, 'firstFrame')">
+                        <img id="img-first" style="display:none;">
+                        <div class="img-actions">
+                            <button class="action-btn" onclick="clearImage(event, 'firstFrame')">
+                                <span class="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="upload-box" id="box-last">
+                        <span class="material-symbols-outlined">add_photo_alternate</span>
+                        <span id="label-last">尾帧画面</span>
+                        <input type="file" accept="image/*" onchange="handleImage(this, 'lastFrame')">
+                        <img id="img-last" style="display:none;">
+                        <div class="img-actions">
+                            <button class="action-btn" onclick="clearImage(event, 'lastFrame')">
+                                <span class="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion" onclick="toggleAccordion(this)">
+                <span>高级控制选项</span>
+                <span class="material-symbols-outlined" style="transition: transform 0.2s;">expand_more</span>
+            </div>
+            <div class="accordion-content">
+                <div class="form-group">
+                    <label class="label">镜头运动 (运镜)</label>
+                    <select id="camera-select" class="md-input" style="padding: 10px 14px;">
+                        <option value="none">自动 / 无</option>
+                        <option value="pan_left">向左平移 (Pan Left)</option>
+                        <option value="pan_right">向右平移 (Pan Right)</option>
+                        <option value="zoom_in">推进放大 (Zoom In)</option>
+                        <option value="zoom_out">拉远缩小 (Zoom Out)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="label">随机种子 (Seed)</label>
+                    <input type="number" id="seed-input" class="md-input" placeholder="输入固定 Seed 值以锁定画面风格">
+                </div>
+            </div>
+
+            <button class="submit-btn" id="generate-btn" onclick="submitTask()">
+                <span class="material-symbols-outlined">auto_awesome</span> 提交生成任务
+            </button>
+        </div>
+
+        <div class="stage-card">
+            <div class="player-wrapper" id="player-container">
+                <div class="empty-state" id="empty-state">
+                    <span class="material-symbols-outlined">video_library</span>
+                    <p>您生成的视频将在此处预览</p>
+                </div>
+                <video id="main-player" controls autoplay loop></video>
+                <div class="floating-download" id="download-btn">
+                    <span class="material-symbols-outlined">download</span> 保存视频
+                </div>
+            </div>
+
+            <div class="dashboard-area">
+                <h2 class="section-title"><span class="material-symbols-outlined">history</span> 生成记录</h2>
+                <div class="task-list" id="task-dashboard">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // ⚙️ API 接口配置
+        // ==========================================
+        const API_SUBMIT = '/api/proxy-submit';
+        const API_POLL = '/api/proxy-poll';
+
+        // ==========================================
+        // 🗃️ 状态管理 (包含新增的参考图数组)
+        // ==========================================
+        let payloadState = {
+            aspectRatio: '16:9',
+            duration: '4s',
+            firstFrame: null,
+            lastFrame: null,
+            references: [] // 新增：风格参考图存储
+        };
+
+        // 初始化交互绑定
+        document.addEventListener('DOMContentLoaded', () => {
+            bindChipGroup('ratio-group', 'aspectRatio');
+            bindChipGroup('duration-group', 'duration');
+            renderDashboard();
+            resumeActivePolls();
+        });
+
+        function bindChipGroup(groupId, stateKey) {
+            document.querySelectorAll(`#${groupId} .chip`).forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const target = e.currentTarget;
+                    document.querySelectorAll(`#${groupId} .chip`).forEach(b => b.classList.remove('active'));
+                    target.classList.add('active');
+                    payloadState[stateKey] = target.getAttribute('data-val');
+                });
+            });
+        }
+
+        function toggleAccordion(el) {
+            el.classList.toggle('active');
+            const icon = el.querySelector('.material-symbols-outlined');
+            icon.style.transform = el.classList.contains('active') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+
+        // ==========================================
+        // 🖼️ 图像处理逻辑 (前端自动压缩)
+        // ==========================================
+        async function compressImage(file, maxWidth = 1280) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ratio = Math.min(maxWidth / img.width, 1);
+                        canvas.width = img.width * ratio;
+                        canvas.height = img.height * ratio;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+                };
+            });
+        }
+
+        // 首尾帧单图处理
+        async function handleImage(input, type) {
+            if (!input.files[0]) return;
+            const base64 = await compressImage(input.files[0]);
+            payloadState[type] = base64;
+
+            const typeStr = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`img-${typeStr}`).src = base64;
+            document.getElementById(`img-${typeStr}`).style.display = 'block';
+            document.getElementById(`box-${typeStr}`).classList.add('has-img');
+            input.value = '';
+        }
+
+        function clearImage(event, type) {
+            event.preventDefault();
+            payloadState[type] = null;
+            const typeStr = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`img-${typeStr}`).src = '';
+            document.getElementById(`img-${typeStr}`).style.display = 'none';
+            document.getElementById(`box-${typeStr}`).classList.remove('has-img');
+        }
+
+        // 新增：多图参考图处理
+        async function handleMultiImages(input) {
+            const files = Array.from(input.files);
+            if (payloadState.references.length + files.length > 3) {
+                alert('最多只能上传 3 张参考图！');
+                return;
+            }
+
+            for (let file of files) {
+                const base64 = await compressImage(file);
+                payloadState.references.push(base64);
+            }
+            input.value = '';
+            renderReferences();
+        }
+
+        function removeReference(index) {
+            payloadState.references.splice(index, 1);
+            renderReferences();
+        }
+
+        function renderReferences() {
+            const container = document.getElementById('ref-container');
+            // 清理旧元素（除上传按钮外）
+            Array.from(container.children).forEach(child => {
+                if (child.id !== 'add-ref-label') child.remove();
+            });
+
+            // 重新渲染已上传的参考图
+            payloadState.references.forEach((b64, index) => {
+                const div = document.createElement('div');
+                div.className = 'ref-item';
+                div.innerHTML = `
+                <img src="${b64}">
+                <button class="action-btn" onclick="removeReference(${index})">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            `;
+                container.insertBefore(div, document.getElementById('add-ref-label'));
+            });
+
+            // 满 3 张隐藏上传按钮
+            document.getElementById('add-ref-label').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+        }
+
+        // ==========================================
+        // 🚀 核心任务调度逻辑
+        // ==========================================
+        async function submitTask() {
+            const prompt = document.getElementById('prompt-input').value.trim();
+            const model = document.getElementById('model-select').value;
+            const camera = document.getElementById('camera-select').value;
+            const seed = document.getElementById('seed-input').value.trim();
+            const btn = document.getElementById('generate-btn');
+
+            if (!prompt) return alert('请输入提示词以描述您的画面。');
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="material-symbols-outlined" style="animation: blink 1s infinite;">hourglass_empty</span> 排队生成中...`;
+
+            // 构建完整 Payload（已加入 references 数组）
+            const payload = {
+                prompt: prompt,
+                model: model,
+                aspectRatio: payloadState.aspectRatio,
+                duration: payloadState.duration,
+                cameraMotion: camera,
+                seed: seed || null,
+                firstFrame: payloadState.firstFrame,
+                lastFrame: payloadState.lastFrame,
+                references: payloadState.references
+            };
+
+            try {
+                const response = await fetch(API_SUBMIT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (data.taskId) {
+                    saveTaskLocal(data.taskId, payload, 'processing');
+                    startTaskPolling(data.taskId);
+                    document.getElementById('prompt-input').value = ''; // 提交成功后清空 prompt 方便下次输入
+                } else {
+                    throw new Error("服务端未返回 TaskID");
+                }
+            } catch (error) {
+                alert('提交失败: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-outlined">auto_awesome</span> 提交生成任务`;
+            }
+        }
+
+        function startTaskPolling(taskId) {
+            let attempts = 0;
+
+            const poll = async () => {
+                attempts++;
+                try {
+                    const response = await fetch(`${API_POLL}?taskId=${taskId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'success' && data.videoUrl) {
+                        updateTaskLocal(taskId, 'success', data.videoUrl);
+                        if (attempts === 1 || getTasks()[0].id === taskId) playVideo(data.videoUrl);
+                        return;
+                    }
+
+                    if (data.status === 'failed') {
+                        updateTaskLocal(taskId, 'failed', null);
+                        return;
+                    }
+
+                    if (attempts < 60) {
+                        setTimeout(poll, 15000);
+                    } else {
+                        updateTaskLocal(taskId, 'failed', null);
+                    }
+                } catch (error) {
+                    setTimeout(poll, 15000);
+                }
+            };
+            poll();
+        }
+
+        // ==========================================
+        // 🗄️ 看板与播放器管理
+        // ==========================================
+        function getTasks() { return JSON.parse(localStorage.getItem('veo_workspace_tasks') || '[]'); }
+
+        function saveTaskLocal(taskId, payload, status) {
+            const tasks = getTasks();
+            tasks.unshift({
+                id: taskId,
+                prompt: payload.prompt,
+                model: payload.model,
+                thumb: payload.firstFrame || payload.references[0] || '', // 优先取首帧，没有则取第一张参考图作为封面
+                status: status,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                videoUrl: null
+            });
+            localStorage.setItem('veo_workspace_tasks', JSON.stringify(tasks.slice(0, 30)));
+            renderDashboard();
+        }
+
+        function updateTaskLocal(taskId, status, url) {
+            const tasks = getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = status;
+                task.videoUrl = url;
+                localStorage.setItem('veo_workspace_tasks', JSON.stringify(tasks));
+                renderDashboard();
+            }
+        }
+
+        function renderDashboard() {
+            const tasks = getTasks();
+            const container = document.getElementById('task-dashboard');
+
+            if (tasks.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#888; padding: 20px; font-size:14px;">暂无生成记录</div>';
+                return;
+            }
+
+            container.innerHTML = tasks.map(task => {
+                const statusMap = {
+                    'processing': '<span class="status-pill processing">处理中</span>',
+                    'success': '<span class="status-pill success">已完成</span>',
+                    'failed': '<span class="status-pill failed">生成失败</span>'
+                };
+
+                const thumbHtml = task.thumb
+                    ? `<img src="${task.thumb}" class="task-thumb">`
+                    : `<div class="task-thumb"><span class="material-symbols-outlined" style="color:#a0a0a0;">movie</span></div>`;
+
+                const clickAction = task.status === 'success' ? `onclick="playVideo('${task.videoUrl}')"` : '';
+
+                return `
+                <div class="task-item" ${clickAction}>
+                    ${thumbHtml}
+                    <div class="task-info">
+                        <div class="task-prompt">${task.prompt}</div>
+                        <div class="task-meta">
+                            <span>Veo 3.1 • ${task.time}</span>
+                            ${statusMap[task.status]}
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        function resumeActivePolls() {
+            const tasks = getTasks();
+            tasks.forEach(task => {
+                if (task.status === 'processing') {
+                    startTaskPolling(task.id);
+                }
+            });
+        }
+
+        function playVideo(url) {
+            document.getElementById('empty-state').style.display = 'none';
+            const player = document.getElementById('main-player');
+            const btn = document.getElementById('download-btn');
+
+            player.src = url;
+            player.style.display = 'block';
+            player.play();
+
+            btn.style.display = 'flex';
+            btn.onclick = () => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.target = "_blank";
+                a.download = `Veo_Video_${Date.now()}.mp4`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+        }
+    </script>
+</body>
+
+</html>

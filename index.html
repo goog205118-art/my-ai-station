@@ -414,13 +414,15 @@
         // ==========================================
         // ⚙️ API 与状态管理
         // ==========================================
-        const API_SUBMIT = '/api/proxy-submit'; 
-        const API_POLL = '/api/proxy-poll';     
+        
+        // 替换为你最新的 ngrok 公网地址
+        const API_SUBMIT = 'https://variably-gumdrop-crabmeat.ngrok-free.dev/webhook/proxy-submit'; 
+        const API_POLL = 'https://variably-gumdrop-crabmeat.ngrok-free.dev/webhook/proxy-poll';     
 
         let payloadState = {
             aspectRatio: '9:16', 
             model: 'veo_3_1_fast',
-            duration: '8s', // 强制锁定为 8s
+            duration: '8s', 
             cameraMotion: 'none',
             firstFrame: null,
             lastFrame: null,
@@ -493,14 +495,11 @@
             });
         }
 
-        // --- 核心：多图参考的 Popover 交互逻辑 ---
         function toggleRefPopover(e) {
             e.stopPropagation();
             if (payloadState.references.length === 0) {
-                // 没有图片时，直接触发上传
                 document.getElementById('ref-file').click();
             } else {
-                // 有图片时，展开弹窗画廊供修改
                 const popover = document.getElementById('ref-popover');
                 popover.style.display = popover.style.display === 'flex' ? 'none' : 'flex';
             }
@@ -519,7 +518,6 @@
             input.value = '';
             renderReferences();
             
-            // 上传后自动展开弹窗供二次确认
             if(payloadState.references.length > 0) {
                 document.getElementById('ref-popover').style.display = 'flex';
             }
@@ -544,7 +542,6 @@
             const listContainer = document.getElementById('ref-list-container');
             const addBtn = document.getElementById('ref-popover-add');
             
-            // 1. 更新主聚拢卡片
             if (payloadState.references.length === 0) {
                 box.classList.remove('has-img');
                 imgEl.src = '';
@@ -557,7 +554,6 @@
                 placeholderIcon.style.display = 'none';
                 placeholderText.style.display = 'none';
                 
-                // 大于 1 张显示数字角标
                 if (payloadState.references.length > 1) {
                     countBadge.style.display = 'flex';
                     countBadge.innerText = payloadState.references.length;
@@ -566,7 +562,6 @@
                 }
             }
             
-            // 2. 更新 Popover 内的小画廊
             listContainer.innerHTML = '';
             payloadState.references.forEach((b64, index) => {
                 const item = document.createElement('div');
@@ -578,11 +573,9 @@
                 listContainer.appendChild(item);
             });
             
-            // 满 3 张隐藏继续添加按钮
             addBtn.style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
         }
 
-        // --- 首尾帧逻辑保持原样 ---
         async function handleSingleFrame(input, type) {
             if (!input.files[0]) return;
             payloadState[type] = await compressImage(input.files[0]);
@@ -628,16 +621,24 @@
                 prompt: prompt,
                 model: payloadState.model,
                 aspectRatio: payloadState.aspectRatio,
-                duration: '8s', // 强制 8s 发送
+                duration: '8s', 
                 cameraMotion: payloadState.cameraMotion,
-                seed: null,     // 彻底废弃 seed
+                seed: null,     
                 firstFrame: submitFirst,
                 lastFrame: submitLast,
                 references: submitRef
             };
 
             try {
-                const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                // 加入了 ngrok-skip-browser-warning 请求头以绕过免费版 ngrok 拦截
+                const response = await fetch(API_SUBMIT, { 
+                    method: 'POST', 
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'ngrok-skip-browser-warning': 'true'
+                    }, 
+                    body: JSON.stringify(payload) 
+                });
                 const data = await response.json();
 
                 if (data.taskId) {
@@ -659,7 +660,13 @@
             const poll = async () => {
                 attempts++;
                 try {
-                    const response = await fetch(`${API_POLL}?taskId=${taskId}`);
+                    // 加入了 ngrok-skip-browser-warning 请求头以绕过免费版 ngrok 拦截
+                    const response = await fetch(`${API_POLL}?taskId=${taskId}`, {
+                        method: 'GET',
+                        headers: {
+                            'ngrok-skip-browser-warning': 'true'
+                        }
+                    });
                     const data = await response.json();
                     if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
                     if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);

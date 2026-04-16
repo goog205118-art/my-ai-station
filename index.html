@@ -4,756 +4,476 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 视频创作台</title>
+    <title>Veo Studio - Pro Console</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 
     <style>
         :root {
-            --google-blue: #0b57d0;
-            --google-blue-hover: #0842a0;
-            --google-blue-bg: #d3e3fd;
-            --surface: #ffffff;
-            --bg: #f3f6fc;
-            --border: #c4c7c5;
-            --text-main: #1f1f1f;
-            --text-sub: #444746;
-            --radius: 16px;
+            --bg: #0f0f11;
+            --surface: #1c1c1e;
+            --surface-hover: #2c2c2e;
+            --border: #333336;
+            --text-main: #f5f5f5;
+            --text-sub: #8e8e93;
+            --accent: #0a84ff;
+            --success: #32d74b;
+            --danger: #ff453a;
+            --radius-lg: 20px;
+            --radius-md: 12px;
             --radius-sm: 8px;
-            --shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Google Sans', -apple-system, sans-serif;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', -apple-system, sans-serif; }
+        
         body {
             background-color: var(--bg);
             color: var(--text-main);
-            line-height: 1.5;
-            padding: 24px;
             height: 100vh;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            color-scheme: dark;
         }
 
-        /* 顶部导航栏 */
         .top-bar {
+            padding: 20px 32px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
-            padding-left: 8px;
+            flex-shrink: 0;
+            background: linear-gradient(180deg, rgba(15,15,17,1) 0%, rgba(15,15,17,0) 100%);
+            z-index: 10;
         }
+        .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; }
 
-        .top-bar .logo-icon {
-            font-size: 32px;
-            color: var(--google-blue);
-        }
-
-        .top-bar h1 {
-            font-size: 22px;
-            font-weight: 500;
-            color: var(--text-sub);
-        }
-
-        .layout {
-            display: grid;
-            grid-template-columns: 420px 1fr;
-            gap: 24px;
-            height: calc(100vh - 100px);
-        }
-
-        @media (max-width: 1024px) {
-            .layout {
-                grid-template-columns: 1fr;
-                height: auto;
-                overflow-y: auto;
-            }
-
-            body {
-                overflow: auto;
-            }
-        }
-
-        .card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
+        .gallery-container {
+            flex: 1;
+            padding: 0 32px 180px 32px;
             overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            align-content: start;
         }
+        .gallery-container::-webkit-scrollbar { width: 6px; }
+        .gallery-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-        .card::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .card::-webkit-scrollbar-thumb {
-            background: #dadce0;
-            border-radius: 4px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-main);
-        }
-
-        .section-title .material-symbols-outlined {
-            font-size: 20px;
-            color: var(--google-blue);
-        }
-
-        /* Material 3 表单控件 */
-        .form-group {
-            margin-bottom: 24px;
-        }
-
-        .label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: var(--text-main);
-        }
-
-        .md-input {
-            width: 100%;
-            padding: 14px 16px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-size: 15px;
+        .video-card {
             background: var(--surface);
-            transition: all 0.2s;
-            color: var(--text-main);
-        }
-
-        .md-input:focus {
-            outline: none;
-            border-color: var(--google-blue);
-            border-width: 2px;
-            padding: 13px 15px;
-        }
-
-        textarea.md-input {
-            resize: vertical;
-            min-height: 100px;
-            line-height: 1.6;
-        }
-
-        /* 药丸选择器 (Chips) */
-        .chip-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .chip {
-            padding: 8px 16px;
             border: 1px solid var(--border);
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
+            border-radius: var(--radius-md);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s;
+        }
+        .video-card:hover { border-color: #4a4a4d; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); }
+        .card-header .time-model { display: flex; align-items: center; gap: 6px; }
+        
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #2c2c2e; color: var(--text-main); }
+        .status-badge.success { background: rgba(50, 215, 75, 0.15); color: var(--success); }
+        .status-badge.failed { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+        .status-badge.processing { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+
+        .card-prompt { display: flex; gap: 8px; align-items: flex-start; }
+        .card-prompt img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: #2c2c2e; flex-shrink: 0; }
+        .card-prompt p { font-size: 13px; line-height: 1.4; color: var(--text-main); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+        .card-tags { display: flex; gap: 6px; }
+        .card-tag { background: #2c2c2e; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--text-sub); }
+
+        .card-media { width: 100%; aspect-ratio: 9/16; background: #000; border-radius: var(--radius-sm); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center;}
+        .card-media.landscape { aspect-ratio: 16/9; }
+        .card-media.square { aspect-ratio: 1/1; }
+        .card-media video { width: 100%; height: 100%; object-fit: contain; }
+        
+        .loading-ring { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--text-main); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .card-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); }
+        .card-actions button { background: transparent; border: none; color: var(--text-sub); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; transition: all 0.2s; }
+        .card-actions button:hover { background: var(--surface-hover); color: var(--text-main); }
+
+        /* ==========================================
+           ✨ 核心沉浸式悬浮控制台 
+           ========================================== */
+        .floating-console {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 860px;
+            background: rgba(28, 28, 30, 0.85);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        .prompt-container {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mode-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 100px;
+            padding: 4px;
+            width: fit-content;
+        }
+        .mode-tab {
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 13px;
             color: var(--text-sub);
-            transition: all 0.2s;
+            cursor: pointer;
             display: flex;
             align-items: center;
             gap: 6px;
-            font-weight: 500;
-        }
-
-        .chip:hover {
-            background: #f0f4f9;
-        }
-
-        .chip.active {
-            background: var(--google-blue-bg);
-            color: var(--google-blue);
-            border-color: var(--google-blue-bg);
-        }
-
-        .chip .material-symbols-outlined {
-            font-size: 18px;
-        }
-
-        /* 单图上传区 (首尾帧) */
-        .upload-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .upload-box {
-            border: 1px dashed var(--border);
-            border-radius: var(--radius-sm);
-            padding: 16px;
-            text-align: center;
-            cursor: pointer;
-            position: relative;
-            background: #f8f9fa;
             transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 110px;
-            overflow: hidden;
         }
-
-        .upload-box:hover {
-            background: #f0f4f9;
-            border-color: var(--google-blue);
-        }
-
-        .upload-box .material-symbols-outlined {
-            font-size: 28px;
-            color: var(--text-sub);
-            margin-bottom: 4px;
-        }
-
-        .upload-box span {
-            font-size: 13px;
-            color: var(--text-sub);
-            font-weight: 500;
-            z-index: 2;
-            background: rgba(248, 249, 250, 0.8);
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-
-        .upload-box img {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-
-        .upload-box input[type="file"] {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 3;
-        }
-
-        .img-actions {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            z-index: 4;
-            display: none;
-        }
-
-        .upload-box.has-img .img-actions {
-            display: block;
-        }
-
-        .action-btn {
-            background: rgba(0, 0, 0, 0.6);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            backdrop-filter: blur(4px);
-        }
-
-        .action-btn .material-symbols-outlined {
-            font-size: 16px;
-            color: white;
-            margin: 0;
-        }
-
-        /* 多图参考区 */
-        .ref-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .ref-item {
-            width: 72px;
-            height: 72px;
-            border-radius: var(--radius-sm);
-            position: relative;
-            overflow: hidden;
-            border: 1px solid var(--border);
-        }
-
-        .ref-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .ref-item .action-btn {
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            width: 22px;
-            height: 22px;
-        }
-
-        .ref-item .action-btn .material-symbols-outlined {
-            font-size: 14px;
-        }
-
-        .add-ref-btn {
-            width: 72px;
-            height: 72px;
-            border: 1px dashed var(--border);
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            background: #f8f9fa;
-            color: var(--text-sub);
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .add-ref-btn:hover {
-            background: #f0f4f9;
-            border-color: var(--google-blue);
-            color: var(--google-blue);
-        }
-
-        .add-ref-btn input {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-        }
-
-        /* FAB 主按钮 */
-        .submit-btn {
-            width: 100%;
-            padding: 14px;
-            background: var(--google-blue);
-            color: white;
-            border: none;
-            border-radius: 100px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-            margin-top: 10px;
-        }
-
-        .submit-btn:hover {
-            background: var(--google-blue-hover);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        }
-
-        .submit-btn:disabled {
-            background: #e3e3e3;
-            color: #a8a8a8;
-            box-shadow: none;
-            cursor: not-allowed;
-        }
-
-        /* 右侧展示区 */
-        .stage-card {
-            display: flex;
-            flex-direction: column;
-            background: var(--surface);
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-
-        .player-wrapper {
-            width: 100%;
-            background: #000;
-            aspect-ratio: 16/9;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #main-player {
-            width: 100%;
-            height: 100%;
-            display: none;
-        }
-
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: var(--text-sub);
-        }
-
-        .empty-state .material-symbols-outlined {
-            font-size: 64px;
-            font-weight: 200;
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
-
-        .empty-state p {
-            font-size: 15px;
-            font-weight: 500;
-        }
-
-        .dashboard-area {
-            padding: 24px;
-            flex: 1;
-            overflow-y: auto;
-            background: var(--surface);
-        }
-
-        .task-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .task-item {
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 12px;
-            display: flex;
-            gap: 16px;
-            transition: all 0.2s;
-            cursor: pointer;
-            background: var(--surface);
-        }
-
-        .task-item:hover {
-            background: #f8f9fa;
-            border-color: #a8c7fa;
-        }
-
-        .task-thumb {
-            width: 90px;
-            height: 60px;
-            border-radius: 4px;
-            background: #e1e3e1;
-            object-fit: cover;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .task-info {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .task-prompt {
-            font-size: 14px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 6px;
+        .mode-tab.active {
+            background: rgba(255, 255, 255, 0.1);
             color: var(--text-main);
         }
+        .mode-tab .material-symbols-outlined { font-size: 16px; }
 
-        .task-meta {
-            font-size: 12px;
-            color: var(--text-sub);
+        .input-wrapper {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            gap: 16px;
+            align-items: flex-start;
         }
 
-        .status-pill {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
+        .slot-group { display: none; gap: 8px; align-items: center; flex-shrink: 0; position: relative; }
+        .slot-group.active { display: flex; }
+        
+        .img-slot {
+            width: 56px; 
+            height: 72px;
+            border: 1px dashed #666;
+            border-radius: 8px;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer; 
+            position: relative; 
+            background: rgba(255,255,255,0.02);
+            transition: all 0.2s;
+        }
+        .img-slot:hover { border-color: var(--text-main); background: rgba(255,255,255,0.05); }
+        .img-slot span { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
+        .img-slot .material-symbols-outlined { font-size: 18px; color: var(--text-sub); }
+        
+        /* 聚合卡片外观调整：溢出隐藏移除，以显示重叠边缘 */
+        .img-slot.has-img { border: none; background: transparent; }
+        .img-slot img { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; z-index: 1; display: none; border-radius: 8px;}
+        .img-slot.has-img img { display: block; border: 1px solid var(--border); }
+        
+        /* 数量角标 */
+        .count-badge { 
+            position: absolute; bottom: -6px; right: -6px; 
+            background: white; color: black; border-radius: 50%; 
+            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; 
+            font-size: 11px; font-weight: bold; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            display: none; 
+        }
+
+        .remove-badge { 
+            position: absolute; top: -6px; right: -6px; 
+            background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 50%; 
+            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; 
+            font-size: 12px; z-index: 10; cursor: pointer; color: white; display: none; 
+        }
+        .img-slot.has-img .remove-badge { display: flex; }
+
+        /* 隐藏的原生 input */
+        .hidden-input { display: none; }
+
+        /* ==========================================
+           🌌 全新图库管理弹窗 (Popover)
+           ========================================== */
+        .ref-popover {
+            position: absolute;
+            bottom: calc(100% + 12px);
+            left: 0;
+            background: rgba(30, 30, 32, 0.95);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            display: flex;
+            gap: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            z-index: 200;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transform-origin: bottom left;
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        
+        .ref-list { display: flex; gap: 8px; }
+        .popover-img-item {
+            width: 72px; height: 96px;
+            border-radius: 8px; position: relative; overflow: hidden; border: 1px solid var(--border);
+        }
+        .popover-img-item img { width: 100%; height: 100%; object-fit: cover; }
+        .popover-rm-btn {
+            position: absolute; top: 4px; right: 4px;
+            background: rgba(0,0,0,0.7); color: white; border-radius: 50%;
+            width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; cursor: pointer; z-index: 10; transition: background 0.2s; backdrop-filter: blur(4px);
+        }
+        .popover-rm-btn:hover { background: rgba(255,69,58,0.9); }
+        
+        .ref-add-btn {
+            width: 72px; height: 96px;
+            border-radius: 8px; border: 1px dashed var(--text-sub);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text-sub); transition: all 0.2s; background: rgba(255,255,255,0.02);
+        }
+        .ref-add-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-main); }
+
+        /* 文本输入域 */
+        .prompt-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-size: 14px;
+            resize: none;
+            height: 72px;
+            line-height: 1.5;
+        }
+        .prompt-input:focus { outline: none; }
+        .prompt-input::placeholder { color: #666; }
+
+        /* 底部操作栏 (药丸菜单 + 发送按钮) */
+        .console-actions-row { display: flex; justify-content: space-between; align-items: center; padding-top: 4px;}
+        
+        .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .action-pill {
+            position: relative;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid transparent;
+            padding: 6px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            color: var(--text-main);
             display: flex;
             align-items: center;
             gap: 4px;
-        }
-
-        .status-pill.processing {
-            background: #e8f0fe;
-            color: #1967d2;
-        }
-
-        .status-pill.processing::before {
-            content: "";
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #1967d2;
-            animation: blink 1s infinite;
-        }
-
-        .status-pill.success {
-            background: #e6f4ea;
-            color: #137333;
-        }
-
-        .status-pill.failed {
-            background: #fce8e6;
-            color: #c5221f;
-        }
-
-        @keyframes blink {
-            50% {
-                opacity: 0.3;
-            }
-        }
-
-        /* 折叠面板 (高级设置) */
-        .accordion {
             cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-sub);
-            padding: 12px 0;
-            border-top: 1px solid var(--border);
-            margin-top: 12px;
-        }
-
-        .accordion-content {
-            display: none;
-            padding-top: 12px;
-        }
-
-        .accordion.active+.accordion-content {
-            display: block;
-        }
-
-        .floating-download {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
-            background: var(--surface);
-            color: var(--google-blue);
-            padding: 8px 16px;
-            border-radius: 100px;
-            font-size: 14px;
-            font-weight: 500;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: var(--shadow);
             transition: all 0.2s;
-            display: none;
-            cursor: pointer;
         }
+        .action-pill:hover { background: rgba(255,255,255,0.15); }
+        .action-pill select { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
-        .floating-download:hover {
-            background: #f0f4f9;
+        .submit-btn {
+            background: var(--text-main);
+            color: var(--bg);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s;
         }
+        .submit-btn:hover:not(:disabled) { transform: scale(1.05); }
+        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 </head>
 
 <body>
 
     <div class="top-bar">
-        <span class="material-symbols-outlined logo-icon">movie_edit</span>
-        <h1>AI 创作台</h1>
+        <div class="logo">
+            <span class="material-symbols-outlined">movie_edit</span> Veo Studio Pro
+        </div>
     </div>
 
-    <div class="layout">
-        <div class="card">
-            <h2 class="section-title"><span class="material-symbols-outlined">tune</span> 生成设置</h2>
+    <div class="gallery-container" id="task-dashboard"></div>
 
-            <div class="form-group">
-                <label class="label">模型配置</label>
-                <select id="model-select" class="md-input" style="padding: 12px 16px;">
-                    <option value="veo_3_1_fast">Veo 3.1 Fast </option>
-                    <option value="veo_3_1_hq">Veo 3.1 Fast 4K</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label class="label">画面描述 (Prompt)</label>
-                <textarea id="prompt-input" class="md-input" placeholder="请详细描述画面的主体、动作、环境光影及镜头质感..."></textarea>
-            </div>
-
-            <div class="form-group">
-                <label class="label" style="display: flex; justify-content: space-between;">
-                    <span>风格参考图 (最高支持 3 张)</span>
-                    <span style="font-size: 12px; color: var(--text-sub); font-weight: normal;">可选</span>
-                </label>
-                <div class="ref-container" id="ref-container">
-                    <div class="add-ref-btn" id="add-ref-label">
-                        <span class="material-symbols-outlined">add_photo_alternate</span>
-                        <input type="file" accept="image/*" multiple onchange="handleMultiImages(this)">
-                    </div>
+    <div class="floating-console">
+        
+        <div class="prompt-container">
+            <div class="mode-tabs">
+                <div class="mode-tab active" onclick="switchMode('ref')" id="tab-ref">
+                    <span class="material-symbols-outlined">image</span> 参考图
+                </div>
+                <div class="mode-tab" onclick="switchMode('frame')" id="tab-frame">
+                    <span class="material-symbols-outlined">movie</span> 首尾帧
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="label">画面比例</label>
-                <div class="chip-group" id="ratio-group">
-                    <div class="chip active" data-val="16:9"><span class="material-symbols-outlined">crop_16_9</span>
-                        16:9 </div>
-                    <div class="chip" data-val="9:16"><span class="material-symbols-outlined">crop_portrait</span> 9:16
-                        </div>
-                    <div class="chip" data-val="1:1"><span class="material-symbols-outlined">crop_square</span> 1:1 
+            <div class="input-wrapper">
+                
+                <div class="slot-group active" id="slots-ref">
+                    <div class="img-slot" id="slot-ref-box" onclick="toggleRefPopover(event)">
+                        <span class="material-symbols-outlined" id="ref-icon-placeholder">add_photo_alternate</span>
+                        <span id="ref-text-placeholder">参考图</span>
+                        <img id="ref-img">
+                        <div class="count-badge" id="ref-count-badge">3</div>
                     </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="label">视频时长</label>
-                <div class="chip-group" id="duration-group">
-                    <div class="chip active" data-val="4s"><span class="material-symbols-outlined">timer</span> 4 秒
-                    </div>
-                    <div class="chip" data-val="8s"><span class="material-symbols-outlined">timer</span> 8 秒</div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="label">结构控制帧 (首尾帧)</label>
-                <div class="upload-grid">
-                    <div class="upload-box" id="box-first">
-                        <span class="material-symbols-outlined">image</span>
-                        <span id="label-first">首帧画面</span>
-                        <input type="file" accept="image/*" onchange="handleImage(this, 'firstFrame')">
-                        <img id="img-first" style="display:none;">
-                        <div class="img-actions">
-                            <button class="action-btn" onclick="clearImage(event, 'firstFrame')">
-                                <span class="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="upload-box" id="box-last">
-                        <span class="material-symbols-outlined">add_photo_alternate</span>
-                        <span id="label-last">尾帧画面</span>
-                        <input type="file" accept="image/*" onchange="handleImage(this, 'lastFrame')">
-                        <img id="img-last" style="display:none;">
-                        <div class="img-actions">
-                            <button class="action-btn" onclick="clearImage(event, 'lastFrame')">
-                                <span class="material-symbols-outlined">close</span>
-                            </button>
+                    
+                    <input type="file" id="ref-file" class="hidden-input" accept="image/*" multiple onchange="handleMultiRefs(this)">
+                    
+                    <div class="ref-popover" id="ref-popover" style="display: none;" onclick="event.stopPropagation()">
+                        <div class="ref-list" id="ref-list-container">
+                            </div>
+                        <div class="ref-add-btn" onclick="document.getElementById('ref-file').click()" id="ref-popover-add">
+                            <span class="material-symbols-outlined">add</span>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="accordion" onclick="toggleAccordion(this)">
-                <span>高级控制选项</span>
-                <span class="material-symbols-outlined" style="transition: transform 0.2s;">expand_more</span>
+                <div class="slot-group" id="slots-frame">
+                    <div class="img-slot" id="slot-first-box" onclick="document.getElementById('first-file').click()">
+                        <span class="material-symbols-outlined">add</span>
+                        <span>首帧</span>
+                        <img id="first-img">
+                        <div class="remove-badge" onclick="clearFrame(event, 'firstFrame')">×</div>
+                        <input type="file" id="first-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'firstFrame')">
+                    </div>
+                    
+                    <span class="material-symbols-outlined" style="color: #666; font-size: 16px;">swap_horiz</span>
+                    
+                    <div class="img-slot" id="slot-last-box" onclick="document.getElementById('last-file').click()">
+                        <span class="material-symbols-outlined">add</span>
+                        <span>尾帧</span>
+                        <img id="last-img">
+                        <div class="remove-badge" onclick="clearFrame(event, 'lastFrame')">×</div>
+                        <input type="file" id="last-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'lastFrame')">
+                    </div>
+                </div>
+
+                <textarea id="prompt-input" class="prompt-input" placeholder="描述视频画面内容和动态过程，使用 @ 指定参考图或参考视频..."></textarea>
             </div>
-            <div class="accordion-content">
-                <div class="form-group">
-                    <label class="label">镜头运动 (运镜)</label>
-                    <select id="camera-select" class="md-input" style="padding: 10px 14px;">
-                        <option value="none">自动 / 无</option>
-                        <option value="pan_left">向左平移 (Pan Left)</option>
-                        <option value="pan_right">向右平移 (Pan Right)</option>
-                        <option value="zoom_in">推进放大 (Zoom In)</option>
-                        <option value="zoom_out">拉远缩小 (Zoom Out)</option>
+        </div>
+
+        <div class="console-actions-row">
+            <div class="pill-group">
+                <div class="action-pill">
+                    <span class="material-symbols-outlined" id="ratio-icon">crop_portrait</span>
+                    <span id="ratio-text">9:16</span>
+                    <select id="ratio-select" onchange="updateRatio(this)">
+                        <option value="9:16">竖屏 9:16</option>
+                        <option value="16:9">横屏 16:9</option>
+                        <option value="1:1">方形 1:1</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label class="label">随机种子 (Seed)</label>
-                    <input type="number" id="seed-input" class="md-input" placeholder="输入固定 Seed 值以锁定画面风格">
+
+                <div class="action-pill">
+                    <span class="material-symbols-outlined">model_training</span>
+                    <span id="model-text">Veo 3.1 Fast</span>
+                    <select id="model-select" onchange="updateModel(this)">
+                        <option value="veo_3_1_fast">Veo 3.1 Fast</option>
+                        <option value="veo_3_1_hq">Veo 3.1 Fast 4K</option>
+                    </select>
+                </div>
+
+                <div class="action-pill">
+                    <span class="material-symbols-outlined">videocam</span>
+                    <span id="camera-text">智能运镜</span>
+                    <select id="camera-select" onchange="updateCamera(this)">
+                        <option value="none">智能运镜</option>
+                        <option value="pan_left">向左平移</option>
+                        <option value="pan_right">向右平移</option>
+                        <option value="zoom_in">推进</option>
+                    </select>
                 </div>
             </div>
 
             <button class="submit-btn" id="generate-btn" onclick="submitTask()">
-                <span class="material-symbols-outlined">auto_awesome</span> 提交生成任务
+                <span class="material-symbols-outlined">arrow_upward</span>
             </button>
-        </div>
-
-        <div class="stage-card">
-            <div class="player-wrapper" id="player-container">
-                <div class="empty-state" id="empty-state">
-                    <span class="material-symbols-outlined">video_library</span>
-                    <p>您生成的视频将在此处预览</p>
-                </div>
-                <video id="main-player" controls autoplay loop></video>
-                <div class="floating-download" id="download-btn">
-                    <span class="material-symbols-outlined">download</span> 保存视频
-                </div>
-            </div>
-
-            <div class="dashboard-area">
-                <h2 class="section-title"><span class="material-symbols-outlined">history</span> 生成记录</h2>
-                <div class="task-list" id="task-dashboard">
-                </div>
-            </div>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // ⚙️ API 接口配置
+        // ⚙️ API 与状态管理
         // ==========================================
-        const API_SUBMIT = '/api/proxy-submit';
-        const API_POLL = '/api/proxy-poll';
+        const API_SUBMIT = '/api/proxy-submit'; 
+        const API_POLL = '/api/proxy-poll';     
 
-        // ==========================================
-        // 🗃️ 状态管理 (包含新增的参考图数组)
-        // ==========================================
         let payloadState = {
-            aspectRatio: '16:9',
-            duration: '4s',
+            aspectRatio: '9:16', 
+            model: 'veo_3_1_fast',
+            duration: '8s', // 强制锁定为 8s
+            cameraMotion: 'none',
             firstFrame: null,
             lastFrame: null,
-            references: [] // 新增：风格参考图存储
+            references: [],
+            currentMode: 'ref' 
         };
 
-        // 初始化交互绑定
         document.addEventListener('DOMContentLoaded', () => {
-            bindChipGroup('ratio-group', 'aspectRatio');
-            bindChipGroup('duration-group', 'duration');
             renderDashboard();
             resumeActivePolls();
         });
 
-        function bindChipGroup(groupId, stateKey) {
-            document.querySelectorAll(`#${groupId} .chip`).forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const target = e.currentTarget;
-                    document.querySelectorAll(`#${groupId} .chip`).forEach(b => b.classList.remove('active'));
-                    target.classList.add('active');
-                    payloadState[stateKey] = target.getAttribute('data-val');
-                });
-            });
+        // 监听点击外部关闭弹窗
+        document.addEventListener('click', (e) => {
+            const popover = document.getElementById('ref-popover');
+            const slotBox = document.getElementById('slot-ref-box');
+            if (popover && popover.style.display === 'flex' && !popover.contains(e.target) && !slotBox.contains(e.target)) {
+                popover.style.display = 'none';
+            }
+        });
+
+        // ==========================================
+        // 🎛️ UI 交互逻辑
+        // ==========================================
+        function switchMode(mode) {
+            payloadState.currentMode = mode;
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active'));
+            document.getElementById(`tab-${mode}`).classList.add('active');
+            document.getElementById(`slots-${mode}`).classList.add('active');
         }
 
-        function toggleAccordion(el) {
-            el.classList.toggle('active');
-            const icon = el.querySelector('.material-symbols-outlined');
-            icon.style.transform = el.classList.contains('active') ? 'rotate(180deg)' : 'rotate(0deg)';
+        function updateRatio(select) {
+            payloadState.aspectRatio = select.value;
+            document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text.split(' ')[1];
+            const iconMap = {'16:9': 'crop_16_9', '9:16': 'crop_portrait', '1:1': 'crop_square'};
+            document.getElementById('ratio-icon').innerText = iconMap[select.value];
+        }
+
+        function updateModel(select) {
+            payloadState.model = select.value;
+            document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
+        }
+
+        function updateCamera(select) {
+            payloadState.cameraMotion = select.value;
+            document.getElementById('camera-text').innerText = select.options[select.selectedIndex].text;
         }
 
         // ==========================================
-        // 🖼️ 图像处理逻辑 (前端自动压缩)
+        // 🖼️ 图像处理 (压缩与多图弹窗)
         // ==========================================
-        async function compressImage(file, maxWidth = 1280) {
+        async function compressImage(file, maxWidth = 1024) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
@@ -773,173 +493,198 @@
             });
         }
 
-        // 首尾帧单图处理
-        async function handleImage(input, type) {
-            if (!input.files[0]) return;
-            const base64 = await compressImage(input.files[0]);
-            payloadState[type] = base64;
-
-            const typeStr = type === 'firstFrame' ? 'first' : 'last';
-            document.getElementById(`img-${typeStr}`).src = base64;
-            document.getElementById(`img-${typeStr}`).style.display = 'block';
-            document.getElementById(`box-${typeStr}`).classList.add('has-img');
-            input.value = '';
+        // --- 核心：多图参考的 Popover 交互逻辑 ---
+        function toggleRefPopover(e) {
+            e.stopPropagation();
+            if (payloadState.references.length === 0) {
+                // 没有图片时，直接触发上传
+                document.getElementById('ref-file').click();
+            } else {
+                // 有图片时，展开弹窗画廊供修改
+                const popover = document.getElementById('ref-popover');
+                popover.style.display = popover.style.display === 'flex' ? 'none' : 'flex';
+            }
         }
 
-        function clearImage(event, type) {
-            event.preventDefault();
-            payloadState[type] = null;
-            const typeStr = type === 'firstFrame' ? 'first' : 'last';
-            document.getElementById(`img-${typeStr}`).src = '';
-            document.getElementById(`img-${typeStr}`).style.display = 'none';
-            document.getElementById(`box-${typeStr}`).classList.remove('has-img');
-        }
-
-        // 新增：多图参考图处理
-        async function handleMultiImages(input) {
+        async function handleMultiRefs(input) {
+            if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
-            if (payloadState.references.length + files.length > 3) {
-                alert('最多只能上传 3 张参考图！');
-                return;
-            }
-
+            
+            if (payloadState.references.length + files.length > 3) return alert('最多支持 3 张参考图');
+            
             for (let file of files) {
-                const base64 = await compressImage(file);
-                payloadState.references.push(base64);
+                payloadState.references.push(await compressImage(file));
             }
+            
             input.value = '';
             renderReferences();
+            
+            // 上传后自动展开弹窗供二次确认
+            if(payloadState.references.length > 0) {
+                document.getElementById('ref-popover').style.display = 'flex';
+            }
         }
 
-        function removeReference(index) {
+        function removeReference(event, index) {
+            event.stopPropagation();
             payloadState.references.splice(index, 1);
             renderReferences();
+            if(payloadState.references.length === 0) {
+                document.getElementById('ref-popover').style.display = 'none';
+            }
         }
 
         function renderReferences() {
-            const container = document.getElementById('ref-container');
-            // 清理旧元素（除上传按钮外）
-            Array.from(container.children).forEach(child => {
-                if (child.id !== 'add-ref-label') child.remove();
-            });
-
-            // 重新渲染已上传的参考图
+            const box = document.getElementById('slot-ref-box');
+            const imgEl = document.getElementById('ref-img');
+            const countBadge = document.getElementById('ref-count-badge');
+            const placeholderIcon = document.getElementById('ref-icon-placeholder');
+            const placeholderText = document.getElementById('ref-text-placeholder');
+            
+            const listContainer = document.getElementById('ref-list-container');
+            const addBtn = document.getElementById('ref-popover-add');
+            
+            // 1. 更新主聚拢卡片
+            if (payloadState.references.length === 0) {
+                box.classList.remove('has-img');
+                imgEl.src = '';
+                countBadge.style.display = 'none';
+                placeholderIcon.style.display = 'block';
+                placeholderText.style.display = 'block';
+            } else {
+                box.classList.add('has-img');
+                imgEl.src = payloadState.references[0];
+                placeholderIcon.style.display = 'none';
+                placeholderText.style.display = 'none';
+                
+                // 大于 1 张显示数字角标
+                if (payloadState.references.length > 1) {
+                    countBadge.style.display = 'flex';
+                    countBadge.innerText = payloadState.references.length;
+                } else {
+                    countBadge.style.display = 'none';
+                }
+            }
+            
+            // 2. 更新 Popover 内的小画廊
+            listContainer.innerHTML = '';
             payloadState.references.forEach((b64, index) => {
-                const div = document.createElement('div');
-                div.className = 'ref-item';
-                div.innerHTML = `
-                <img src="${b64}">
-                <button class="action-btn" onclick="removeReference(${index})">
-                    <span class="material-symbols-outlined">close</span>
-                </button>
-            `;
-                container.insertBefore(div, document.getElementById('add-ref-label'));
+                const item = document.createElement('div');
+                item.className = 'popover-img-item';
+                item.innerHTML = `
+                    <img src="${b64}">
+                    <div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div>
+                `;
+                listContainer.appendChild(item);
             });
+            
+            // 满 3 张隐藏继续添加按钮
+            addBtn.style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+        }
 
-            // 满 3 张隐藏上传按钮
-            document.getElementById('add-ref-label').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+        // --- 首尾帧逻辑保持原样 ---
+        async function handleSingleFrame(input, type) {
+            if (!input.files[0]) return;
+            payloadState[type] = await compressImage(input.files[0]);
+            
+            const typeStr = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`${typeStr}-img`).src = payloadState[type];
+            document.getElementById(`slot-${typeStr}-box`).classList.add('has-img');
+            input.value = '';
+        }
+
+        function clearFrame(event, type) {
+            event.preventDefault(); event.stopPropagation();
+            payloadState[type] = null;
+            const typeStr = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`slot-${typeStr}-box`).classList.remove('has-img');
+            document.getElementById(`${typeStr}-img`).src = '';
         }
 
         // ==========================================
-        // 🚀 核心任务调度逻辑
+        // 🚀 核心任务调度与瀑布流渲染
         // ==========================================
         async function submitTask() {
             const prompt = document.getElementById('prompt-input').value.trim();
-            const model = document.getElementById('model-select').value;
-            const camera = document.getElementById('camera-select').value;
-            const seed = document.getElementById('seed-input').value.trim();
             const btn = document.getElementById('generate-btn');
 
-            if (!prompt) return alert('请输入提示词以描述您的画面。');
+            if (!prompt) return alert('请填写提示词');
 
             btn.disabled = true;
-            btn.innerHTML = `<span class="material-symbols-outlined" style="animation: blink 1s infinite;">hourglass_empty</span> 排队生成中...`;
+            btn.innerHTML = `<div class="loading-ring" style="width:16px;height:16px;border-width:2px;"></div>`;
 
-            // 构建完整 Payload（已加入 references 数组）
+            let submitRef = [];
+            let submitFirst = null;
+            let submitLast = null;
+
+            if (payloadState.currentMode === 'ref') {
+                submitRef = payloadState.references;
+            } else {
+                submitFirst = payloadState.firstFrame;
+                submitLast = payloadState.lastFrame;
+            }
+
             const payload = {
                 prompt: prompt,
-                model: model,
+                model: payloadState.model,
                 aspectRatio: payloadState.aspectRatio,
-                duration: payloadState.duration,
-                cameraMotion: camera,
-                seed: seed || null,
-                firstFrame: payloadState.firstFrame,
-                lastFrame: payloadState.lastFrame,
-                references: payloadState.references
+                duration: '8s', // 强制 8s 发送
+                cameraMotion: payloadState.cameraMotion,
+                seed: null,     // 彻底废弃 seed
+                firstFrame: submitFirst,
+                lastFrame: submitLast,
+                references: submitRef
             };
 
             try {
-                const response = await fetch(API_SUBMIT, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await response.json();
 
                 if (data.taskId) {
                     saveTaskLocal(data.taskId, payload, 'processing');
                     startTaskPolling(data.taskId);
-                    document.getElementById('prompt-input').value = ''; // 提交成功后清空 prompt 方便下次输入
-                } else {
-                    throw new Error("服务端未返回 TaskID");
-                }
+                    document.getElementById('prompt-input').value = ''; 
+                    document.getElementById('ref-popover').style.display = 'none';
+                } else throw new Error("API未返回TaskID");
             } catch (error) {
                 alert('提交失败: ' + error.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<span class="material-symbols-outlined">auto_awesome</span> 提交生成任务`;
+                btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
             }
         }
 
         function startTaskPolling(taskId) {
             let attempts = 0;
-
             const poll = async () => {
                 attempts++;
                 try {
                     const response = await fetch(`${API_POLL}?taskId=${taskId}`);
                     const data = await response.json();
-
-                    if (data.status === 'success' && data.videoUrl) {
-                        updateTaskLocal(taskId, 'success', data.videoUrl);
-                        if (attempts === 1 || getTasks()[0].id === taskId) playVideo(data.videoUrl);
-                        return;
-                    }
-
-                    if (data.status === 'failed') {
-                        updateTaskLocal(taskId, 'failed', null);
-                        return;
-                    }
-
-                    if (attempts < 60) {
-                        setTimeout(poll, 15000);
-                    } else {
-                        updateTaskLocal(taskId, 'failed', null);
-                    }
-                } catch (error) {
-                    setTimeout(poll, 15000);
-                }
+                    if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
+                    if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);
+                    if (attempts < 60) setTimeout(poll, 15000); else updateTaskLocal(taskId, 'failed', null);
+                } catch (error) { setTimeout(poll, 15000); }
             };
             poll();
         }
 
-        // ==========================================
-        // 🗄️ 看板与播放器管理
-        // ==========================================
-        function getTasks() { return JSON.parse(localStorage.getItem('veo_workspace_tasks') || '[]'); }
+        function getTasks() { return JSON.parse(localStorage.getItem('veo_gallery_tasks') || '[]'); }
 
         function saveTaskLocal(taskId, payload, status) {
             const tasks = getTasks();
             tasks.unshift({
                 id: taskId,
                 prompt: payload.prompt,
-                model: payload.model,
-                thumb: payload.firstFrame || payload.references[0] || '', // 优先取首帧，没有则取第一张参考图作为封面
+                modelStr: payload.model === 'veo_3_1_fast' ? 'Veo 3 Fast' : 'Veo 3 HQ',
+                ratio: payload.aspectRatio,
+                duration: payload.duration,
+                thumb: payload.firstFrame || (payload.references && payload.references[0]) || '', 
                 status: status,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                time: '刚刚',
                 videoUrl: null
             });
-            localStorage.setItem('veo_workspace_tasks', JSON.stringify(tasks.slice(0, 30)));
+            localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks.slice(0, 50)));
             renderDashboard();
         }
 
@@ -949,7 +694,7 @@
             if (task) {
                 task.status = status;
                 task.videoUrl = url;
-                localStorage.setItem('veo_workspace_tasks', JSON.stringify(tasks));
+                localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks));
                 renderDashboard();
             }
         }
@@ -957,68 +702,76 @@
         function renderDashboard() {
             const tasks = getTasks();
             const container = document.getElementById('task-dashboard');
+            if (tasks.length === 0) return container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; color:var(--text-sub); margin-top: 100px;">暂无生成任务，在底部输入提示词开始创作。</div>';
 
-            if (tasks.length === 0) {
-                container.innerHTML = '<div style="text-align:center; color:#888; padding: 20px; font-size:14px;">暂无生成记录</div>';
-                return;
-            }
+            container.innerHTML = tasks.map((task, index) => {
+                let statusBadge = '';
+                let mediaHtml = '';
+                let ratioClass = task.ratio === '16:9' ? 'landscape' : (task.ratio === '1:1' ? 'square' : '');
 
-            container.innerHTML = tasks.map(task => {
-                const statusMap = {
-                    'processing': '<span class="status-pill processing">处理中</span>',
-                    'success': '<span class="status-pill success">已完成</span>',
-                    'failed': '<span class="status-pill failed">生成失败</span>'
-                };
+                if (task.status === 'processing') {
+                    statusBadge = `<span class="status-badge processing">生成中...</span>`;
+                    mediaHtml = `<div class="card-media ${ratioClass}"><div class="loading-ring"></div></div>`;
+                } else if (task.status === 'failed') {
+                    statusBadge = `<span class="status-badge failed">失败</span>`;
+                    mediaHtml = `<div class="card-media ${ratioClass}" style="background:#2c2c2e; color:var(--danger); font-size:12px;">生成超时或失败</div>`;
+                } else {
+                    statusBadge = `<span class="status-badge success">已完成</span>`;
+                    mediaHtml = `<div class="card-media ${ratioClass}">
+                                    <video src="${task.videoUrl}" controls controlslist="nodownload"></video>
+                                 </div>`;
+                }
 
-                const thumbHtml = task.thumb
-                    ? `<img src="${task.thumb}" class="task-thumb">`
-                    : `<div class="task-thumb"><span class="material-symbols-outlined" style="color:#a0a0a0;">movie</span></div>`;
-
-                const clickAction = task.status === 'success' ? `onclick="playVideo('${task.videoUrl}')"` : '';
+                const thumbHtml = task.thumb ? `<img src="${task.thumb}">` : `<div style="width:40px;height:40px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="font-size:18px;color:#666;">image</span></div>`;
 
                 return `
-                <div class="task-item" ${clickAction}>
-                    ${thumbHtml}
-                    <div class="task-info">
-                        <div class="task-prompt">${task.prompt}</div>
-                        <div class="task-meta">
-                            <span>Veo 3.1 • ${task.time}</span>
-                            ${statusMap[task.status]}
+                <div class="video-card">
+                    <div class="card-header">
+                        <div class="time-model">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}
                         </div>
+                        ${statusBadge}
+                    </div>
+                    <div class="card-prompt">
+                        ${thumbHtml}
+                        <p title="${task.prompt}">${task.prompt}</p>
+                    </div>
+                    <div class="card-tags">
+                        <span class="card-tag">${task.ratio}</span>
+                        <span class="card-tag">${task.duration}</span>
+                    </div>
+                    ${mediaHtml}
+                    <div class="card-actions">
+                        ${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}
+                        <button onclick="deleteTask(${index})" title="删除记录"><span class="material-symbols-outlined">delete</span></button>
                     </div>
                 </div>
-            `;
+                `;
             }).join('');
         }
 
         function resumeActivePolls() {
             const tasks = getTasks();
-            tasks.forEach(task => {
-                if (task.status === 'processing') {
-                    startTaskPolling(task.id);
-                }
-            });
+            tasks.forEach(task => { if (task.status === 'processing') startTaskPolling(task.id); });
         }
 
-        function playVideo(url) {
-            document.getElementById('empty-state').style.display = 'none';
-            const player = document.getElementById('main-player');
-            const btn = document.getElementById('download-btn');
+        function deleteTask(index) {
+            if(confirm('确定删除这条生成记录吗？')) {
+                const tasks = getTasks();
+                tasks.splice(index, 1);
+                localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks));
+                renderDashboard();
+            }
+        }
 
-            player.src = url;
-            player.style.display = 'block';
-            player.play();
-
-            btn.style.display = 'flex';
-            btn.onclick = () => {
-                const a = document.createElement('a');
-                a.href = url;
-                a.target = "_blank";
-                a.download = `Veo_Video_${Date.now()}.mp4`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            };
+        function downloadVideo(url) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = "_blank";
+            a.download = `Veo_Video_${Date.now()}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
     </script>
 </body>

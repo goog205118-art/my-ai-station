@@ -10,22 +10,11 @@
 
     <style>
         :root {
-            --bg: #0f0f11;
-            --surface: #1c1c1e;
-            --surface-hover: #2c2c2e;
-            --border: #333336;
-            --text-main: #f5f5f5;
-            --text-sub: #8e8e93;
-            --accent: #0a84ff;
-            --success: #32d74b;
-            --danger: #ff453a;
-            --radius-lg: 20px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
+            --bg: #0f0f11; --surface: #1c1c1e; --surface-hover: #2c2c2e; --border: #333336;
+            --text-main: #f5f5f5; --text-sub: #8e8e93; --accent: #0a84ff; --success: #32d74b; --danger: #ff453a;
+            --radius-lg: 20px; --radius-md: 12px; --radius-sm: 8px;
         }
-
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', -apple-system, sans-serif; }
-        
         body { background-color: var(--bg); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; color-scheme: dark; }
 
         .top-bar { padding: 20px 32px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; background: linear-gradient(180deg, rgba(15,15,17,1) 0%, rgba(15,15,17,0) 100%); z-index: 10; }
@@ -37,7 +26,6 @@
 
         .video-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; transition: transform 0.2s; }
         .video-card:hover { border-color: #4a4a4d; }
-
         .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); }
         .card-header .time-model { display: flex; align-items: center; gap: 6px; }
         
@@ -57,7 +45,6 @@
         .card-media.landscape { aspect-ratio: 16/9; }
         .card-media video { width: 100%; height: 100%; object-fit: contain; }
         
-        /* 生成中的呼吸灯效果 */
         @keyframes pulseText { 0% {opacity:0.5;} 50% {opacity:1;} 100% {opacity:0.5;} }
         .generating-text { font-size: 13px; font-weight: 500; letter-spacing: 1px; margin-top: 12px; animation: pulseText 1.5s infinite; }
 
@@ -66,7 +53,6 @@
         .card-actions button:hover { background: var(--surface-hover); color: var(--text-main); }
         .card-actions button.reuse-btn:hover { color: var(--accent); background: rgba(10, 132, 255, 0.1); }
 
-        /* 悬浮控制台 */
         .floating-console { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 860px; background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); z-index: 100; }
         .prompt-container { background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; }
         .mode-tabs { display: flex; background: rgba(255, 255, 255, 0.05); border-radius: 100px; padding: 4px; width: fit-content; }
@@ -104,10 +90,9 @@
         .submit-btn:hover:not(:disabled) { transform: scale(1.05); }
         .submit-btn:disabled { background: var(--border); cursor: not-allowed; }
 
-        /* 旋转加载动画 */
         .spinner { width: 20px; height: 20px; animation: rotate 2s linear infinite; }
         .spinner circle { stroke: var(--bg); stroke-width: 3; stroke-dasharray: 1, 200; stroke-dashoffset: 0; animation: dash 1.5s ease-in-out infinite; stroke-linecap: round; fill: none; }
-        .card-media .spinner circle { stroke: currentColor; } /* 卡片内的转圈颜色跟随文本颜色 */
+        .card-media .spinner circle { stroke: currentColor; }
         @keyframes rotate { 100% { transform: rotate(360deg); } }
         @keyframes dash {
             0% { stroke-dasharray: 1, 200; stroke-dashoffset: 0; }
@@ -118,17 +103,15 @@
 </head>
 
 <body>
-
     <div class="top-bar">
         <div class="logo">
-            <span class="material-symbols-outlined">movie_edit</span> Veo & Sora Studio Pro
+            <span class="material-symbols-outlined">movie_edit</span> Veo & Sora Studio
         </div>
     </div>
 
     <div class="gallery-container" id="task-dashboard"></div>
 
     <div class="floating-console">
-        
         <div class="prompt-container">
             <div class="mode-tabs">
                 <div class="mode-tab active" onclick="switchMode('ref')" id="tab-ref">
@@ -187,14 +170,14 @@
 
                 <div class="action-pill">
                     <span class="material-symbols-outlined" id="ratio-icon">crop_portrait</span>
-                    <span id="ratio-text">9:16</span>
+                    <span id="ratio-text">竖屏 9:16</span>
                     <select id="ratio-select" onchange="updateRatio(this)">
                         <option value="9:16">竖屏 9:16</option>
                         <option value="16:9">横屏 16:9</option>
                     </select>
                 </div>
 
-                <div class="action-pill">
+                <div class="action-pill" id="pill-enhance">
                     <span class="material-symbols-outlined">auto_fix_high</span>
                     <span id="enhance-text">AI 扩写提示词</span>
                     <select id="enhance-select" onchange="updateEnhance(this)">
@@ -202,8 +185,7 @@
                         <option value="false">原词生成</option>
                     </select>
                 </div>
-
-                <div class="action-pill">
+                <div class="action-pill" id="pill-upsample">
                     <span class="material-symbols-outlined">high_quality</span>
                     <span id="upsample-text">标准画质</span>
                     <select id="upsample-select" onchange="updateUpsample(this)">
@@ -211,6 +193,32 @@
                         <option value="true">开启超分 (更慢)</option>
                     </select>
                 </div>
+
+                <div class="action-pill" id="pill-size" style="display: none;">
+                    <span class="material-symbols-outlined">photo_size_select_large</span>
+                    <span id="size-text">Large (默认)</span>
+                    <select id="size-select" onchange="updateSize(this)">
+                        <option value="large">Large (默认)</option>
+                        <option value="small">Small (720p)</option>
+                    </select>
+                </div>
+                <div class="action-pill" id="pill-duration" style="display: none;">
+                    <span class="material-symbols-outlined">timer</span>
+                    <span id="duration-text">10 秒</span>
+                    <select id="duration-select" onchange="updateDuration(this)">
+                        <option value="10">10 秒</option>
+                        <option value="15">15 秒</option>
+                    </select>
+                </div>
+                <div class="action-pill" id="pill-watermark" style="display: none;">
+                    <span class="material-symbols-outlined">branding_watermark</span>
+                    <span id="watermark-text">无水印</span>
+                    <select id="watermark-select" onchange="updateWatermark(this)">
+                        <option value="false">无水印</option>
+                        <option value="true">保留水印</option>
+                    </select>
+                </div>
+
             </div>
 
             <button class="submit-btn" id="generate-btn" onclick="submitTask()">
@@ -220,17 +228,20 @@
     </div>
 
     <script>
-        // ==========================================
-        // ⚙️ API 与状态管理
-        // ==========================================
         const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
         const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 
         let payloadState = {
             model: 'veo_3_1_fast',
             aspectRatio: '9:16', 
+            // Veo 参数
             enhancePrompt: true,
             enableUpsample: false,
+            // Sora 参数
+            soraSize: 'large',
+            soraDuration: 10,
+            soraWatermark: false,
+
             firstFrame: null,
             lastFrame: null,
             references: [],
@@ -250,9 +261,9 @@
             }
         });
 
-        // ==========================================
-        // 🎛️ UI 交互逻辑
-        // ==========================================
+        // ==============================
+        // 动态 UI 控制逻辑
+        // ==============================
         function switchMode(mode) {
             payloadState.currentMode = mode;
             document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
@@ -261,30 +272,52 @@
             document.getElementById(`slots-${mode}`).classList.add('active');
         }
 
+        // 核心：模型切换引发面板变动
         function updateModel(select) {
             payloadState.model = select.value;
             document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
+
+            const isSora = payloadState.model === 'sora-2-all';
+            
+            // Veo 面板控制
+            document.getElementById('pill-enhance').style.display = isSora ? 'none' : 'flex';
+            document.getElementById('pill-upsample').style.display = isSora ? 'none' : 'flex';
+
+            // Sora 面板控制
+            document.getElementById('pill-size').style.display = isSora ? 'flex' : 'none';
+            document.getElementById('pill-duration').style.display = isSora ? 'flex' : 'none';
+            document.getElementById('pill-watermark').style.display = isSora ? 'flex' : 'none';
         }
 
         function updateRatio(select) {
             payloadState.aspectRatio = select.value;
-            document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text.split(' ')[1];
+            document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text;
             document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait';
         }
-
         function updateEnhance(select) {
             payloadState.enhancePrompt = select.value === 'true';
             document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text;
         }
-
         function updateUpsample(select) {
             payloadState.enableUpsample = select.value === 'true';
             document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text;
         }
+        function updateSize(select) {
+            payloadState.soraSize = select.value;
+            document.getElementById('size-text').innerText = select.options[select.selectedIndex].text;
+        }
+        function updateDuration(select) {
+            payloadState.soraDuration = parseInt(select.value, 10);
+            document.getElementById('duration-text').innerText = select.options[select.selectedIndex].text;
+        }
+        function updateWatermark(select) {
+            payloadState.soraWatermark = select.value === 'true';
+            document.getElementById('watermark-text').innerText = select.options[select.selectedIndex].text;
+        }
 
-        // ==========================================
-        // 🖼️ 图像处理
-        // ==========================================
+        // ==============================
+        // 图像处理
+        // ==============================
         async function compressImage(file, maxWidth = 1024) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -318,7 +351,6 @@
             if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
             if (payloadState.references.length + files.length > 3) return alert('最多支持 3 张参考图');
-            
             for (let file of files) payloadState.references.push(await compressImage(file));
             input.value = ''; renderReferences();
             if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
@@ -369,9 +401,9 @@
             document.getElementById(`${t}-img`).src = '';
         }
 
-        // ==========================================
-        // 🚀 核心任务调度与轮询
-        // ==========================================
+        // ==============================
+        // 调度与轮询
+        // ==============================
         function setButtonLoading(isLoading) {
             const btn = document.getElementById('generate-btn');
             if (isLoading) {
@@ -386,19 +418,22 @@
         async function submitTask() {
             const prompt = document.getElementById('prompt-input').value.trim();
             if (!prompt) return alert('请填写提示词');
-
             setButtonLoading(true);
 
             let submitRef = [], submitFirst = null, submitLast = null;
             if (payloadState.currentMode === 'ref') submitRef = payloadState.references;
             else { submitFirst = payloadState.firstFrame; submitLast = payloadState.lastFrame; }
 
+            // 把所有状态一次性发给后端，后端根据 model 判断拿哪些数据
             const payload = {
                 model: payloadState.model,
                 prompt: prompt,
                 aspectRatio: payloadState.aspectRatio,
                 enhancePrompt: payloadState.enhancePrompt,
                 enableUpsample: payloadState.enableUpsample,
+                soraSize: payloadState.soraSize,
+                soraDuration: payloadState.soraDuration,
+                soraWatermark: payloadState.soraWatermark,
                 firstFrame: submitFirst,
                 lastFrame: submitLast,
                 references: submitRef
@@ -440,7 +475,6 @@
                     if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
                     if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);
                     
-                    // ⚠️ 将查询次数提升至 240 次，每次间隔 15 秒（总时长达 1 小时）
                     if (attempts < 240) setTimeout(poll, 15000); 
                     else updateTaskLocal(taskId, 'failed', null);
                 } catch (error) { 
@@ -450,9 +484,9 @@
             poll();
         }
 
-        // ==========================================
-        // 💾 本地存储与 UI 渲染
-        // ==========================================
+        // ==============================
+        // 数据缓存与提取同款
+        // ==============================
         function getTasks() { return JSON.parse(localStorage.getItem('veo_gallery_tasks') || '[]'); }
 
         function saveTaskLocal(taskId, payload, status) {
@@ -463,14 +497,14 @@
                 id: taskId,
                 prompt: payload.prompt,
                 modelStr: modelLabel,
-                modelVal: payload.model, // 记录真实模型值用于复用
+                modelVal: payload.model,
                 ratio: payload.aspectRatio,
+                // 保存 Sora 专属记录方便提取
+                soraSize: payload.soraSize,
+                soraDuration: payload.soraDuration,
+                soraWatermark: payload.soraWatermark,
                 thumb: payload.firstFrame || (payload.references && payload.references[0]) || '', 
-                rawImages: {             // 记录所有原始图片数据用于复用
-                    firstFrame: payload.firstFrame,
-                    lastFrame: payload.lastFrame,
-                    references: payload.references || []
-                },
+                rawImages: { firstFrame: payload.firstFrame, lastFrame: payload.lastFrame, references: payload.references || [] },
                 mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
                 status: status,
                 time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}),
@@ -491,28 +525,32 @@
             }
         }
 
-        // 🌟 核心新功能：提取同款配置
         function reuseTask(index) {
             const task = getTasks()[index];
             if(!task) return;
             
-            // 恢复提示词
             document.getElementById('prompt-input').value = task.prompt || '';
             
-            // 恢复比例和模型
-            if (task.ratio) {
-                document.getElementById('ratio-select').value = task.ratio;
-                updateRatio(document.getElementById('ratio-select'));
-            }
             if (task.modelVal) {
                 const modelSelect = document.getElementById('model-select');
                 if(modelSelect.querySelector(`option[value="${task.modelVal}"]`)) {
                     modelSelect.value = task.modelVal;
-                    updateModel(modelSelect);
+                    updateModel(modelSelect); // 触发面板动态变化
                 }
             }
 
-            // 恢复图片与模式 (向下兼容没有 rawImages 的老数据)
+            if (task.ratio) {
+                document.getElementById('ratio-select').value = task.ratio;
+                updateRatio(document.getElementById('ratio-select'));
+            }
+
+            // 如果是 Sora 模型，恢复它的特殊参数
+            if (task.modelVal === 'sora-2-all') {
+                if (task.soraSize) { document.getElementById('size-select').value = task.soraSize; updateSize(document.getElementById('size-select')); }
+                if (task.soraDuration) { document.getElementById('duration-select').value = task.soraDuration; updateDuration(document.getElementById('duration-select')); }
+                if (task.soraWatermark !== undefined) { document.getElementById('watermark-select').value = task.soraWatermark; updateWatermark(document.getElementById('watermark-select')); }
+            }
+
             if (task.rawImages) {
                 payloadState.firstFrame = task.rawImages.firstFrame || null;
                 payloadState.lastFrame = task.rawImages.lastFrame || null;
@@ -534,8 +572,6 @@
                     renderReferences();
                 }
             }
-            
-            // 自动聚焦输入框提醒用户可以点击发送了
             document.getElementById('prompt-input').focus();
         }
 
@@ -551,7 +587,6 @@
 
                 if (task.status === 'processing') {
                     statusBadge = `<span class="status-badge processing">排队生成中...</span>`;
-                    // 🌟 沉浸式生成状态 UI
                     mediaHtml = `
                     <div class="card-media ${ratioClass}">
                         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; color: var(--accent);">
@@ -587,6 +622,7 @@
                     </div>
                     <div class="card-tags">
                         <span class="card-tag">${task.ratio}</span>
+                        ${task.modelVal === 'sora-2-all' && task.soraDuration ? `<span class="card-tag">${task.soraDuration}s</span>` : ''}
                     </div>
                     ${mediaHtml}
                     <div class="card-actions">
@@ -603,7 +639,6 @@
             const tasks = getTasks();
             tasks.forEach(task => { if (task.status === 'processing') startTaskPolling(task.id); });
         }
-
         function deleteTask(index) {
             if(confirm('确定删除这条生成记录吗？')) {
                 const tasks = getTasks();
@@ -612,17 +647,10 @@
                 renderDashboard();
             }
         }
-
         function downloadVideo(url) {
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = "_blank";
-            a.download = `Studio_Video_${Date.now()}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const a = document.createElement('a'); a.href = url; a.target = "_blank";
+            a.download = `Studio_Video_${Date.now()}.mp4`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
     </script>
 </body>
-
 </html>

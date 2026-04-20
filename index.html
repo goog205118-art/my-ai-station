@@ -88,12 +88,8 @@
 
         .card-media { width: 100%; aspect-ratio: 9/16; background: #000; border-radius: var(--radius-sm); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center;}
         .card-media.landscape { aspect-ratio: 16/9; }
-        .card-media.square { aspect-ratio: 1/1; }
         .card-media video { width: 100%; height: 100%; object-fit: contain; }
         
-        .loading-ring { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--text-main); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
         .card-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); }
         .card-actions button { background: transparent; border: none; color: var(--text-sub); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; transition: all 0.2s; }
         .card-actions button:hover { background: var(--surface-hover); color: var(--text-main); }
@@ -153,158 +149,75 @@
             background: rgba(255, 255, 255, 0.1);
             color: var(--text-main);
         }
-        .mode-tab .material-symbols-outlined { font-size: 16px; }
 
-        .input-wrapper {
-            display: flex;
-            gap: 16px;
-            align-items: flex-start;
-        }
+        .input-wrapper { display: flex; gap: 16px; align-items: flex-start; }
 
         .slot-group { display: none; gap: 8px; align-items: center; flex-shrink: 0; position: relative; }
         .slot-group.active { display: flex; }
         
         .img-slot {
-            width: 56px; 
-            height: 72px;
-            border: 1px dashed #666;
-            border-radius: 8px;
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center;
-            cursor: pointer; 
-            position: relative; 
-            background: rgba(255,255,255,0.02);
-            transition: all 0.2s;
+            width: 56px; height: 72px; border: 1px dashed #666; border-radius: 8px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; position: relative; background: rgba(255,255,255,0.02); transition: all 0.2s;
         }
         .img-slot:hover { border-color: var(--text-main); background: rgba(255,255,255,0.05); }
         .img-slot span { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
-        .img-slot .material-symbols-outlined { font-size: 18px; color: var(--text-sub); }
         
         .img-slot.has-img { border: none; background: transparent; }
         .img-slot img { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; z-index: 1; display: none; border-radius: 8px;}
         .img-slot.has-img img { display: block; border: 1px solid var(--border); }
         
-        .count-badge { 
-            position: absolute; bottom: -6px; right: -6px; 
-            background: white; color: black; border-radius: 50%; 
-            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; 
-            font-size: 11px; font-weight: bold; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            display: none; 
-        }
-
-        .remove-badge { 
-            position: absolute; top: -6px; right: -6px; 
-            background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 50%; 
-            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; 
-            font-size: 12px; z-index: 10; cursor: pointer; color: white; display: none; 
-        }
+        .count-badge { position: absolute; bottom: -6px; right: -6px; background: white; color: black; border-radius: 50%; width: 20px; height: 20px; display: none; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; z-index: 10; }
+        .remove-badge { position: absolute; top: -6px; right: -6px; background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 50%; width: 20px; height: 20px; display: none; align-items: center; justify-content: center; font-size: 12px; z-index: 10; cursor: pointer; color: white; }
         .img-slot.has-img .remove-badge { display: flex; }
 
         .hidden-input { display: none; }
 
-        /* ==========================================
-           🌌 全新图库管理弹窗 (Popover)
-           ========================================== */
         .ref-popover {
-            position: absolute;
-            bottom: calc(100% + 12px);
-            left: 0;
-            background: rgba(30, 30, 32, 0.95);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 12px;
-            display: flex;
-            gap: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-            z-index: 200;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            transform-origin: bottom left;
-            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: absolute; bottom: calc(100% + 12px); left: 0; background: rgba(30, 30, 32, 0.95);
+            border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;
+            display: flex; gap: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); z-index: 200;
+            backdrop-filter: blur(20px); transform-origin: bottom left;
         }
-        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-        
         .ref-list { display: flex; gap: 8px; }
-        .popover-img-item {
-            width: 72px; height: 96px;
-            border-radius: 8px; position: relative; overflow: hidden; border: 1px solid var(--border);
-        }
+        .popover-img-item { width: 72px; height: 96px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid var(--border); }
         .popover-img-item img { width: 100%; height: 100%; object-fit: cover; }
-        .popover-rm-btn {
-            position: absolute; top: 4px; right: 4px;
-            background: rgba(0,0,0,0.7); color: white; border-radius: 50%;
-            width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
-            font-size: 14px; cursor: pointer; z-index: 10; transition: background 0.2s; backdrop-filter: blur(4px);
-        }
-        .popover-rm-btn:hover { background: rgba(255,69,58,0.9); }
+        .popover-rm-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
         
-        .ref-add-btn {
-            width: 72px; height: 96px;
-            border-radius: 8px; border: 1px dashed var(--text-sub);
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; color: var(--text-sub); transition: all 0.2s; background: rgba(255,255,255,0.02);
-        }
-        .ref-add-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-main); }
+        .ref-add-btn { width: 72px; height: 96px; border-radius: 8px; border: 1px dashed var(--text-sub); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-sub); }
 
-        .prompt-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            font-size: 14px;
-            resize: none;
-            height: 72px;
-            line-height: 1.5;
-        }
+        .prompt-input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 14px; resize: none; height: 72px; line-height: 1.5; }
         .prompt-input:focus { outline: none; }
-        .prompt-input::placeholder { color: #666; }
 
         /* 底部操作栏 */
         .console-actions-row { display: flex; justify-content: space-between; align-items: center; padding-top: 4px;}
-        
         .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
         .action-pill {
-            position: relative;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid transparent;
-            padding: 6px 12px;
-            border-radius: 100px;
-            font-size: 12px;
-            color: var(--text-main);
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
+            position: relative; background: rgba(255,255,255,0.08); border: 1px solid transparent;
+            padding: 6px 12px; border-radius: 100px; font-size: 12px; color: var(--text-main);
+            display: flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s;
         }
         .action-pill:hover { background: rgba(255,255,255,0.15); }
         .action-pill select { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         
-        /* 针对 Seed 输入框的特殊去除默认上下箭头样式 */
-        .seed-input-field::-webkit-outer-spin-button,
-        .seed-input-field::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .seed-input-field[type=number] { -moz-appearance: textfield; }
-
+        /* 丝滑的提交按钮与 Loading */
         .submit-btn {
-            background: var(--text-main);
-            color: var(--bg);
-            border: none;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: transform 0.2s;
+            background: var(--text-main); color: var(--bg); border: none; width: 36px; height: 36px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;
         }
         .submit-btn:hover:not(:disabled) { transform: scale(1.05); }
-        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .submit-btn:disabled { background: var(--border); cursor: not-allowed; }
+
+        .spinner {
+            width: 20px; height: 20px; animation: rotate 2s linear infinite;
+        }
+        .spinner circle { stroke: var(--bg); stroke-width: 3; stroke-dasharray: 1, 200; stroke-dashoffset: 0; animation: dash 1.5s ease-in-out infinite; stroke-linecap: round; fill: none; }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+        @keyframes dash {
+            0% { stroke-dasharray: 1, 200; stroke-dashoffset: 0; }
+            50% { stroke-dasharray: 90, 200; stroke-dashoffset: -35px; }
+            100% { stroke-dasharray: 90, 200; stroke-dashoffset: -124px; }
+        }
     </style>
 </head>
 
@@ -331,7 +244,6 @@
             </div>
 
             <div class="input-wrapper">
-                
                 <div class="slot-group active" id="slots-ref">
                     <div class="img-slot" id="slot-ref-box" onclick="toggleRefPopover(event)">
                         <span class="material-symbols-outlined" id="ref-icon-placeholder">add_photo_alternate</span>
@@ -339,12 +251,9 @@
                         <img id="ref-img">
                         <div class="count-badge" id="ref-count-badge">3</div>
                     </div>
-                    
                     <input type="file" id="ref-file" class="hidden-input" accept="image/*" multiple onchange="handleMultiRefs(this)">
-                    
                     <div class="ref-popover" id="ref-popover" style="display: none;" onclick="event.stopPropagation()">
-                        <div class="ref-list" id="ref-list-container">
-                            </div>
+                        <div class="ref-list" id="ref-list-container"></div>
                         <div class="ref-add-btn" onclick="document.getElementById('ref-file').click()" id="ref-popover-add">
                             <span class="material-symbols-outlined">add</span>
                         </div>
@@ -353,25 +262,19 @@
 
                 <div class="slot-group" id="slots-frame">
                     <div class="img-slot" id="slot-first-box" onclick="document.getElementById('first-file').click()">
-                        <span class="material-symbols-outlined">add</span>
-                        <span>首帧</span>
-                        <img id="first-img">
-                        <div class="remove-badge" onclick="clearFrame(event, 'firstFrame')">×</div>
+                        <span class="material-symbols-outlined">add</span><span>首帧</span>
+                        <img id="first-img"><div class="remove-badge" onclick="clearFrame(event, 'firstFrame')">×</div>
                         <input type="file" id="first-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'firstFrame')">
                     </div>
-                    
-                    <span class="material-symbols-outlined" style="color: #666; font-size: 16px;">swap_horiz</span>
-                    
+                    <span class="material-symbols-outlined" style="color: #666;">swap_horiz</span>
                     <div class="img-slot" id="slot-last-box" onclick="document.getElementById('last-file').click()">
-                        <span class="material-symbols-outlined">add</span>
-                        <span>尾帧</span>
-                        <img id="last-img">
-                        <div class="remove-badge" onclick="clearFrame(event, 'lastFrame')">×</div>
+                        <span class="material-symbols-outlined">add</span><span>尾帧</span>
+                        <img id="last-img"><div class="remove-badge" onclick="clearFrame(event, 'lastFrame')">×</div>
                         <input type="file" id="last-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'lastFrame')">
                     </div>
                 </div>
 
-                <textarea id="prompt-input" class="prompt-input" placeholder="描述视频画面内容和动态过程，使用 @ 指定参考图或参考视频..."></textarea>
+                <textarea id="prompt-input" class="prompt-input" placeholder="描述视频画面内容和动态过程..."></textarea>
             </div>
         </div>
 
@@ -383,38 +286,30 @@
                     <select id="ratio-select" onchange="updateRatio(this)">
                         <option value="9:16">竖屏 9:16</option>
                         <option value="16:9">横屏 16:9</option>
-                        <option value="1:1">方形 1:1</option>
                     </select>
                 </div>
 
                 <div class="action-pill">
-                    <span class="material-symbols-outlined">model_training</span>
-                    <span id="model-text">Veo 3.1 Fast</span>
-                    <select id="model-select" onchange="updateModel(this)">
-                        <option value="veo_3_1_fast">Veo 3.1 Fast</option>
-                        <option value="veo_3_1_hq">Veo 3.1 Fast 4K</option>
+                    <span class="material-symbols-outlined">auto_fix_high</span>
+                    <span id="enhance-text">AI 扩写提示词</span>
+                    <select id="enhance-select" onchange="updateEnhance(this)">
+                        <option value="true">AI 扩写提示词</option>
+                        <option value="false">原词生成</option>
                     </select>
                 </div>
 
                 <div class="action-pill">
-                    <span class="material-symbols-outlined">videocam</span>
-                    <span id="camera-text">智能运镜</span>
-                    <select id="camera-select" onchange="updateCamera(this)">
-                        <option value="none">智能运镜</option>
-                        <option value="pan_left">向左平移</option>
-                        <option value="pan_right">向右平移</option>
-                        <option value="zoom_in">推进</option>
+                    <span class="material-symbols-outlined">high_quality</span>
+                    <span id="upsample-text">标准画质</span>
+                    <select id="upsample-select" onchange="updateUpsample(this)">
+                        <option value="false">标准画质</option>
+                        <option value="true">开启超分 (更慢)</option>
                     </select>
-                </div>
-
-                <div class="action-pill" style="cursor: text; padding-right: 6px;">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">tag</span>
-                    <input type="number" id="seed-input" class="seed-input-field" placeholder="随机种子 (0 为随机)" style="background:transparent; border:none; color:var(--text-main); width: 110px; font-size: 12px; outline:none;">
                 </div>
             </div>
 
             <button class="submit-btn" id="generate-btn" onclick="submitTask()">
-                <span class="material-symbols-outlined">arrow_upward</span>
+                <span class="material-symbols-outlined" id="btn-icon">arrow_upward</span>
             </button>
         </div>
     </div>
@@ -423,16 +318,13 @@
         // ==========================================
         // ⚙️ API 与状态管理
         // ==========================================
-        
-        // ✨ 已自动替换为你最新的 Cloudflare 穿透地址 (端口 5679)
         const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
         const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 
         let payloadState = {
             aspectRatio: '9:16', 
-            model: 'veo_3_1_fast',
-            duration: '8s', 
-            cameraMotion: 'none',
+            enhancePrompt: true,
+            enableUpsample: false,
             firstFrame: null,
             lastFrame: null,
             references: [],
@@ -444,7 +336,6 @@
             resumeActivePolls();
         });
 
-        // 监听点击外部关闭弹窗
         document.addEventListener('click', (e) => {
             const popover = document.getElementById('ref-popover');
             const slotBox = document.getElementById('slot-ref-box');
@@ -467,22 +358,21 @@
         function updateRatio(select) {
             payloadState.aspectRatio = select.value;
             document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text.split(' ')[1];
-            const iconMap = {'16:9': 'crop_16_9', '9:16': 'crop_portrait', '1:1': 'crop_square'};
-            document.getElementById('ratio-icon').innerText = iconMap[select.value];
+            document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait';
         }
 
-        function updateModel(select) {
-            payloadState.model = select.value;
-            document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
+        function updateEnhance(select) {
+            payloadState.enhancePrompt = select.value === 'true';
+            document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text;
         }
 
-        function updateCamera(select) {
-            payloadState.cameraMotion = select.value;
-            document.getElementById('camera-text').innerText = select.options[select.selectedIndex].text;
+        function updateUpsample(select) {
+            payloadState.enableUpsample = select.value === 'true';
+            document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text;
         }
 
         // ==========================================
-        // 🖼️ 图像处理 (压缩与多图弹窗)
+        // 🖼️ 图像处理
         // ==========================================
         async function compressImage(file, maxWidth = 1024) {
             return new Promise((resolve) => {
@@ -506,137 +396,98 @@
 
         function toggleRefPopover(e) {
             e.stopPropagation();
-            if (payloadState.references.length === 0) {
-                document.getElementById('ref-file').click();
-            } else {
-                const popover = document.getElementById('ref-popover');
-                popover.style.display = popover.style.display === 'flex' ? 'none' : 'flex';
+            if (payloadState.references.length === 0) document.getElementById('ref-file').click();
+            else {
+                const p = document.getElementById('ref-popover');
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
             }
         }
 
         async function handleMultiRefs(input) {
             if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
-            
             if (payloadState.references.length + files.length > 3) return alert('最多支持 3 张参考图');
             
-            for (let file of files) {
-                payloadState.references.push(await compressImage(file));
-            }
-            
-            input.value = '';
-            renderReferences();
-            
-            if(payloadState.references.length > 0) {
-                document.getElementById('ref-popover').style.display = 'flex';
-            }
+            for (let file of files) payloadState.references.push(await compressImage(file));
+            input.value = ''; renderReferences();
+            if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
         }
 
         function removeReference(event, index) {
             event.stopPropagation();
             payloadState.references.splice(index, 1);
             renderReferences();
-            if(payloadState.references.length === 0) {
-                document.getElementById('ref-popover').style.display = 'none';
-            }
+            if(payloadState.references.length === 0) document.getElementById('ref-popover').style.display = 'none';
         }
 
         function renderReferences() {
             const box = document.getElementById('slot-ref-box');
             const imgEl = document.getElementById('ref-img');
             const countBadge = document.getElementById('ref-count-badge');
-            const placeholderIcon = document.getElementById('ref-icon-placeholder');
-            const placeholderText = document.getElementById('ref-text-placeholder');
-            
-            const listContainer = document.getElementById('ref-list-container');
-            const addBtn = document.getElementById('ref-popover-add');
             
             if (payloadState.references.length === 0) {
-                box.classList.remove('has-img');
-                imgEl.src = '';
-                countBadge.style.display = 'none';
-                placeholderIcon.style.display = 'block';
-                placeholderText.style.display = 'block';
+                box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none';
             } else {
-                box.classList.add('has-img');
-                imgEl.src = payloadState.references[0];
-                placeholderIcon.style.display = 'none';
-                placeholderText.style.display = 'none';
-                
-                if (payloadState.references.length > 1) {
-                    countBadge.style.display = 'flex';
-                    countBadge.innerText = payloadState.references.length;
-                } else {
-                    countBadge.style.display = 'none';
-                }
+                box.classList.add('has-img'); imgEl.src = payloadState.references[0];
+                countBadge.style.display = payloadState.references.length > 1 ? 'flex' : 'none';
+                countBadge.innerText = payloadState.references.length;
             }
             
-            listContainer.innerHTML = '';
-            payloadState.references.forEach((b64, index) => {
-                const item = document.createElement('div');
-                item.className = 'popover-img-item';
-                item.innerHTML = `
-                    <img src="${b64}">
-                    <div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div>
-                `;
-                listContainer.appendChild(item);
-            });
-            
-            addBtn.style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+            const listContainer = document.getElementById('ref-list-container');
+            listContainer.innerHTML = payloadState.references.map((b64, index) => `
+                <div class="popover-img-item">
+                    <img src="${b64}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div>
+                </div>`).join('');
+            document.getElementById('ref-popover-add').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
         }
 
         async function handleSingleFrame(input, type) {
             if (!input.files[0]) return;
             payloadState[type] = await compressImage(input.files[0]);
-            
-            const typeStr = type === 'firstFrame' ? 'first' : 'last';
-            document.getElementById(`${typeStr}-img`).src = payloadState[type];
-            document.getElementById(`slot-${typeStr}-box`).classList.add('has-img');
+            const t = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`${t}-img`).src = payloadState[type];
+            document.getElementById(`slot-${t}-box`).classList.add('has-img');
             input.value = '';
         }
 
         function clearFrame(event, type) {
             event.preventDefault(); event.stopPropagation();
             payloadState[type] = null;
-            const typeStr = type === 'firstFrame' ? 'first' : 'last';
-            document.getElementById(`slot-${typeStr}-box`).classList.remove('has-img');
-            document.getElementById(`${typeStr}-img`).src = '';
+            const t = type === 'firstFrame' ? 'first' : 'last';
+            document.getElementById(`slot-${t}-box`).classList.remove('has-img');
+            document.getElementById(`${t}-img`).src = '';
         }
 
         // ==========================================
-        // 🚀 核心任务调度与瀑布流渲染
+        // 🚀 核心任务调度与轮询
         // ==========================================
+        function setButtonLoading(isLoading) {
+            const btn = document.getElementById('generate-btn');
+            if (isLoading) {
+                btn.disabled = true;
+                btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
+            }
+        }
+
         async function submitTask() {
             const prompt = document.getElementById('prompt-input').value.trim();
-            const seedInput = document.getElementById('seed-input').value.trim();
-            const btn = document.getElementById('generate-btn');
-
             if (!prompt) return alert('请填写提示词');
 
-            btn.disabled = true;
-            btn.innerHTML = `<div class="loading-ring" style="width:16px;height:16px;border-width:2px;"></div>`;
+            setButtonLoading(true);
 
-            let submitRef = [];
-            let submitFirst = null;
-            let submitLast = null;
+            let submitRef = [], submitFirst = null, submitLast = null;
+            if (payloadState.currentMode === 'ref') submitRef = payloadState.references;
+            else { submitFirst = payloadState.firstFrame; submitLast = payloadState.lastFrame; }
 
-            if (payloadState.currentMode === 'ref') {
-                submitRef = payloadState.references;
-            } else {
-                submitFirst = payloadState.firstFrame;
-                submitLast = payloadState.lastFrame;
-            }
-
-            // 处理 Seed 逻辑 (如果为空或者 0，则传 null 让大模型自己随机)
-            const seedValue = (seedInput && seedInput !== '0') ? parseInt(seedInput, 10) : null;
-
+            // 完全对齐 Veo 3.1 官方 API 参数
             const payload = {
                 prompt: prompt,
-                model: payloadState.model,
                 aspectRatio: payloadState.aspectRatio,
-                duration: '8s', 
-                cameraMotion: payloadState.cameraMotion,
-                seed: seedValue,     
+                enhancePrompt: payloadState.enhancePrompt,
+                enableUpsample: payloadState.enableUpsample,
                 firstFrame: submitFirst,
                 lastFrame: submitLast,
                 references: submitRef
@@ -659,8 +510,7 @@
             } catch (error) {
                 alert('提交失败: ' + error.message);
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
+                setButtonLoading(false);
             }
         }
 
@@ -669,12 +519,23 @@
             const poll = async () => {
                 attempts++;
                 try {
-                    const response = await fetch(`${API_POLL}?taskId=${taskId}`);
+                    // ⚠️ 这里改为标准的 POST 请求，解决 n8n 接收失败的问题
+                    const response = await fetch(API_POLL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ taskId: taskId })
+                    });
+                    
                     const data = await response.json();
                     if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
                     if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);
-                    if (attempts < 60) setTimeout(poll, 15000); else updateTaskLocal(taskId, 'failed', null);
-                } catch (error) { setTimeout(poll, 15000); }
+                    
+                    // 继续轮询，每隔 15 秒查一次，最多查 60 次 (15分钟)
+                    if (attempts < 60) setTimeout(poll, 15000); 
+                    else updateTaskLocal(taskId, 'failed', null);
+                } catch (error) { 
+                    setTimeout(poll, 15000); 
+                }
             };
             poll();
         }
@@ -686,9 +547,8 @@
             tasks.unshift({
                 id: taskId,
                 prompt: payload.prompt,
-                modelStr: payload.model === 'veo_3_1_fast' ? 'Veo 3 Fast' : 'Veo 3 HQ',
+                modelStr: payload.references.length > 0 ? 'Veo 3 Components' : 'Veo 3 Fast',
                 ratio: payload.aspectRatio,
-                duration: payload.duration,
                 thumb: payload.firstFrame || (payload.references && payload.references[0]) || '', 
                 status: status,
                 time: '刚刚',
@@ -717,11 +577,11 @@
             container.innerHTML = tasks.map((task, index) => {
                 let statusBadge = '';
                 let mediaHtml = '';
-                let ratioClass = task.ratio === '16:9' ? 'landscape' : (task.ratio === '1:1' ? 'square' : '');
+                let ratioClass = task.ratio === '16:9' ? 'landscape' : '';
 
                 if (task.status === 'processing') {
                     statusBadge = `<span class="status-badge processing">生成中...</span>`;
-                    mediaHtml = `<div class="card-media ${ratioClass}"><div class="loading-ring"></div></div>`;
+                    mediaHtml = `<div class="card-media ${ratioClass}"><svg class="spinner" viewBox="0 0 50 50" style="width:30px;height:30px;"><circle cx="25" cy="25" r="20"></circle></svg></div>`;
                 } else if (task.status === 'failed') {
                     statusBadge = `<span class="status-badge failed">失败</span>`;
                     mediaHtml = `<div class="card-media ${ratioClass}" style="background:#2c2c2e; color:var(--danger); font-size:12px;">生成超时或失败</div>`;
@@ -748,7 +608,6 @@
                     </div>
                     <div class="card-tags">
                         <span class="card-tag">${task.ratio}</span>
-                        <span class="card-tag">${task.duration}</span>
                     </div>
                     ${mediaHtml}
                     <div class="card-actions">

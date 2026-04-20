@@ -164,7 +164,7 @@
                     <span id="model-text">Veo 3.1 Fast</span>
                     <select id="model-select" onchange="updateModel(this)">
                         <option value="veo_3_1_fast">Veo 3.1 Fast</option>
-                        <option value="sora-2-all">Sora 2 (无水印)</option>
+                        <option value="sora-2-all">Sora 2 (仅单图)</option>
                     </select>
                 </div>
 
@@ -272,21 +272,42 @@
             document.getElementById(`slots-${mode}`).classList.add('active');
         }
 
-        // 核心：模型切换引发面板变动
+        // 🌟 核心升级：模型切换时动态调整输入限制
         function updateModel(select) {
             payloadState.model = select.value;
             document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
 
             const isSora = payloadState.model === 'sora-2-all';
             
-            // Veo 面板控制
+            // 1. 下方面板参数控制
             document.getElementById('pill-enhance').style.display = isSora ? 'none' : 'flex';
             document.getElementById('pill-upsample').style.display = isSora ? 'none' : 'flex';
-
-            // Sora 面板控制
             document.getElementById('pill-size').style.display = isSora ? 'flex' : 'none';
             document.getElementById('pill-duration').style.display = isSora ? 'flex' : 'none';
             document.getElementById('pill-watermark').style.display = isSora ? 'flex' : 'none';
+
+            // 2. 🌟 输入框与模式控制 (Sora专属限制)
+            const tabFrame = document.getElementById('tab-frame');
+            if (isSora) {
+                // 隐藏首尾帧选项卡
+                tabFrame.style.display = 'none'; 
+                // 如果用户当前在首尾帧，强行踢回垫图模式
+                if (payloadState.currentMode === 'frame') {
+                    switchMode('ref'); 
+                }
+                // 如果用户传了多张图，直接截断只保留第一张
+                if (payloadState.references.length > 1) {
+                    payloadState.references = [payloadState.references[0]];
+                    renderReferences();
+                    // 轻提示，不打断操作
+                    console.log('Sora 仅支持单图，已自动截取第一张。'); 
+                }
+            } else {
+                // 切回 Veo 时，恢复首尾帧选项卡
+                tabFrame.style.display = 'flex'; 
+            }
+            // 重新渲染垫图区UI（为了隐藏/显示加号按钮）
+            renderReferences();
         }
 
         function updateRatio(select) {
@@ -350,7 +371,14 @@
         async function handleMultiRefs(input) {
             if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
-            if (payloadState.references.length + files.length > 3) return alert('最多支持 3 张参考图');
+            
+            // 🌟 动态限制上传数量：Sora 1 张，Veo 3 张
+            const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
+            if (payloadState.references.length + files.length > maxAllowed) {
+                input.value = '';
+                return alert(`当前模型最多仅支持 ${maxAllowed} 张垫图。`);
+            }
+
             for (let file of files) payloadState.references.push(await compressImage(file));
             input.value = ''; renderReferences();
             if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
@@ -381,7 +409,10 @@
                 <div class="popover-img-item">
                     <img src="${b64}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div>
                 </div>`).join('');
-            document.getElementById('ref-popover-add').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+                
+            // 🌟 动态控制加号按钮的显示/隐藏
+            const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
+            document.getElementById('ref-popover-add').style.display = payloadState.references.length >= maxAllowed ? 'none' : 'flex';
         }
 
         async function handleSingleFrame(input, type) {
@@ -424,7 +455,6 @@
             if (payloadState.currentMode === 'ref') submitRef = payloadState.references;
             else { submitFirst = payloadState.firstFrame; submitLast = payloadState.lastFrame; }
 
-            // 把所有状态一次性发给后端，后端根据 model 判断拿哪些数据
             const payload = {
                 model: payloadState.model,
                 prompt: prompt,
@@ -499,7 +529,6 @@
                 modelStr: modelLabel,
                 modelVal: payload.model,
                 ratio: payload.aspectRatio,
-                // 保存 Sora 专属记录方便提取
                 soraSize: payload.soraSize,
                 soraDuration: payload.soraDuration,
                 soraWatermark: payload.soraWatermark,
@@ -535,7 +564,7 @@
                 const modelSelect = document.getElementById('model-select');
                 if(modelSelect.querySelector(`option[value="${task.modelVal}"]`)) {
                     modelSelect.value = task.modelVal;
-                    updateModel(modelSelect); // 触发面板动态变化
+                    updateModel(modelSelect); // 触发面板动态变化和清洗逻辑
                 }
             }
 
@@ -544,7 +573,6 @@
                 updateRatio(document.getElementById('ratio-select'));
             }
 
-            // 如果是 Sora 模型，恢复它的特殊参数
             if (task.modelVal === 'sora-2-all') {
                 if (task.soraSize) { document.getElementById('size-select').value = task.soraSize; updateSize(document.getElementById('size-select')); }
                 if (task.soraDuration) { document.getElementById('duration-select').value = task.soraDuration; updateDuration(document.getElementById('duration-select')); }
@@ -556,9 +584,18 @@
                 payloadState.lastFrame = task.rawImages.lastFrame || null;
                 payloadState.references = task.rawImages.references || [];
                 
+                // 🌟 提取同款时的二次安全过滤
+                if (payloadState.model === 'sora-2-all') {
+                    payloadState.firstFrame = null;
+                    payloadState.lastFrame = null;
+                    if (payloadState.references.length > 1) {
+                        payloadState.references = [payloadState.references[0]];
+                    }
+                }
+
                 switchMode(task.mode || 'ref');
                 
-                if (payloadState.currentMode === 'frame') {
+                if (payloadState.currentMode === 'frame' && payloadState.model !== 'sora-2-all') {
                     if (payloadState.firstFrame) {
                         document.getElementById('first-img').src = payloadState.firstFrame;
                         document.getElementById('slot-first-box').classList.add('has-img');

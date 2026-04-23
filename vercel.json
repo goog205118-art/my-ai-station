@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/n8n/:match*",
+      "destination": "http://wallyai.topIP:5678/:match*"
+    }
+  ]
+}

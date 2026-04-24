@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veo & Sora Studio - Pro Console</title>
+    <title>Veo Studio - Pro Console</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 
@@ -105,7 +105,7 @@
 <body>
     <div class="top-bar">
         <div class="logo">
-            <span class="material-symbols-outlined">movie_edit</span> Veo & Sora Studio
+            <span class="material-symbols-outlined">movie_edit</span> Veo Studio
         </div>
     </div>
 
@@ -164,7 +164,6 @@
                     <span id="model-text">Veo 3.1 Fast</span>
                     <select id="model-select" onchange="updateModel(this)">
                         <option value="veo_3_1_fast">Veo 3.1 Fast</option>
-                        <option value="sora-2-all">Sora 2 (仅单图)</option>
                     </select>
                 </div>
 
@@ -185,6 +184,7 @@
                         <option value="false">原词生成</option>
                     </select>
                 </div>
+                
                 <div class="action-pill" id="pill-upsample">
                     <span class="material-symbols-outlined">high_quality</span>
                     <span id="upsample-text">标准画质</span>
@@ -193,32 +193,6 @@
                         <option value="true">开启超分 (更慢)</option>
                     </select>
                 </div>
-
-                <div class="action-pill" id="pill-size" style="display: none;">
-                    <span class="material-symbols-outlined">photo_size_select_large</span>
-                    <span id="size-text">Large (默认)</span>
-                    <select id="size-select" onchange="updateSize(this)">
-                        <option value="large">Large (默认)</option>
-                        <option value="small">Small (720p)</option>
-                    </select>
-                </div>
-                <div class="action-pill" id="pill-duration" style="display: none;">
-                    <span class="material-symbols-outlined">timer</span>
-                    <span id="duration-text">10 秒</span>
-                    <select id="duration-select" onchange="updateDuration(this)">
-                        <option value="10">10 秒</option>
-                        <option value="15">15 秒</option>
-                    </select>
-                </div>
-                <div class="action-pill" id="pill-watermark" style="display: none;">
-                    <span class="material-symbols-outlined">branding_watermark</span>
-                    <span id="watermark-text">无水印</span>
-                    <select id="watermark-select" onchange="updateWatermark(this)">
-                        <option value="false">无水印</option>
-                        <option value="true">保留水印</option>
-                    </select>
-                </div>
-
             </div>
 
             <button class="submit-btn" id="generate-btn" onclick="submitTask()">
@@ -234,14 +208,8 @@
         let payloadState = {
             model: 'veo_3_1_fast',
             aspectRatio: '9:16', 
-            // Veo 参数
             enhancePrompt: true,
             enableUpsample: false,
-            // Sora 参数
-            soraSize: 'large',
-            soraDuration: 10,
-            soraWatermark: false,
-
             firstFrame: null,
             lastFrame: null,
             references: [],
@@ -272,44 +240,10 @@
             document.getElementById(`slots-${mode}`).classList.add('active');
         }
 
-        // 🌟 核心升级：模型切换时动态调整输入限制
         function updateModel(select) {
             payloadState.model = select.value;
             document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
-
-            const isSora = payloadState.model === 'sora-2-all';
-            
-            // 1. 下方面板参数控制
-            document.getElementById('pill-enhance').style.display = isSora ? 'none' : 'flex';
-            document.getElementById('pill-upsample').style.display = isSora ? 'none' : 'flex';
-            document.getElementById('pill-size').style.display = isSora ? 'flex' : 'none';
-            document.getElementById('pill-duration').style.display = isSora ? 'flex' : 'none';
-            document.getElementById('pill-watermark').style.display = isSora ? 'flex' : 'none';
-
-            // 2. 🌟 输入框与模式控制 (Sora专属限制)
-            const tabFrame = document.getElementById('tab-frame');
-            if (isSora) {
-                // 隐藏首尾帧选项卡
-                tabFrame.style.display = 'none'; 
-                // 如果用户当前在首尾帧，强行踢回垫图模式
-                if (payloadState.currentMode === 'frame') {
-                    switchMode('ref'); 
-                }
-                // 如果用户传了多张图，直接截断只保留第一张
-                if (payloadState.references.length > 1) {
-                    payloadState.references = [payloadState.references[0]];
-                    renderReferences();
-                    // 轻提示，不打断操作
-                    console.log('Sora 仅支持单图，已自动截取第一张。'); 
-                }
-            } else {
-                // 切回 Veo 时，恢复首尾帧选项卡
-                tabFrame.style.display = 'flex'; 
-            }
-            // 重新渲染垫图区UI（为了隐藏/显示加号按钮）
-            renderReferences();
         }
-
         function updateRatio(select) {
             payloadState.aspectRatio = select.value;
             document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text;
@@ -322,18 +256,6 @@
         function updateUpsample(select) {
             payloadState.enableUpsample = select.value === 'true';
             document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text;
-        }
-        function updateSize(select) {
-            payloadState.soraSize = select.value;
-            document.getElementById('size-text').innerText = select.options[select.selectedIndex].text;
-        }
-        function updateDuration(select) {
-            payloadState.soraDuration = parseInt(select.value, 10);
-            document.getElementById('duration-text').innerText = select.options[select.selectedIndex].text;
-        }
-        function updateWatermark(select) {
-            payloadState.soraWatermark = select.value === 'true';
-            document.getElementById('watermark-text').innerText = select.options[select.selectedIndex].text;
         }
 
         // ==============================
@@ -371,12 +293,10 @@
         async function handleMultiRefs(input) {
             if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
-            
-            // 🌟 动态限制上传数量：Sora 1 张，Veo 3 张
-            const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
+            const maxAllowed = 3;
             if (payloadState.references.length + files.length > maxAllowed) {
                 input.value = '';
-                return alert(`当前模型最多仅支持 ${maxAllowed} 张垫图。`);
+                return alert(`最多仅支持 ${maxAllowed} 张垫图。`);
             }
 
             for (let file of files) payloadState.references.push(await compressImage(file));
@@ -410,8 +330,7 @@
                     <img src="${b64}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div>
                 </div>`).join('');
                 
-            // 🌟 动态控制加号按钮的显示/隐藏
-            const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
+            const maxAllowed = 3;
             document.getElementById('ref-popover-add').style.display = payloadState.references.length >= maxAllowed ? 'none' : 'flex';
         }
 
@@ -461,9 +380,6 @@
                 aspectRatio: payloadState.aspectRatio,
                 enhancePrompt: payloadState.enhancePrompt,
                 enableUpsample: payloadState.enableUpsample,
-                soraSize: payloadState.soraSize,
-                soraDuration: payloadState.soraDuration,
-                soraWatermark: payloadState.soraWatermark,
                 firstFrame: submitFirst,
                 lastFrame: submitLast,
                 references: submitRef
@@ -521,7 +437,7 @@
 
         function saveTaskLocal(taskId, payload, status) {
             const tasks = getTasks();
-            let modelLabel = payload.model === 'sora-2-all' ? 'Sora 2' : (payload.references.length > 0 ? 'Veo 3 Components' : 'Veo 3 Fast');
+            let modelLabel = payload.references && payload.references.length > 0 ? 'Veo 3 Components' : 'Veo 3 Fast';
             
             tasks.unshift({
                 id: taskId,
@@ -529,17 +445,15 @@
                 modelStr: modelLabel,
                 modelVal: payload.model,
                 ratio: payload.aspectRatio,
-                soraSize: payload.soraSize,
-                soraDuration: payload.soraDuration,
-                soraWatermark: payload.soraWatermark,
                 thumb: payload.firstFrame || (payload.references && payload.references[0]) || '', 
-                rawImages: { firstFrame: payload.firstFrame, lastFrame: payload.lastFrame, references: payload.references || [] },
+                rawImages: null, // 核心修复点：不再保存冗余大体积图片数据，防止撑爆缓存
                 mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
                 status: status,
                 time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}),
                 videoUrl: null
             });
-            localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks.slice(0, 50)));
+            // 核心修复点：强制限制最多保存 15 条任务，彻底告别 exceed quota 报错
+            localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks.slice(0, 15)));
             renderDashboard();
         }
 
@@ -564,7 +478,7 @@
                 const modelSelect = document.getElementById('model-select');
                 if(modelSelect.querySelector(`option[value="${task.modelVal}"]`)) {
                     modelSelect.value = task.modelVal;
-                    updateModel(modelSelect); // 触发面板动态变化和清洗逻辑
+                    updateModel(modelSelect);
                 }
             }
 
@@ -573,42 +487,15 @@
                 updateRatio(document.getElementById('ratio-select'));
             }
 
-            if (task.modelVal === 'sora-2-all') {
-                if (task.soraSize) { document.getElementById('size-select').value = task.soraSize; updateSize(document.getElementById('size-select')); }
-                if (task.soraDuration) { document.getElementById('duration-select').value = task.soraDuration; updateDuration(document.getElementById('duration-select')); }
-                if (task.soraWatermark !== undefined) { document.getElementById('watermark-select').value = task.soraWatermark; updateWatermark(document.getElementById('watermark-select')); }
-            }
-
-            if (task.rawImages) {
-                payloadState.firstFrame = task.rawImages.firstFrame || null;
-                payloadState.lastFrame = task.rawImages.lastFrame || null;
-                payloadState.references = task.rawImages.references || [];
-                
-                // 🌟 提取同款时的二次安全过滤
-                if (payloadState.model === 'sora-2-all') {
-                    payloadState.firstFrame = null;
-                    payloadState.lastFrame = null;
-                    if (payloadState.references.length > 1) {
-                        payloadState.references = [payloadState.references[0]];
-                    }
-                }
-
-                switchMode(task.mode || 'ref');
-                
-                if (payloadState.currentMode === 'frame' && payloadState.model !== 'sora-2-all') {
-                    if (payloadState.firstFrame) {
-                        document.getElementById('first-img').src = payloadState.firstFrame;
-                        document.getElementById('slot-first-box').classList.add('has-img');
-                    } else clearFrame(new Event(''), 'firstFrame');
-                    
-                    if (payloadState.lastFrame) {
-                        document.getElementById('last-img').src = payloadState.lastFrame;
-                        document.getElementById('slot-last-box').classList.add('has-img');
-                    } else clearFrame(new Event(''), 'lastFrame');
-                } else {
-                    renderReferences();
-                }
-            }
+            // 因为出于节省内存的考虑，不再保存原图数据，所以提取同款时需清空画板让用户重新上传
+            payloadState.firstFrame = null;
+            payloadState.lastFrame = null;
+            payloadState.references = [];
+            clearFrame(new Event(''), 'firstFrame');
+            clearFrame(new Event(''), 'lastFrame');
+            renderReferences();
+            
+            switchMode(task.mode || 'ref');
             document.getElementById('prompt-input').focus();
         }
 
@@ -659,7 +546,6 @@
                     </div>
                     <div class="card-tags">
                         <span class="card-tag">${task.ratio}</span>
-                        ${task.modelVal === 'sora-2-all' && task.soraDuration ? `<span class="card-tag">${task.soraDuration}s</span>` : ''}
                     </div>
                     ${mediaHtml}
                     <div class="card-actions">

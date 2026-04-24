@@ -25,6 +25,11 @@
 
         .top-bar { position: fixed; top: 0; left: 0; width: 100%; padding: 20px 32px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(180deg, rgba(15,15,17,0.8) 0%, rgba(15,15,17,0) 100%); z-index: 10; pointer-events: none; }
         .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; text-shadow: 0 2px 10px rgba(0,0,0,0.5); pointer-events: auto; }
+        
+        /* 顶部操作区 */
+        .top-actions { display: flex; gap: 12px; pointer-events: auto; }
+        .top-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(10px); transition: all 0.2s; font-size: 13px; }
+        .top-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
 
         /* 画布核心层 */
         .canvas-viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; cursor: grab; }
@@ -53,6 +58,12 @@
         .card-media { width: 100%; background: #0b0b0c; border-radius: var(--radius-sm); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.05); min-height: 120px; }
         .card-media img, .card-media video { width: 100%; height: auto; display: block; max-height: 500px; object-fit: contain; }
         
+        /* 便签卡片专属样式 */
+        .sticky-note { width: 260px; background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.3); padding: 0; box-shadow: 0 10px 30px rgba(255, 213, 79, 0.05); }
+        .sticky-note .card-header { background: rgba(255, 213, 79, 0.15); padding: 10px 12px; border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
+        .sticky-note textarea { width: 100%; height: 160px; background: transparent; border: none; color: #fff; font-size: 14px; line-height: 1.6; resize: none; outline: none; padding: 0 12px 12px 12px; user-select: text; }
+        .sticky-note textarea::placeholder { color: rgba(255,255,255,0.3); }
+
         @keyframes pulseText { 0% {opacity:0.5;} 50% {opacity:1;} 100% {opacity:0.5;} }
         .generating-text { font-size: 13px; font-weight: 500; letter-spacing: 1px; margin-top: 12px; animation: pulseText 1.5s infinite; color: var(--accent); }
 
@@ -89,6 +100,13 @@
         .img-slot.has-img .remove-badge { display: flex; }
         .hidden-input { display: none; }
         
+        .ref-popover { position: absolute; bottom: calc(100% + 12px); left: 0; background: rgba(30, 30, 32, 0.95); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; gap: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); z-index: 200; backdrop-filter: blur(20px); transform-origin: bottom left; }
+        .ref-list { display: flex; gap: 8px; }
+        .popover-img-item { width: 72px; height: 96px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid var(--border); }
+        .popover-img-item img { width: 100%; height: 100%; object-fit: cover; }
+        .popover-rm-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+        .ref-add-btn { width: 72px; height: 96px; border-radius: 8px; border: 1px dashed var(--text-sub); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-sub); }
+
         .prompt-input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 14px; resize: none; height: 72px; line-height: 1.5; outline: none; user-select: text; }
 
         .console-actions-row { display: flex; justify-content: space-between; align-items: center; padding-top: 4px;}
@@ -112,6 +130,11 @@
         <div class="logo">
             <span class="material-symbols-outlined">account_tree</span> Veo Studio <span style="font-size:12px; color:var(--text-sub); font-weight:normal;">/ Infinity Flow</span>
         </div>
+        <div class="top-actions">
+            <button class="top-btn" onclick="createStickyNote()">
+                <span class="material-symbols-outlined" style="font-size: 16px;">sticky_note_2</span> 新建便签 (双击画布)
+            </button>
+        </div>
     </div>
 
     <div class="canvas-viewport" id="canvas-viewport">
@@ -131,14 +154,21 @@
 
             <div class="input-wrapper">
                 <div class="slot-group active" id="slots-ref">
-                    <div class="img-slot" id="slot-ref-box" onclick="document.getElementById('ref-file').click()">
-                        <span class="material-symbols-outlined">add_photo_alternate</span>
-                        <span>参考图</span>
+                    <div class="img-slot" id="slot-ref-box" onclick="toggleRefPopover(event)">
+                        <span class="material-symbols-outlined" id="ref-icon-placeholder">add_photo_alternate</span>
+                        <span id="ref-text-placeholder">参考图</span>
                         <img id="ref-img">
                         <div class="count-badge" id="ref-count-badge">0</div>
                         <div class="remove-badge" onclick="clearReferences(event)">×</div>
                     </div>
                     <input type="file" id="ref-file" class="hidden-input" accept="image/*" multiple onchange="handleMultiRefs(this)">
+                    
+                    <div class="ref-popover" id="ref-popover" style="display: none;" onclick="event.stopPropagation()">
+                        <div class="ref-list" id="ref-list-container"></div>
+                        <div class="ref-add-btn" onclick="document.getElementById('ref-file').click()" id="ref-popover-add">
+                            <span class="material-symbols-outlined">add</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="slot-group" id="slots-frame">
@@ -155,7 +185,7 @@
                     </div>
                 </div>
 
-                <textarea id="prompt-input" class="prompt-input" placeholder="支持将本地电脑图片直接拖入背景画布，或拖入左侧选框内..."></textarea>
+                <textarea id="prompt-input" class="prompt-input" placeholder="描述视频画面内容和动态过程... (支持将画布上的图片拖入左侧框内)"></textarea>
             </div>
         </div>
 
@@ -176,7 +206,6 @@
                         <option value="16:9">横屏 16:9</option>
                     </select>
                 </div>
-
                 <div class="action-pill" id="pill-enhance">
                     <span class="material-symbols-outlined">auto_fix_high</span>
                     <span id="enhance-text">AI 扩写提示词</span>
@@ -185,7 +214,6 @@
                         <option value="false">原词生成</option>
                     </select>
                 </div>
-                
                 <div class="action-pill" id="pill-upsample">
                     <span class="material-symbols-outlined">high_quality</span>
                     <span id="upsample-text">标准画质</span>
@@ -194,7 +222,6 @@
                         <option value="true">开启超分 (更慢)</option>
                     </select>
                 </div>
-
                 <div class="action-pill" style="border-color: rgba(10, 132, 255, 0.5);">
                     <span class="material-symbols-outlined" style="color:var(--accent)">layers</span>
                     <span id="batch-text" style="color:var(--accent)">单次 (x1)</span>
@@ -329,6 +356,7 @@
         // 使卡片可拖拽
         function makeCardDraggable(cardEl, task) {
             const header = cardEl.querySelector('.card-header');
+            if(!header) return;
             let isDraggingCard = false, cStartX, cStartY;
 
             header.addEventListener('mousedown', (e) => {
@@ -352,10 +380,18 @@
         }
 
         // ==========================================
-        // 👁️ 控制台智能缩小逻辑
+        // 👁️ 交互逻辑与防误触
         // ==========================================
         const consoleEl = document.getElementById('floating-console');
         document.addEventListener('click', (e) => {
+            // 点击气泡外关闭气泡
+            const popover = document.getElementById('ref-popover');
+            const slotBox = document.getElementById('slot-ref-box');
+            if (popover && popover.style.display === 'flex' && !popover.contains(e.target) && !slotBox.contains(e.target)) {
+                popover.style.display = 'none';
+            }
+            
+            // 点击控制台外部使其智能缩小
             if (e.target === viewport || e.target === board) {
                 consoleEl.classList.add('minimized');
             } else if (consoleEl.contains(e.target)) {
@@ -364,14 +400,50 @@
         });
 
         // ==========================================
-        // 🖼️ 核心突破：本地文件直接拖放至画布与卡槽
+        // 📝 核心突破 1：即时便签功能 (Miro 体验)
         // ==========================================
-        
-        // 1. 全局屏蔽浏览器默认的“拖入打开新页面”行为（极其重要，否则会离开你的网页）
+        async function createStickyNote(spawnX, spawnY) {
+            // 如果未传坐标，默认在视野正中心生成
+            if (spawnX === undefined) spawnX = (-transform.x + window.innerWidth/2 - 120) / transform.scale;
+            if (spawnY === undefined) spawnY = (-transform.y + window.innerHeight/2 - 80) / transform.scale;
+
+            const newNote = {
+                id: 'note_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                type: 'note',
+                text: '',
+                x: spawnX,
+                y: spawnY,
+                timestamp: Date.now()
+            };
+            await saveTaskDB(newNote);
+            renderBoard();
+        }
+
+        // 🌟 双击画布空白处，直接生成便签
+        viewport.addEventListener('dblclick', (e) => {
+            if (e.target === viewport || e.target === board) {
+                const spawnX = (e.clientX - transform.x) / transform.scale;
+                const spawnY = (e.clientY - transform.y) / transform.scale;
+                createStickyNote(spawnX, spawnY);
+            }
+        });
+
+        // 便签内容防抖自动保存
+        let noteTimeout;
+        async function updateNoteText(id, text) {
+            clearTimeout(noteTimeout);
+            noteTimeout = setTimeout(async () => {
+                const note = await getTaskDB(id);
+                if (note) { note.text = text; await saveTaskDB(note); }
+            }, 500);
+        }
+
+        // ==========================================
+        // 🖼️ 核心突破 2：本地文件拖放交互
+        // ==========================================
         window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
         window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
 
-        // 2. 将本地图片拖拽进无限画布 -> 转化为本地素材卡片
         viewport.addEventListener('drop', async (e) => {
             e.preventDefault();
             const files = e.dataTransfer.files;
@@ -380,7 +452,6 @@
                 for (let file of files) {
                     if (file.type.startsWith('image/')) {
                         const base64 = await compressImage(file, 1024);
-                        // 根据鼠标松开的坐标，智能计算素材卡片在无限画布上的真实绝对坐标
                         const spawnX = (e.clientX - transform.x) / transform.scale + offset;
                         const spawnY = (e.clientY - transform.y) / transform.scale + offset;
                         
@@ -388,19 +459,16 @@
                             id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5),
                             type: 'local_image',
                             src: base64,
-                            x: spawnX,
-                            y: spawnY,
-                            timestamp: Date.now()
+                            x: spawnX, y: spawnY, timestamp: Date.now()
                         };
                         await saveTaskDB(newLocalNode);
-                        offset += 40; // 如果拖了多张图，给它们做一点偏移防止完全叠在一起
+                        offset += 40; 
                     }
                 }
                 renderBoard();
             }
         });
 
-        // 3. 将（画布上的卡片 / 本地电脑里的图片）拖入控制台小框
         function setupDropZone(slotId, stateKey) {
             const slot = document.getElementById(slotId);
             slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
@@ -409,23 +477,17 @@
                 e.preventDefault(); slot.classList.remove('drag-over');
                 
                 let srcToUse = null;
-
-                // 情景 A：从画布里拖过来的已存在图片 (基于 text/plain 数据传输)
                 const textData = e.dataTransfer.getData('text/plain');
                 if (textData && textData.startsWith('data:image')) {
                     srcToUse = textData;
-                } 
-                // 情景 B：直接把本地电脑的图片拖进了小框里
-                else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                     const file = e.dataTransfer.files[0];
-                    if (file.type.startsWith('image/')) {
-                        srcToUse = await compressImage(file, 1024);
-                    }
+                    if (file.type.startsWith('image/')) srcToUse = await compressImage(file, 1024);
                 }
 
-                // 统一赋值并渲染
                 if (srcToUse) {
                     if (stateKey === 'references') {
+                        // 🌟 修复点 2：允许最多推入 3 张垫图
                         const maxAllowed = 3;
                         if (payloadState.references.length < maxAllowed) payloadState.references.push(srcToUse);
                         renderReferences();
@@ -450,8 +512,18 @@
         });
 
         // ==============================
-        // 动态 UI 控制逻辑
+        // 弹窗与 UI 控制
         // ==============================
+        function toggleRefPopover(e) {
+            e.stopPropagation();
+            if (payloadState.references.length === 0) {
+                document.getElementById('ref-file').click();
+            } else {
+                const p = document.getElementById('ref-popover');
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            }
+        }
+
         function switchMode(mode) {
             payloadState.currentMode = mode;
             document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
@@ -462,7 +534,6 @@
 
         function updateModel(select) { payloadState.model = select.value; document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; }
         function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; }
-        // 恢复丢失的方法
         function updateEnhance(select) { payloadState.enhancePrompt = select.value === 'true'; document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text; }
         function updateUpsample(select) { payloadState.enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
 
@@ -486,12 +557,23 @@
             if (payloadState.references.length + input.files.length > 3) { input.value = ''; return alert(`最多仅支持 3 张图。`); }
             for (let file of Array.from(input.files)) payloadState.references.push(await compressImage(file));
             input.value = ''; renderReferences();
+            if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
         }
-        function clearReferences(e) { e.stopPropagation(); payloadState.references = []; renderReferences(); }
+        function removeReference(event, index) {
+            event.stopPropagation();
+            payloadState.references.splice(index, 1);
+            renderReferences();
+            if(payloadState.references.length === 0) document.getElementById('ref-popover').style.display = 'none';
+        }
+        function clearReferences(e) { e.stopPropagation(); payloadState.references = []; renderReferences(); document.getElementById('ref-popover').style.display = 'none'; }
         function renderReferences() {
             const box = document.getElementById('slot-ref-box'), imgEl = document.getElementById('ref-img'), countBadge = document.getElementById('ref-count-badge');
             if (payloadState.references.length === 0) { box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; } 
             else { box.classList.add('has-img'); imgEl.src = payloadState.references[0]; countBadge.style.display = payloadState.references.length > 1 ? 'flex' : 'none'; countBadge.innerText = payloadState.references.length; }
+            
+            const listContainer = document.getElementById('ref-list-container');
+            listContainer.innerHTML = payloadState.references.map((b64, index) => `<div class="popover-img-item"><img src="${b64}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
+            document.getElementById('ref-popover-add').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
         }
         async function handleSingleFrame(input, type) {
             if (!input.files[0]) return;
@@ -506,7 +588,7 @@
         }
 
         // ==============================
-        // x1 / x2 批处理调度
+        // 批处理提交调度
         // ==============================
         async function submitBatchTask() {
             const prompt = document.getElementById('prompt-input').value.trim();
@@ -517,7 +599,7 @@
             btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
             
             let submitRef = [], submitFirst = null, submitLast = null;
-            if (payloadState.currentMode === 'ref') submitRef = payloadState.references;
+            if (payloadState.currentMode === 'ref') submitRef = [...payloadState.references];
             else { submitFirst = payloadState.firstFrame; submitLast = payloadState.lastFrame; }
 
             const basePayload = {
@@ -527,9 +609,7 @@
             };
 
             let promises = [];
-            for(let i=0; i<batchCount; i++) {
-                promises.push(executeSubmission(basePayload, i)); 
-            }
+            for(let i=0; i<batchCount; i++) { promises.push(executeSubmission(basePayload, i)); }
             
             await Promise.allSettled(promises);
             btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
@@ -548,7 +628,7 @@
                     
                     const newTask = {
                         id: data.taskId, prompt: payload.prompt,
-                        modelStr: payload.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast',
+                        modelStr: payload.references && payload.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast',
                         modelVal: payload.model, ratio: payload.aspectRatio,
                         rawImages: { firstFrame: payload.firstFrame, lastFrame: payload.lastFrame, references: payload.references || [] },
                         mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
@@ -569,7 +649,7 @@
             const payload = {
                 model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio,
                 enhancePrompt: true, enableUpsample: false,
-                firstFrame: task.rawImages.firstFrame, lastFrame: task.rawImages.lastFrame, references: task.rawImages.references
+                firstFrame: task.rawImages.firstFrame, lastFrame: task.rawImages.lastFrame, references: task.rawImages.references || []
             };
             await deleteTaskDB(taskId);
             executeSubmission(payload);
@@ -598,12 +678,28 @@
         }
 
         // ==============================
-        // 渲染与交互
+        // 渲染大板
         // ==============================
         async function renderBoard() {
             const tasks = await getAllTasksDB();
             board.innerHTML = tasks.map((task) => {
-                // 🌟 新增分支：如果这是一张“本地拖入的素材卡片”
+                
+                // 🌟 新增类型 1：便签节点
+                if (task.type === 'note') {
+                    return `
+                    <div class="video-card sticky-note" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
+                        <div class="card-header">
+                            <span style="color:#ffca28; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签
+                            </span>
+                            <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+                        </div>
+                        <textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>
+                    </div>
+                    `;
+                }
+
+                // 🌟 新增类型 2：本地素材卡片
                 if (task.type === 'local_image') {
                     return `
                     <div class="video-card" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: 220px; padding: 8px; background: rgba(30,30,32,0.95); box-shadow: 0 4px 20px rgba(0,0,0,0.8);">
@@ -618,7 +714,7 @@
                     `;
                 }
 
-                // 常规视频卡片渲染
+                // 常规类型：视频生成卡片
                 let statusBadge = '', mediaHtml = '';
 
                 if (task.status === 'processing') {

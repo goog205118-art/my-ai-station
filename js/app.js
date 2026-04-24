@@ -462,7 +462,14 @@ async function removeTask(id) {
 function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB(); updateCanvas(); await renderBoard();
+    await initDB(); 
+    
+    // ✅ 修复：手动初始化一下画布的默认位移（用来替代缺失的 updateCanvas()）
+    board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+    document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
+
+    // 执行渲染画板
+    await renderBoard(); 
     
     const setupDrop = (slotId, stateKey) => {
         const slot = document.getElementById(slotId);

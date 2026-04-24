@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veo & Sora Studio - Infinity Flow</title>
+    <title>Veo Studio - Infinity Flow</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 
@@ -155,7 +155,7 @@
                     </div>
                 </div>
 
-                <textarea id="prompt-input" class="prompt-input" placeholder="描述视频画面内容和动态过程... (支持将画布上的图片拖入左侧框内)"></textarea>
+                <textarea id="prompt-input" class="prompt-input" placeholder="支持将本地电脑图片直接拖入背景画布，或拖入左侧选框内..."></textarea>
             </div>
         </div>
 
@@ -166,7 +166,6 @@
                     <span id="model-text">Veo 3.1 Fast</span>
                     <select id="model-select" onchange="updateModel(this)">
                         <option value="veo_3_1_fast">Veo 3.1 Fast</option>
-                        <option value="sora-2-all">Sora 2</option>
                     </select>
                 </div>
                 <div class="action-pill">
@@ -177,6 +176,25 @@
                         <option value="16:9">横屏 16:9</option>
                     </select>
                 </div>
+
+                <div class="action-pill" id="pill-enhance">
+                    <span class="material-symbols-outlined">auto_fix_high</span>
+                    <span id="enhance-text">AI 扩写提示词</span>
+                    <select id="enhance-select" onchange="updateEnhance(this)">
+                        <option value="true">AI 扩写提示词</option>
+                        <option value="false">原词生成</option>
+                    </select>
+                </div>
+                
+                <div class="action-pill" id="pill-upsample">
+                    <span class="material-symbols-outlined">high_quality</span>
+                    <span id="upsample-text">标准画质</span>
+                    <select id="upsample-select" onchange="updateUpsample(this)">
+                        <option value="false">标准画质</option>
+                        <option value="true">开启超分 (更慢)</option>
+                    </select>
+                </div>
+
                 <div class="action-pill" style="border-color: rgba(10, 132, 255, 0.5);">
                     <span class="material-symbols-outlined" style="color:var(--accent)">layers</span>
                     <span id="batch-text" style="color:var(--accent)">单次 (x1)</span>
@@ -210,11 +228,11 @@
             sessionStorage.setItem('veo_admin_pwd', adminPwd);
         }
 
-        let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
+        let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
         let activeTasks = [];
 
         // ==========================================
-        // 🗄️ 核心进化：IndexedDB 数据库封装 (告别 5MB 限制)
+        // 🗄️ 核心进化：IndexedDB 数据库封装
         // ==========================================
         const DB_NAME = 'VeoInfinityDB';
         let db;
@@ -271,7 +289,7 @@
         // ==========================================
         const viewport = document.getElementById('canvas-viewport');
         const board = document.getElementById('canvas-board');
-        let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; // 默认初始视野偏上中心
+        let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
         let isPanning = false, startPanX = 0, startPanY = 0;
 
         function updateCanvas() {
@@ -296,7 +314,7 @@
             e.preventDefault();
             const zoomSensitivity = 0.001;
             const delta = e.deltaY * zoomSensitivity;
-            let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); // 限制缩放 0.2x 到 3x
+            let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
 
             const rect = viewport.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -317,7 +335,6 @@
                 isDraggingCard = true;
                 cStartX = e.clientX - (task.x || 0) * transform.scale;
                 cStartY = e.clientY - (task.y || 0) * transform.scale;
-                // 提升层级
                 document.querySelectorAll('.video-card').forEach(c => c.style.zIndex = '1');
                 cardEl.style.zIndex = '10';
                 e.stopPropagation(); 
@@ -339,48 +356,94 @@
         // ==========================================
         const consoleEl = document.getElementById('floating-console');
         document.addEventListener('click', (e) => {
-            // 如果点击的是背景画布，缩小控制台
             if (e.target === viewport || e.target === board) {
                 consoleEl.classList.add('minimized');
-            } 
-            // 如果点击的是缩小的控制台，展开它
-            else if (consoleEl.contains(e.target)) {
+            } else if (consoleEl.contains(e.target)) {
                 consoleEl.classList.remove('minimized');
             }
         });
 
         // ==========================================
-        // 🖼️ HTML5 拖拽复用素材逻辑 (VeoFlow级体验)
+        // 🖼️ 核心突破：本地文件直接拖放至画布与卡槽
         // ==========================================
+        
+        // 1. 全局屏蔽浏览器默认的“拖入打开新页面”行为（极其重要，否则会离开你的网页）
+        window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
+        window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
+
+        // 2. 将本地图片拖拽进无限画布 -> 转化为本地素材卡片
+        viewport.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                let offset = 0;
+                for (let file of files) {
+                    if (file.type.startsWith('image/')) {
+                        const base64 = await compressImage(file, 1024);
+                        // 根据鼠标松开的坐标，智能计算素材卡片在无限画布上的真实绝对坐标
+                        const spawnX = (e.clientX - transform.x) / transform.scale + offset;
+                        const spawnY = (e.clientY - transform.y) / transform.scale + offset;
+                        
+                        const newLocalNode = {
+                            id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                            type: 'local_image',
+                            src: base64,
+                            x: spawnX,
+                            y: spawnY,
+                            timestamp: Date.now()
+                        };
+                        await saveTaskDB(newLocalNode);
+                        offset += 40; // 如果拖了多张图，给它们做一点偏移防止完全叠在一起
+                    }
+                }
+                renderBoard();
+            }
+        });
+
+        // 3. 将（画布上的卡片 / 本地电脑里的图片）拖入控制台小框
         function setupDropZone(slotId, stateKey) {
             const slot = document.getElementById(slotId);
             slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
             slot.addEventListener('dragleave', (e) => { e.preventDefault(); slot.classList.remove('drag-over'); });
-            slot.addEventListener('drop', (e) => {
+            slot.addEventListener('drop', async (e) => {
                 e.preventDefault(); slot.classList.remove('drag-over');
-                const src = e.dataTransfer.getData('text/plain');
-                if (src && src.startsWith('data:image')) {
+                
+                let srcToUse = null;
+
+                // 情景 A：从画布里拖过来的已存在图片 (基于 text/plain 数据传输)
+                const textData = e.dataTransfer.getData('text/plain');
+                if (textData && textData.startsWith('data:image')) {
+                    srcToUse = textData;
+                } 
+                // 情景 B：直接把本地电脑的图片拖进了小框里
+                else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.type.startsWith('image/')) {
+                        srcToUse = await compressImage(file, 1024);
+                    }
+                }
+
+                // 统一赋值并渲染
+                if (srcToUse) {
                     if (stateKey === 'references') {
-                        const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
-                        if (payloadState.references.length < maxAllowed) payloadState.references.push(src);
+                        const maxAllowed = 3;
+                        if (payloadState.references.length < maxAllowed) payloadState.references.push(srcToUse);
                         renderReferences();
                     } else {
-                        payloadState[stateKey] = src;
+                        payloadState[stateKey] = srcToUse;
                         const t = stateKey === 'firstFrame' ? 'first' : 'last';
-                        document.getElementById(`${t}-img`).src = src;
+                        document.getElementById(`${t}-img`).src = srcToUse;
                         document.getElementById(`slot-${t}-box`).classList.add('has-img');
                     }
                 }
             });
         }
 
-        // 初始化所有组件
+        // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
             await initDB();
             updateCanvas();
             await renderBoard();
-            
-            // 绑定拖放热区
             setupDropZone('slot-ref-box', 'references');
             setupDropZone('slot-first-box', 'firstFrame');
             setupDropZone('slot-last-box', 'lastFrame');
@@ -397,20 +460,11 @@
             document.getElementById(`slots-${mode}`).classList.add('active');
         }
 
-        function updateModel(select) {
-            payloadState.model = select.value;
-            document.getElementById('model-text').innerText = select.options[select.selectedIndex].text;
-            const isSora = payloadState.model === 'sora-2-all';
-            const tabFrame = document.getElementById('tab-frame');
-            if (isSora) {
-                tabFrame.style.display = 'none'; 
-                if (payloadState.currentMode === 'frame') switchMode('ref'); 
-                if (payloadState.references.length > 1) { payloadState.references = [payloadState.references[0]]; renderReferences(); }
-            } else {
-                tabFrame.style.display = 'flex'; 
-            }
-        }
-        function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; }
+        function updateModel(select) { payloadState.model = select.value; document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; }
+        function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; }
+        // 恢复丢失的方法
+        function updateEnhance(select) { payloadState.enhancePrompt = select.value === 'true'; document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text; }
+        function updateUpsample(select) { payloadState.enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
 
         async function compressImage(file, maxWidth = 1024) {
             return new Promise((resolve) => {
@@ -429,8 +483,7 @@
 
         async function handleMultiRefs(input) {
             if (!input.files || input.files.length === 0) return;
-            const maxAllowed = payloadState.model === 'sora-2-all' ? 1 : 3;
-            if (payloadState.references.length + input.files.length > maxAllowed) { input.value = ''; return alert(`最多仅支持 ${maxAllowed} 张图。`); }
+            if (payloadState.references.length + input.files.length > 3) { input.value = ''; return alert(`最多仅支持 3 张图。`); }
             for (let file of Array.from(input.files)) payloadState.references.push(await compressImage(file));
             input.value = ''; renderReferences();
         }
@@ -463,21 +516,19 @@
             const btn = document.getElementById('generate-btn');
             btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
             
-            // 构造统一 payload
             let submitRef = [], submitFirst = null, submitLast = null;
             if (payloadState.currentMode === 'ref') submitRef = payloadState.references;
             else { submitFirst = payloadState.firstFrame; submitLast = payloadState.lastFrame; }
 
             const basePayload = {
                 model: payloadState.model, prompt: prompt, aspectRatio: payloadState.aspectRatio,
-                enhancePrompt: true, enableUpsample: false, soraSize: 'large', soraDuration: 10, soraWatermark: false,
+                enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample,
                 firstFrame: submitFirst, lastFrame: submitLast, references: submitRef
             };
 
-            // 发起并发请求
             let promises = [];
             for(let i=0; i<batchCount; i++) {
-                promises.push(executeSubmission(basePayload, i)); // 传入 i 作为画面偏移量
+                promises.push(executeSubmission(basePayload, i)); 
             }
             
             await Promise.allSettled(promises);
@@ -485,7 +536,6 @@
             document.getElementById('prompt-input').value = ''; 
         }
 
-        // 单次 API 提交核心函数
         async function executeSubmission(payload, offsetIndex = 0) {
             try {
                 const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': adminPwd }, body: JSON.stringify(payload) });
@@ -493,13 +543,12 @@
                 const data = await response.json();
 
                 if (data.taskId) {
-                    // 智能计算出生坐标 (屏幕中心附近，偏移防重叠)
                     const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360);
                     const spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
                     
                     const newTask = {
                         id: data.taskId, prompt: payload.prompt,
-                        modelStr: payload.model === 'sora-2-all' ? 'Sora 2' : (payload.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast'),
+                        modelStr: payload.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast',
                         modelVal: payload.model, ratio: payload.aspectRatio,
                         rawImages: { firstFrame: payload.firstFrame, lastFrame: payload.lastFrame, references: payload.references || [] },
                         mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
@@ -514,15 +563,14 @@
             } catch (error) { console.error('提交失败:', error); }
         }
 
-        // 失败重试逻辑 (直接读取旧数据复用)
         async function retryTask(taskId) {
             const task = await getTaskDB(taskId);
             if(!task) return;
             const payload = {
                 model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio,
+                enhancePrompt: true, enableUpsample: false,
                 firstFrame: task.rawImages.firstFrame, lastFrame: task.rawImages.lastFrame, references: task.rawImages.references
             };
-            // 删除旧失败卡片，发起新请求
             await deleteTaskDB(taskId);
             executeSubmission(payload);
         }
@@ -537,7 +585,7 @@
                     const data = await response.json();
                     
                     const task = await getTaskDB(taskId);
-                    if (!task) return; // 任务可能被手删了
+                    if (!task) return; 
 
                     if (data.status === 'success' && data.videoUrl) { task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
                     if (data.status === 'failed') { task.status = 'failed'; await saveTaskDB(task); renderBoard(); return; }
@@ -555,6 +603,22 @@
         async function renderBoard() {
             const tasks = await getAllTasksDB();
             board.innerHTML = tasks.map((task) => {
+                // 🌟 新增分支：如果这是一张“本地拖入的素材卡片”
+                if (task.type === 'local_image') {
+                    return `
+                    <div class="video-card" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: 220px; padding: 8px; background: rgba(30,30,32,0.95); box-shadow: 0 4px 20px rgba(0,0,0,0.8);">
+                        <div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材
+                            </span>
+                            <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+                        </div>
+                        <img src="${task.src}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${task.src}')" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片，拖拽至下方工作台使用">
+                    </div>
+                    `;
+                }
+
+                // 常规视频卡片渲染
                 let statusBadge = '', mediaHtml = '';
 
                 if (task.status === 'processing') {
@@ -568,7 +632,6 @@
                     mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" controls loop muted playsinline></video></div>`;
                 }
 
-                // 支持拖拽图片复用
                 const thumbImg = task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]);
                 const thumbHtml = thumbImg ? `<img src="${thumbImg}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${thumbImg}')" title="可按住拖拽至下方工作台使用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
 
@@ -590,15 +653,12 @@
                 `;
             }).join('');
 
-            // 绑定所有卡片的拖动事件
             tasks.forEach(task => makeCardDraggable(document.getElementById(`card-${task.id}`), task));
-            
-            // 恢复轮询
             tasks.forEach(task => { if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); } });
         }
 
         async function removeTask(id) {
-            if(confirm('确定删除这条卡片吗？')) { await deleteTaskDB(id); renderBoard(); }
+            if(confirm('确定删除这张卡片吗？')) { await deleteTaskDB(id); renderBoard(); }
         }
         function downloadVideo(url) {
             const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click();

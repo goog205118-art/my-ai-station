@@ -27,6 +27,15 @@
             <span class="material-symbols-outlined">account_tree</span> Veo Studio <span style="font-size:12px; color:var(--text-sub); font-weight:normal;">/ Infinity Flow</span>
         </div>
         <div class="top-actions">
+            <button class="top-btn" id="export-btn" onclick="exportWorkspace()">
+                <span class="material-symbols-outlined" style="font-size: 16px;">download</span> 导出工程
+            </button>
+            <label class="top-btn" style="cursor: pointer; margin: 0;">
+                <span class="material-symbols-outlined" style="font-size: 16px;">upload</span> 导入工程
+                <input type="file" accept=".veo" style="display: none;" onchange="importWorkspace(this)">
+            </label>
+            <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 8px;"></div>
+
             <button class="top-btn" onclick="toggleDrawer()">
                 <span class="material-symbols-outlined" style="font-size: 16px;">grid_view</span> 工具箱
             </button>

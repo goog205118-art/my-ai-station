@@ -72,6 +72,7 @@
         .card-actions button:hover { background: var(--surface-hover); color: var(--text-main); }
         .card-actions button.reuse-btn:hover { color: var(--accent); background: rgba(10, 132, 255, 0.1); }
         .card-actions button.retry-btn:hover { color: var(--success); background: rgba(50, 215, 75, 0.1); }
+        .card-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* 控制台区域 */
         .floating-console { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 860px; background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 100; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: bottom center; }
@@ -403,7 +404,6 @@
         // 📝 核心突破 1：即时便签功能 (Miro 体验)
         // ==========================================
         async function createStickyNote(spawnX, spawnY) {
-            // 如果未传坐标，默认在视野正中心生成
             if (spawnX === undefined) spawnX = (-transform.x + window.innerWidth/2 - 120) / transform.scale;
             if (spawnY === undefined) spawnY = (-transform.y + window.innerHeight/2 - 80) / transform.scale;
 
@@ -487,10 +487,10 @@
 
                 if (srcToUse) {
                     if (stateKey === 'references') {
-                        // 🌟 修复点 2：允许最多推入 3 张垫图
                         const maxAllowed = 3;
                         if (payloadState.references.length < maxAllowed) payloadState.references.push(srcToUse);
                         renderReferences();
+                        document.getElementById('ref-popover').style.display = 'flex'; // 拖入后自动展示气泡
                     } else {
                         payloadState[stateKey] = srcToUse;
                         const t = stateKey === 'firstFrame' ? 'first' : 'last';
@@ -643,7 +643,14 @@
             } catch (error) { console.error('提交失败:', error); }
         }
 
-        async function retryTask(taskId) {
+        // 🌟 核心突破 3：真正的原地重试且带 UI 动画
+        async function retryTask(taskId, btnElement) {
+            // 点击瞬间将按钮变为旋转 loading 状态，防止重复点击
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:var(--text-sub);"><circle cx="25" cy="25" r="20"></circle></svg>`;
+            }
+
             const task = await getTaskDB(taskId);
             if(!task) return;
             const payload = {
@@ -651,8 +658,35 @@
                 enhancePrompt: true, enableUpsample: false,
                 firstFrame: task.rawImages.firstFrame, lastFrame: task.rawImages.lastFrame, references: task.rawImages.references || []
             };
-            await deleteTaskDB(taskId);
-            executeSubmission(payload);
+            
+            try {
+                // 静默发起重新提交请求
+                const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': adminPwd }, body: JSON.stringify(payload) });
+                if (response.status === 401 || response.status === 403) throw new Error("密码错误");
+                const data = await response.json();
+
+                if (data.taskId) {
+                    // 🌟 拿到新 ID 后，原地替换旧数据，保留 X/Y 坐标不移动！
+                    await deleteTaskDB(taskId); // 删掉旧 ID 的壳
+                    task.id = data.taskId;      // 换上新 ID
+                    task.status = 'processing';
+                    task.timestamp = Date.now();
+                    task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'});
+                    
+                    await saveTaskDB(task);     // 存入新数据
+                    await renderBoard();        // 重新渲染画布
+                    startTaskPolling(task.id);
+                } else {
+                    throw new Error("无返回 ID");
+                }
+            } catch (error) {
+                console.error("重试失败", error);
+                alert("重试失败，请检查网络！");
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = `<span class="material-symbols-outlined">refresh</span>`;
+                }
+            }
         }
 
         function startTaskPolling(taskId) {
@@ -684,7 +718,7 @@
             const tasks = await getAllTasksDB();
             board.innerHTML = tasks.map((task) => {
                 
-                // 🌟 新增类型 1：便签节点
+                // 便签节点
                 if (task.type === 'note') {
                     return `
                     <div class="video-card sticky-note" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
@@ -699,7 +733,7 @@
                     `;
                 }
 
-                // 🌟 新增类型 2：本地素材卡片
+                // 本地素材卡片
                 if (task.type === 'local_image') {
                     return `
                     <div class="video-card" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: 220px; padding: 8px; background: rgba(30,30,32,0.95); box-shadow: 0 4px 20px rgba(0,0,0,0.8);">
@@ -742,7 +776,9 @@
                     ${mediaHtml}
                     <div class="card-actions">
                         ${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}
-                        ${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}')" title="一键重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}
+                        
+                        ${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}
+                        
                         <button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button>
                     </div>
                 </div>

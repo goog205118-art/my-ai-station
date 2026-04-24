@@ -205,6 +205,19 @@
         const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
         const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 
+        // ==========================================
+        // 🔒 安全控制：获取并验证控制台密码
+        // ==========================================
+        let adminPwd = sessionStorage.getItem('veo_admin_pwd');
+        if (!adminPwd) {
+            adminPwd = prompt('🔒 请输入 Veo Studio 控制台安全访问密码：');
+            if (!adminPwd) {
+                document.body.innerHTML = '<h2 style="color:var(--danger); text-align:center; margin-top:20vh;">未授权访问：需要密码才能使用控制台</h2>';
+                throw new Error('未授权，代码已终止执行'); // 阻止后续逻辑运行
+            }
+            sessionStorage.setItem('veo_admin_pwd', adminPwd);
+        }
+
         let payloadState = {
             model: 'veo_3_1_fast',
             aspectRatio: '9:16', 
@@ -388,9 +401,18 @@
             try {
                 const response = await fetch(API_SUBMIT, { 
                     method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-studio-pwd': adminPwd // 🔒 将密码放入请求头发送给 n8n 验证
+                    }, 
                     body: JSON.stringify(payload) 
                 });
+                
+                if (response.status === 401 || response.status === 403) {
+                    sessionStorage.removeItem('veo_admin_pwd');
+                    throw new Error("密码错误或失效，请刷新页面重试。");
+                }
+
                 const data = await response.json();
 
                 if (data.taskId) {
@@ -413,10 +435,18 @@
                 try {
                     const response = await fetch(API_POLL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'x-studio-pwd': adminPwd // 🔒 查询进度也必须带上密码进行验证
+                        },
                         body: JSON.stringify({ taskId: taskId })
                     });
                     
+                    if (response.status === 401 || response.status === 403) {
+                        console.error("轮询权限不足");
+                        return;
+                    }
+
                     const data = await response.json();
                     if (data.status === 'success' && data.videoUrl) return updateTaskLocal(taskId, 'success', data.videoUrl);
                     if (data.status === 'failed') return updateTaskLocal(taskId, 'failed', null);
@@ -446,13 +476,12 @@
                 modelVal: payload.model,
                 ratio: payload.aspectRatio,
                 thumb: payload.firstFrame || (payload.references && payload.references[0]) || '', 
-                rawImages: null, // 核心修复点：不再保存冗余大体积图片数据，防止撑爆缓存
+                rawImages: null, 
                 mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
                 status: status,
                 time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}),
                 videoUrl: null
             });
-            // 核心修复点：强制限制最多保存 15 条任务，彻底告别 exceed quota 报错
             localStorage.setItem('veo_gallery_tasks', JSON.stringify(tasks.slice(0, 15)));
             renderDashboard();
         }
@@ -487,7 +516,6 @@
                 updateRatio(document.getElementById('ratio-select'));
             }
 
-            // 因为出于节省内存的考虑，不再保存原图数据，所以提取同款时需清空画板让用户重新上传
             payloadState.firstFrame = null;
             payloadState.lastFrame = null;
             payloadState.references = [];

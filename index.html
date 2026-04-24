@@ -36,12 +36,18 @@
         .draggable-tool:hover { background: rgba(255,255,255,0.1); border-color: var(--accent); transform: translateY(-2px); }
         .draggable-tool:active { cursor: grabbing; }
 
+        /* 🚀 性能优化 1：开启 GPU 硬件加速 */
         .canvas-viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; cursor: grab; }
         .canvas-viewport:active { cursor: grabbing; }
-        .canvas-board { position: absolute; top: 0; left: 0; width: 1px; height: 1px; transform-origin: 0 0; }
+        .canvas-board { position: absolute; top: 0; left: 0; width: 1px; height: 1px; transform-origin: 0 0; will-change: transform; }
 
-        /* 统一卡片样式 */
-        .video-card { position: absolute; width: 340px; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: default; }
+        /* 🚀 性能优化 2：统一卡片样式，开启 content-visibility 视口剔除 */
+        .video-card { 
+            position: absolute; width: 340px; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: default; 
+            will-change: transform, left, top;
+            content-visibility: auto; 
+            contain-intrinsic-size: 340px 400px;
+        }
         .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); cursor: grab; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .card-header:active { cursor: grabbing; }
         .card-header .time-model { display: flex; align-items: center; gap: 6px; pointer-events: none; }
@@ -61,7 +67,7 @@
         .card-media { width: 100%; background: #0b0b0c; border-radius: var(--radius-sm); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.05); min-height: 120px; }
         .card-media img, .card-media video { width: 100%; height: auto; display: block; max-height: 500px; object-fit: contain; }
         
-        .sticky-note { resize: both; overflow: hidden; min-width: 200px; min-height: 140px; background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.3); padding: 0; }
+        .sticky-note { resize: both; overflow: hidden; min-width: 200px; min-height: 140px; background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.3); padding: 0; box-shadow: 0 10px 30px rgba(255, 213, 79, 0.05); }
         .sticky-note .card-header { background: rgba(255, 213, 79, 0.15); padding: 10px 12px; border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
         .sticky-note textarea { width: 100%; height: calc(100% - 42px); background: transparent; border: none; color: #fff; font-size: 14px; line-height: 1.6; resize: none; outline: none; padding: 0 12px 12px 12px; user-select: text; }
 
@@ -359,16 +365,23 @@
             });
         }
 
-        // ♾️ 无限画布核心逻辑
+        // 🚀 优化性能：无限画布核心逻辑 (防抖 + 显卡加速)
         const viewport = document.getElementById('canvas-viewport');
         const board = document.getElementById('canvas-board');
         let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
         let isPanning = false, startPanX = 0, startPanY = 0;
+        let ticking = false; // 用于动画帧节流
 
         function updateCanvas() {
-            board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
-            document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
-            document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+                    document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
+                    document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
+                    ticking = false;
+                });
+                ticking = true;
+            }
         }
 
         viewport.addEventListener('mousedown', (e) => {
@@ -383,6 +396,8 @@
 
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
+            if (ticking) return; // 节流控制
+            
             const zoomSensitivity = 0.001;
             const delta = e.deltaY * zoomSensitivity;
             let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
@@ -798,7 +813,7 @@
         }
 
         // ==========================================
-        // 🟢 插件内部逻辑 (建议未来拆分到 tools/generator.js)
+        // 🟢 插件内部逻辑 
         // ==========================================
         const genData = {
             formats: ["主播带货", "街头采访", "教程演示", "前后反差", "开箱测评", "对比实验", "剧情短剧", "冲突夸张", "用户证言", "评论区回复", "生活方式植入"],
@@ -817,7 +832,7 @@
             task.state.attribute = getRandom(genData.attributes);
             task.state.general = getRandom(genData.generals);
             await saveTaskDB(task);
-            renderBoard(); // 重新渲染更新下拉框
+            renderBoard(); 
         }
 
         async function updateGeneratorState(id, key, value) {
@@ -840,7 +855,6 @@
             document.getElementById('prompt-input').value = promptText;
             document.getElementById('floating-console').classList.remove('minimized');
             
-            // 按钮视觉反馈
             const originalText = btnElement.innerHTML;
             btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`;
             btnElement.style.color = 'var(--success)';
@@ -863,13 +877,13 @@
             const tasks = await getAllTasksDB();
             board.innerHTML = tasks.map((task) => {
                 
-                // 🌟 新增类型：插件-灵感生成器
+                // 插件-灵感生成器
                 if (task.type === 'tool_generator') {
                     return `
                     <div class="video-card tool-generator" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
                         <div class="card-header">
                             <span style="color:#818cf8; display:flex; align-items:center; gap:4px;">
-                                <span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 灵感生成器
+                                <span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器
                             </span>
                             <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
                         </div>
@@ -935,6 +949,7 @@
 
                 // 常规类型：视频生成卡片
                 let statusBadge = '', mediaHtml = '';
+                const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]));
 
                 if (task.status === 'processing') {
                     const retryTxt = task.retryCount ? ` (重试 ${task.retryCount} 次)` : '';
@@ -945,10 +960,10 @@
                     mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`;
                 } else {
                     statusBadge = `<span class="status-badge success">已完成</span>`;
-                    mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" controls loop muted playsinline></video></div>`;
+                    // 🚀 性能优化 2：关闭自动预加载视频，用缩略图当封面
+                    mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbImg || ''}" controls playsinline style="cursor:pointer;"></video></div>`;
                 }
 
-                const thumbImg = task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]);
                 const thumbHtml = thumbImg ? `<img src="${thumbImg}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${thumbImg}')" title="可按住拖拽至下方工作台使用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
 
                 return `

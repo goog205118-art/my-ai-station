@@ -28,10 +28,15 @@ body {
 .canvas-viewport:active { cursor: grabbing; }
 .canvas-board { position: absolute; top: 0; left: 0; width: 1px; height: 1px; transform-origin: 0 0; will-change: transform; }
 
+/* 🚀 性能修复：左上角归零，禁用 left/top，只保留 transform 硬件加速 */
 .video-card { 
-    position: absolute; width: 340px; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: default; 
-    will-change: transform, left, top; content-visibility: auto; contain-intrinsic-size: 340px 400px;
+    position: absolute; left: 0; top: 0; 
+    width: 340px; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: default; 
+    will-change: transform; 
+    content-visibility: auto; 
+    contain-intrinsic-size: 340px 400px;
 }
+
 .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); cursor: grab; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .card-header:active { cursor: grabbing; }
 .card-header .time-model { display: flex; align-items: center; gap: 6px; pointer-events: none; }

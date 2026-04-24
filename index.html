@@ -71,7 +71,7 @@
         .sticky-note .card-header { background: rgba(255, 213, 79, 0.15); padding: 10px 12px; border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
         .sticky-note textarea { width: 100%; height: calc(100% - 42px); background: transparent; border: none; color: #fff; font-size: 14px; line-height: 1.6; resize: none; outline: none; padding: 0 12px 12px 12px; user-select: text; }
 
-        /* 💡 灵感生成器专属样式 */
+        /* 💡 灵感生成器 & 本地素材 专属样式 */
         .tool-generator { width: 380px; background: rgba(20, 20, 22, 0.95); border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.8); }
         .tool-generator .gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 12px; }
         .gen-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -84,6 +84,9 @@
         .gen-btn.shuffle:hover { filter: brightness(1.1); }
         .gen-btn.copy { background: rgba(255,255,255,0.1); color: var(--text-main); }
         .gen-btn.copy:hover { background: rgba(255,255,255,0.15); }
+
+        .local-image-card { width: 220px !important; padding: 8px !important; background: rgba(30,30,32,0.95) !important; box-shadow: 0 4px 20px rgba(0,0,0,0.8) !important; }
+        .local-image-card .card-header { padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
         .generating-text { font-size: 13px; font-weight: 500; letter-spacing: 1px; margin-top: 12px; animation: pulseText 1.5s infinite; color: var(--accent); }
         @keyframes pulseText { 0% {opacity:0.5;} 50% {opacity:1;} 100% {opacity:0.5;} }
@@ -370,7 +373,7 @@
         const board = document.getElementById('canvas-board');
         let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
         let isPanning = false, startPanX = 0, startPanY = 0;
-        let ticking = false; // 用于动画帧节流
+        let ticking = false; 
 
         function updateCanvas() {
             if (!ticking) {
@@ -396,7 +399,7 @@
 
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
-            if (ticking) return; // 节流防抖
+            if (ticking) return; 
             
             const zoomSensitivity = 0.001;
             const delta = e.deltaY * zoomSensitivity;
@@ -497,7 +500,6 @@
         viewport.addEventListener('drop', async (e) => {
             e.preventDefault();
             
-            // 1. 检查是否是拖入了【插件】
             const pluginType = e.dataTransfer.getData('plugin');
             if (pluginType === 'generator') {
                 const spawnX = (e.clientX - transform.x) / transform.scale;
@@ -513,7 +515,6 @@
                 return;
             }
 
-            // 2. 原本逻辑：处理拖入的本地图片
             const files = e.dataTransfer.files;
             if (files && files.length > 0) {
                 let offset = 0;
@@ -812,7 +813,7 @@
         }
 
         // ==========================================
-        // 🟢 插件内部逻辑 
+        // 🟢 插件内部逻辑
         // ==========================================
         const genData = {
             formats: ["主播带货", "街头采访", "教程演示", "前后反差", "开箱测评", "对比实验", "剧情短剧", "冲突夸张", "用户证言", "评论区回复", "生活方式植入"],
@@ -976,11 +977,19 @@
                     cardEl = document.createElement('div');
                     cardEl.id = 'card-' + task.id;
                     
-                    if (task.type === 'note') cardEl.className = 'video-card sticky-note';
+                    if (task.type === 'note') {
+                        cardEl.className = 'video-card sticky-note';
+                        cardEl.style.width = `${task.width || 260}px`;
+                        cardEl.style.height = `${task.height || 180}px`;
+                    }
                     else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
                     else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
                     else cardEl.className = 'video-card';
                     
+                    // 🌟 核心修复：初次加载时必须赋予绝对坐标！
+                    cardEl.style.left = `${task.x}px`;
+                    cardEl.style.top = `${task.y}px`;
+
                     cardEl.innerHTML = generateCardHTML(task);
                     board.appendChild(cardEl);
                     makeCardDraggable(cardEl, task);

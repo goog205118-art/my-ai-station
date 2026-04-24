@@ -23,15 +23,15 @@ const board = document.getElementById('canvas-board');
 
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
 let isPanning = false, startPanX = 0, startPanY = 0;
-let ticking = false; // 全局 RAF 防抖锁
+let ticking = false; 
 
-// 🌟 全局唯一拖拽状态记录，彻底消灭内存泄露
+// 全局唯一拖拽状态，彻底消灭内存泄露
 let draggingCardInfo = null; 
+let highestZIndex = 10; // 🌟 修复 Z-Index 错乱：全局控制最高层级
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
         requestAnimationFrame(() => {
-            // 1. 如果在平移画布
             if (isPanning) {
                 transform.x = e.clientX - startPanX; 
                 transform.y = e.clientY - startPanY; 
@@ -39,11 +39,9 @@ window.addEventListener('mousemove', (e) => {
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } 
-            // 2. 如果在拖拽某张卡片
             else if (draggingCardInfo) {
                 draggingCardInfo.task.x = (e.clientX - draggingCardInfo.startX) / transform.scale;
                 draggingCardInfo.task.y = (e.clientY - draggingCardInfo.startY) / transform.scale;
-                // 强制使用 GPU 加速
                 draggingCardInfo.el.style.transform = `translate3d(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px, 0)`;
             }
             ticking = false;
@@ -62,7 +60,7 @@ window.addEventListener('mouseup', () => {
     isPanning = false; 
     if (draggingCardInfo) {
         saveTaskDB(draggingCardInfo.task);
-        draggingCardInfo = null; // 释放拖拽状态
+        draggingCardInfo = null;
     }
 });
 
@@ -79,7 +77,6 @@ viewport.addEventListener('wheel', (e) => {
     transform.y = mouseY - (mouseY - transform.y) * (newScale / transform.scale);
     transform.scale = newScale;
     
-    // 手动触发一次重绘
     if (!ticking) {
         requestAnimationFrame(() => {
             board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
@@ -91,19 +88,18 @@ viewport.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// 🌟 为单张卡片绑定唯一的点击触发器，不再绑定 mousemove
 function bindCardDrag(cardEl, task) {
     const header = cardEl.querySelector('.card-header');
     if(header) {
         header.onmousedown = (e) => {
+            highestZIndex++; // 🌟 修复重叠遮挡：点击即置顶
+            cardEl.style.zIndex = highestZIndex;
+
             draggingCardInfo = {
-                el: cardEl,
-                task: task,
+                el: cardEl, task: task,
                 startX: e.clientX - (task.x || 0) * transform.scale,
                 startY: e.clientY - (task.y || 0) * transform.scale
             };
-            document.querySelectorAll('.video-card').forEach(c => c.style.zIndex = '1');
-            cardEl.style.zIndex = '10';
             e.stopPropagation(); 
         };
     }
@@ -154,7 +150,72 @@ function saveNoteSize(id, w, h) {
 }
 
 // ==============================
-// 🖼️ 本地拖拽交互 (原生文件流支持)
+// 📦 新增功能：工程导入与导出 
+// ==============================
+async function exportWorkspace() {
+    const btn = document.getElementById('export-btn');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:16px;height:16px;stroke:currentColor;margin-right:6px;"><circle cx="25" cy="25" r="20"></circle></svg> 打包中...`;
+    
+    try {
+        const tasks = await getAllTasksDB();
+        const exportData = [];
+        for (let t of tasks) {
+            let clone = { ...t };
+            // 将内部的 Blob 全部还原为 base64 以便序列化为纯文本 JSON
+            if (clone.type === 'local_image' && clone.src) clone.src = await blobToBase64(clone.src);
+            if (clone.rawImages) {
+                if (clone.rawImages.firstFrame) clone.rawImages.firstFrame = await blobToBase64(clone.rawImages.firstFrame);
+                if (clone.rawImages.lastFrame) clone.rawImages.lastFrame = await blobToBase64(clone.rawImages.lastFrame);
+                if (clone.rawImages.references) {
+                    clone.rawImages.references = await Promise.all(clone.rawImages.references.map(b => blobToBase64(b)));
+                }
+            }
+            exportData.push(clone);
+        }
+        const blob = new Blob([JSON.stringify(exportData)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `VeoStudio_Flow_${Date.now()}.veo`; a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert('导出失败: ' + e.message);
+    } finally {
+        btn.innerHTML = originalHTML;
+    }
+}
+
+async function importWorkspace(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (confirm(`📦 解析成功！包含 ${data.length} 个节点。\n这会与您当前的画布合并，是否继续？`)) {
+                for (let t of data) {
+                    // 利用浏览器底层的 fetch，将 Base64 极速转换回高效率的 Blob 二进制存入数据库
+                    if (t.type === 'local_image' && typeof t.src === 'string') t.src = await fetch(t.src).then(r => r.blob());
+                    if (t.rawImages) {
+                        if (typeof t.rawImages.firstFrame === 'string') t.rawImages.firstFrame = await fetch(t.rawImages.firstFrame).then(r => r.blob());
+                        if (typeof t.rawImages.lastFrame === 'string') t.rawImages.lastFrame = await fetch(t.rawImages.lastFrame).then(r => r.blob());
+                        if (t.rawImages.references) {
+                            t.rawImages.references = await Promise.all(t.rawImages.references.map(async b => {
+                                return typeof b === 'string' ? await fetch(b).then(r => r.blob()) : b;
+                            }));
+                        }
+                    }
+                    await saveTaskDB(t);
+                }
+                renderBoard();
+            }
+        } catch(err) { alert('❌ 文件解析失败，请确保导入的是有效的 .veo 格式文件'); }
+        input.value = '';
+    };
+    reader.readAsText(file);
+}
+
+// ==============================
+// 🖼️ 拖放传输强化交互
 // ==============================
 window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
 window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
@@ -392,8 +453,11 @@ function buildGeneratorOptions(arr, selected) {
 // 🚀 智能 DOM 对比引擎
 // ==============================
 function generateCardHTML(task) {
+    // 🌟 核心修复 1：统一拖拽协议，所有需要拖拽复用的图片全部附加唯一的 JSON 协议头
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
-    if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${getBlobUrl(task.id, task.src)}')" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片拖拽复用">`;
+    
+    if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'local'}))" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片拖拽复用">`;
+    
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
     let statusBadge = '', mediaHtml = '';
@@ -409,10 +473,11 @@ function generateCardHTML(task) {
         mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`;
     } else {
         statusBadge = `<span class="status-badge success">已完成</span>`;
-        mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline></video></div>`;
+        // 🌟 新增刚需体验优化：双击已完成的视频，即可开启系统级沉浸全屏播放
+        mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()" title="双击全屏播放"></video></div>`;
     }
 
-    const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${thumbUrl}')" title="按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
+    const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'thumb'}))" title="按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
 
     return `<div class="card-header"><div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>${statusBadge}</div><div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div><div class="card-tags"><span class="card-tag">${task.ratio}</span>${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}</div>${mediaHtml}<div class="card-actions">${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}<button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button><button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button></div>`;
 }
@@ -433,7 +498,6 @@ async function renderBoard() {
             else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
             else cardEl.className = 'video-card';
             
-            // 🌟 强行绑定物理坐标
             cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
             
             cardEl.innerHTML = generateCardHTML(task);
@@ -463,12 +527,8 @@ function downloadVideo(url) { const a = document.createElement('a'); a.href = ur
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initDB(); 
-    
-    // ✅ 修复：手动初始化一下画布的默认位移（用来替代缺失的 updateCanvas()）
     board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
     document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
-
-    // 执行渲染画板
     await renderBoard(); 
     
     const setupDrop = (slotId, stateKey) => {
@@ -477,8 +537,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         slot.addEventListener('dragleave', (e) => { e.preventDefault(); slot.classList.remove('drag-over'); });
         slot.addEventListener('drop', async (e) => {
             e.preventDefault(); slot.classList.remove('drag-over');
-            let srcToUse = e.dataTransfer.getData('text/plain') || null;
-            if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
+            let srcToUse = null;
+
+            // 🌟 核心修复 1：捕获并还原我们专属的内部 JSON 拖拽协议，找回 Blob
+            try {
+                const jsonStr = e.dataTransfer.getData('application/json');
+                if (jsonStr) {
+                    const meta = JSON.parse(jsonStr);
+                    const t = await getTaskDB(meta.taskId);
+                    if (t) {
+                        if (meta.type === 'local') srcToUse = t.src;
+                        else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]);
+                    }
+                }
+            } catch(err) {}
+
+            // 备用方案：处理外部拖入的基础图片
+            if (!srcToUse) {
+                let textData = e.dataTransfer.getData('text/plain');
+                if (textData && textData.startsWith('data:image')) srcToUse = textData;
+            }
+
+            if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) {
+                srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
+            }
+
             if (srcToUse) {
                 if (stateKey === 'references') {
                     if (payloadState.references.length < 3) payloadState.references.push(srcToUse);

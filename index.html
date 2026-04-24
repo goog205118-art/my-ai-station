@@ -365,7 +365,7 @@
             });
         }
 
-        // 🚀 优化性能：无限画布核心逻辑 (防抖 + 显卡加速)
+        // 🚀 性能优化：无限画布核心逻辑 (防抖节流 + 显卡加速)
         const viewport = document.getElementById('canvas-viewport');
         const board = document.getElementById('canvas-board');
         let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
@@ -396,7 +396,7 @@
 
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
-            if (ticking) return; // 节流控制
+            if (ticking) return; // 节流防抖
             
             const zoomSensitivity = 0.001;
             const delta = e.deltaY * zoomSensitivity;
@@ -444,7 +444,7 @@
             }
             if (e.target === viewport || e.target === board) {
                 consoleEl.classList.add('minimized');
-                document.getElementById('tool-drawer').classList.remove('open'); // 点背景关闭抽屉
+                document.getElementById('tool-drawer').classList.remove('open'); 
             } else if (consoleEl.contains(e.target)) {
                 consoleEl.classList.remove('minimized');
             }
@@ -505,7 +505,6 @@
                 const newTool = {
                     id: 'tool_' + Date.now(), type: 'tool_generator',
                     x: spawnX, y: spawnY, timestamp: Date.now(),
-                    // 初始化组件状态
                     state: { format: '', opening: '', attribute: '', general: '' }
                 };
                 await saveTaskDB(newTool);
@@ -870,137 +869,161 @@
             return html;
         }
 
-        // ==============================
-        // 渲染大板
-        // ==============================
-        async function renderBoard() {
-            const tasks = await getAllTasksDB();
-            board.innerHTML = tasks.map((task) => {
-                
-                // 插件-灵感生成器
-                if (task.type === 'tool_generator') {
-                    return `
-                    <div class="video-card tool-generator" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
-                        <div class="card-header">
-                            <span style="color:#818cf8; display:flex; align-items:center; gap:4px;">
-                                <span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器
-                            </span>
-                            <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
-                        </div>
-                        
-                        <div class="gen-grid">
-                            <div class="gen-item">
-                                <label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label>
-                                <select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select>
-                            </div>
-                            <div class="gen-item">
-                                <label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label>
-                                <select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select>
-                            </div>
-                            <div class="gen-item">
-                                <label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label>
-                                <select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select>
-                            </div>
-                            <div class="gen-item">
-                                <label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label>
-                                <select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select>
-                            </div>
-                        </div>
-
-                        <div class="gen-actions">
-                            <button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')">
-                                <span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取
-                            </button>
-                            <button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)">
-                                <span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台
-                            </button>
-                        </div>
-                    </div>
-                    `;
-                }
-
-                if (task.type === 'note') {
-                    return `
-                    <div class="video-card sticky-note" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: ${task.width || 260}px; height: ${task.height || 180}px;" onmouseup="saveNoteSize('${task.id}', this.offsetWidth, this.offsetHeight)">
-                        <div class="card-header">
-                            <span style="color:#ffca28; display:flex; align-items:center; gap:4px;">
-                                <span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签
-                            </span>
-                            <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
-                        </div>
-                        <textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>
-                    </div>
-                    `;
-                }
-
-                if (task.type === 'local_image') {
-                    return `
-                    <div class="video-card" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: 220px; padding: 8px; background: rgba(30,30,32,0.95); box-shadow: 0 4px 20px rgba(0,0,0,0.8);">
-                        <div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                            <span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;">
-                                <span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材
-                            </span>
-                            <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
-                        </div>
-                        <img src="${task.src}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${task.src}')" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片，拖拽至下方工作台使用">
-                    </div>
-                    `;
-                }
-
-                // 常规类型：视频生成卡片
-                let statusBadge = '', mediaHtml = '';
-                const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]));
-
-                if (task.status === 'processing') {
-                    const retryTxt = task.retryCount ? ` (重试 ${task.retryCount} 次)` : '';
-                    statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`;
-                    mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`;
-                } else if (task.status === 'failed') {
-                    statusBadge = `<span class="status-badge failed">失败</span>`;
-                    mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`;
-                } else {
-                    statusBadge = `<span class="status-badge success">已完成</span>`;
-                    // 🚀 性能优化 2：关闭自动预加载视频，用缩略图当封面
-                    mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbImg || ''}" controls playsinline style="cursor:pointer;"></video></div>`;
-                }
-
-                const thumbHtml = thumbImg ? `<img src="${thumbImg}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${thumbImg}')" title="可按住拖拽至下方工作台使用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
-
+        // ==========================================
+        // 🚀 核心大升级：智能 DOM 对比引擎 
+        // ==========================================
+        function generateCardHTML(task) {
+            if (task.type === 'note') {
                 return `
-                <div class="video-card" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
-                    <div class="card-header">
-                        <div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>
-                        ${statusBadge}
-                    </div>
-                    <div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div>
-                    <div class="card-tags">
-                        <span class="card-tag">${task.ratio}</span>
-                        ${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}
-                    </div>
-                    ${mediaHtml}
-                    <div class="card-actions">
-                        ${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}
-                        ${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}
-                        <button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button>
-                        <button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button>
-                    </div>
+                <div class="card-header">
+                    <span style="color:#ffca28; display:flex; align-items:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签
+                    </span>
+                    <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+                </div>
+                <textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>
+                `;
+            }
+
+            if (task.type === 'local_image') {
+                return `
+                <div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材
+                    </span>
+                    <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+                </div>
+                <img src="${task.src}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${task.src}')" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片，拖拽至下方工作台使用">
+                `;
+            }
+
+            if (task.type === 'tool_generator') {
+                return `
+                <div class="card-header">
+                    <span style="color:#818cf8; display:flex; align-items:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器
+                    </span>
+                    <button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+                </div>
+                <div class="gen-grid">
+                    <div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div>
+                    <div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div>
+                    <div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div>
+                    <div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div>
+                </div>
+                <div class="gen-actions">
+                    <button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button>
+                    <button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button>
                 </div>
                 `;
-            }).join('');
+            }
 
-            tasks.forEach(task => makeCardDraggable(document.getElementById(`card-${task.id}`), task));
-            
-            tasks.forEach(task => { 
-                if (task.status === 'processing' && !activeTasks.includes(task.id)) { 
-                    activeTasks.push(task.id); 
-                    startTaskPolling(task.id); 
+            // 常规视频卡片
+            let statusBadge = '', mediaHtml = '';
+            const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]));
+
+            if (task.status === 'processing') {
+                const retryTxt = task.retryCount ? ` (重试 ${task.retryCount} 次)` : '';
+                statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`;
+                mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`;
+            } else if (task.status === 'failed') {
+                statusBadge = `<span class="status-badge failed">失败</span>`;
+                mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`;
+            } else {
+                statusBadge = `<span class="status-badge success">已完成</span>`;
+                mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbImg || ''}" controls playsinline></video></div>`;
+            }
+
+            const thumbHtml = thumbImg ? `<img src="${thumbImg}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${thumbImg}')" title="按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
+
+            return `
+            <div class="card-header">
+                <div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>
+                ${statusBadge}
+            </div>
+            <div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div>
+            <div class="card-tags">
+                <span class="card-tag">${task.ratio}</span>
+                ${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}
+            </div>
+            ${mediaHtml}
+            <div class="card-actions">
+                ${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}
+                ${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}
+                <button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button>
+                <button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button>
+            </div>
+            `;
+        }
+
+        async function renderBoard() {
+            const tasks = await getAllTasksDB();
+            const taskIds = new Set(tasks.map(t => 'card-' + t.id));
+            const existingCards = Array.from(board.children);
+
+            // 删除数据库中不存在的节点
+            existingCards.forEach(card => {
+                if (!taskIds.has(card.id)) {
+                    card.remove();
+                }
+            });
+
+            // 智能更新或创建
+            tasks.forEach(task => {
+                let cardEl = document.getElementById('card-' + task.id);
+                
+                if (!cardEl) {
+                    cardEl = document.createElement('div');
+                    cardEl.id = 'card-' + task.id;
+                    
+                    if (task.type === 'note') cardEl.className = 'video-card sticky-note';
+                    else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
+                    else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
+                    else cardEl.className = 'video-card';
+                    
+                    cardEl.innerHTML = generateCardHTML(task);
+                    board.appendChild(cardEl);
+                    makeCardDraggable(cardEl, task);
+
+                    if (task.type === 'note') {
+                        cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
+                    }
+
+                    if (task.status === 'processing' && !activeTasks.includes(task.id)) {
+                        activeTasks.push(task.id);
+                        startTaskPolling(task.id);
+                    }
                 } 
+                else {
+                    cardEl.style.left = `${task.x}px`;
+                    cardEl.style.top = `${task.y}px`;
+                    if (task.type === 'note' && task.width && task.height) {
+                        cardEl.style.width = `${task.width}px`;
+                        cardEl.style.height = `${task.height}px`;
+                    }
+
+                    const oldStatus = cardEl.getAttribute('data-sync-status');
+                    const oldRetry = cardEl.getAttribute('data-sync-retry');
+                    
+                    if (oldStatus !== task.status || oldRetry != task.retryCount) {
+                        cardEl.innerHTML = generateCardHTML(task);
+                        makeCardDraggable(cardEl, task); 
+                    }
+                }
+
+                cardEl.setAttribute('data-sync-status', task.status || 'static');
+                cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
             });
         }
 
         async function removeTask(id) {
-            if(confirm('确定删除这张卡片吗？')) { await deleteTaskDB(id); renderBoard(); }
+            if(confirm('确定删除这张卡片吗？')) { 
+                await deleteTaskDB(id); 
+                const card = document.getElementById('card-' + id);
+                if (card) card.remove();
+            }
         }
+
         function downloadVideo(url) {
             const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click();
         }

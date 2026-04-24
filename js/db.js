@@ -7,7 +7,7 @@ const blobUrlCache = new Map(); // 🌟 URL 缓存锁，彻底杜绝内存泄漏
 
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 2); // 升级版本号适配 Blob
+        const request = indexedDB.open(DB_NAME, 2); 
         request.onupgradeneeded = (e) => {
             let database = e.target.result;
             if (!database.objectStoreNames.contains('tasks')) {
@@ -19,10 +19,8 @@ function initDB() {
     });
 }
 
-// 🌟 安全获取并缓存 Blob URL
 function getBlobUrl(id, blobData) {
     if (!blobData) return '';
-    // 兼容旧版的 Base64 文本数据，防止老数据白屏
     if (typeof blobData === 'string') return blobData; 
     
     if (blobUrlCache.has(id)) return blobUrlCache.get(id);
@@ -32,7 +30,6 @@ function getBlobUrl(id, blobData) {
     return url;
 }
 
-// 🌟 将图片压缩为底层二进制 Blob (性能提升 10 倍的核心)
 async function compressImageToBlob(file, maxWidth = 1024) {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -47,14 +44,12 @@ async function compressImageToBlob(file, maxWidth = 1024) {
                 canvas.height = img.height * ratio;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                // 直接输出二进制流
                 canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
             };
         };
     });
 }
 
-// 🌟 用于提交给后端的实时转换器 (仅在发出网络请求的那一秒占用内存)
 function blobToBase64(blob) {
     if (!blob) return null;
     if (typeof blob === 'string') return Promise.resolve(blob);
@@ -65,7 +60,6 @@ function blobToBase64(blob) {
     });
 }
 
-// 基础数据库操作
 async function getAllTasksDB() {
     return new Promise((resolve) => {
         const tx = db.transaction('tasks', 'readonly');
@@ -95,10 +89,12 @@ async function deleteTaskDB(id) {
         const tx = db.transaction('tasks', 'readwrite');
         tx.objectStore('tasks').delete(id);
         tx.oncomplete = () => {
-            // 🌟 彻底清理垃圾，释放显存
-            if (blobUrlCache.has(id)) {
-                URL.revokeObjectURL(blobUrlCache.get(id));
-                blobUrlCache.delete(id);
+            // 🌟 核心修复：连根拔起！清理该任务名下关联的所有 Blob URL (包括缩略图和原图)
+            for (let [key, url] of blobUrlCache.entries()) {
+                if (key.toString().startsWith(id)) {
+                    URL.revokeObjectURL(url);
+                    blobUrlCache.delete(key);
+                }
             }
             resolve();
         };

@@ -58,10 +58,10 @@
         .card-media { width: 100%; background: #0b0b0c; border-radius: var(--radius-sm); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.05); min-height: 120px; }
         .card-media img, .card-media video { width: 100%; height: auto; display: block; max-height: 500px; object-fit: contain; }
         
-        /* 便签卡片专属样式 */
-        .sticky-note { width: 260px; background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.3); padding: 0; box-shadow: 0 10px 30px rgba(255, 213, 79, 0.05); }
+        /* 🌟 便签卡片专属样式 (加入了缩放功能) */
+        .sticky-note { resize: both; overflow: hidden; min-width: 200px; min-height: 140px; background: rgba(255, 213, 79, 0.1); border: 1px solid rgba(255, 213, 79, 0.3); padding: 0; box-shadow: 0 10px 30px rgba(255, 213, 79, 0.05); }
         .sticky-note .card-header { background: rgba(255, 213, 79, 0.15); padding: 10px 12px; border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
-        .sticky-note textarea { width: 100%; height: 160px; background: transparent; border: none; color: #fff; font-size: 14px; line-height: 1.6; resize: none; outline: none; padding: 0 12px 12px 12px; user-select: text; }
+        .sticky-note textarea { width: 100%; height: calc(100% - 42px); background: transparent; border: none; color: #fff; font-size: 14px; line-height: 1.6; resize: none; outline: none; padding: 0 12px 12px 12px; user-select: text; }
         .sticky-note textarea::placeholder { color: rgba(255,255,255,0.3); }
 
         @keyframes pulseText { 0% {opacity:0.5;} 50% {opacity:1;} 100% {opacity:0.5;} }
@@ -75,7 +75,7 @@
         .card-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* 控制台区域 */
-        .floating-console { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 860px; background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 100; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: bottom center; }
+        .floating-console { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 900px; background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 100; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: bottom center; }
         
         /* 智能缩小状态 */
         .floating-console.minimized { transform: translateX(-50%) scale(0.6) translateY(20px); opacity: 0.5; cursor: pointer; }
@@ -223,12 +223,21 @@
                         <option value="true">开启超分 (更慢)</option>
                     </select>
                 </div>
-                <div class="action-pill" style="border-color: rgba(10, 132, 255, 0.5);">
+                <div class="action-pill">
                     <span class="material-symbols-outlined" style="color:var(--accent)">layers</span>
                     <span id="batch-text" style="color:var(--accent)">单次 (x1)</span>
                     <select id="batch-select" onchange="document.getElementById('batch-text').innerText = this.options[this.selectedIndex].text;">
                         <option value="1">单次 (x1)</option>
                         <option value="2">并行 (x2)</option>
+                    </select>
+                </div>
+                
+                <div class="action-pill" style="border-color: rgba(50, 215, 75, 0.4);">
+                    <span class="material-symbols-outlined" style="color:var(--success)">autorenew</span>
+                    <span id="retry-text" style="color:var(--success)">不自动重试</span>
+                    <select id="retry-select" onchange="updateAutoRetry(this)">
+                        <option value="false">不自动重试</option>
+                        <option value="true">失败自动重试</option>
                     </select>
                 </div>
             </div>
@@ -256,7 +265,7 @@
             sessionStorage.setItem('veo_admin_pwd', adminPwd);
         }
 
-        let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
+        let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, autoRetry: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
         let activeTasks = [];
 
         // ==========================================
@@ -313,7 +322,7 @@
         }
 
         // ==========================================
-        // ♾️ 无限画布核心逻辑 (Pan & Zoom & Drag Cards)
+        // ♾️ 无限画布核心逻辑
         // ==========================================
         const viewport = document.getElementById('canvas-viewport');
         const board = document.getElementById('canvas-board');
@@ -326,7 +335,6 @@
             document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
         }
 
-        // 拖拽背景平移
         viewport.addEventListener('mousedown', (e) => {
             if (e.target === viewport || e.target === board) {
                 isPanning = true; startPanX = e.clientX - transform.x; startPanY = e.clientY - transform.y;
@@ -337,24 +345,20 @@
         });
         window.addEventListener('mouseup', () => { isPanning = false; });
 
-        // 滚轮缩放
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomSensitivity = 0.001;
             const delta = e.deltaY * zoomSensitivity;
             let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
-
             const rect = viewport.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-
             transform.x = mouseX - (mouseX - transform.x) * (newScale / transform.scale);
             transform.y = mouseY - (mouseY - transform.y) * (newScale / transform.scale);
             transform.scale = newScale;
             updateCanvas();
         }, { passive: false });
 
-        // 使卡片可拖拽
         function makeCardDraggable(cardEl, task) {
             const header = cardEl.querySelector('.card-header');
             if(!header) return;
@@ -380,19 +384,13 @@
             });
         }
 
-        // ==========================================
-        // 👁️ 交互逻辑与防误触
-        // ==========================================
         const consoleEl = document.getElementById('floating-console');
         document.addEventListener('click', (e) => {
-            // 点击气泡外关闭气泡
             const popover = document.getElementById('ref-popover');
             const slotBox = document.getElementById('slot-ref-box');
             if (popover && popover.style.display === 'flex' && !popover.contains(e.target) && !slotBox.contains(e.target)) {
                 popover.style.display = 'none';
             }
-            
-            // 点击控制台外部使其智能缩小
             if (e.target === viewport || e.target === board) {
                 consoleEl.classList.add('minimized');
             } else if (consoleEl.contains(e.target)) {
@@ -401,7 +399,7 @@
         });
 
         // ==========================================
-        // 📝 核心突破 1：即时便签功能 (Miro 体验)
+        // 📝 便签功能与缩放保存
         // ==========================================
         async function createStickyNote(spawnX, spawnY) {
             if (spawnX === undefined) spawnX = (-transform.x + window.innerWidth/2 - 120) / transform.scale;
@@ -411,24 +409,20 @@
                 id: 'note_' + Date.now() + Math.random().toString(36).substr(2, 5),
                 type: 'note',
                 text: '',
-                x: spawnX,
-                y: spawnY,
+                x: spawnX, y: spawnY,
+                width: 260, height: 200, // 初始尺寸
                 timestamp: Date.now()
             };
             await saveTaskDB(newNote);
             renderBoard();
         }
 
-        // 🌟 双击画布空白处，直接生成便签
         viewport.addEventListener('dblclick', (e) => {
             if (e.target === viewport || e.target === board) {
-                const spawnX = (e.clientX - transform.x) / transform.scale;
-                const spawnY = (e.clientY - transform.y) / transform.scale;
-                createStickyNote(spawnX, spawnY);
+                createStickyNote((e.clientX - transform.x) / transform.scale, (e.clientY - transform.y) / transform.scale);
             }
         });
 
-        // 便签内容防抖自动保存
         let noteTimeout;
         async function updateNoteText(id, text) {
             clearTimeout(noteTimeout);
@@ -438,8 +432,19 @@
             }, 500);
         }
 
+        // 🌟 监听便签的鼠标释放事件，用于保存缩放后的尺寸
+        function saveNoteSize(id, w, h) {
+            setTimeout(async () => {
+                const note = await getTaskDB(id);
+                if (note && (note.width !== w || note.height !== h)) {
+                    note.width = w; note.height = h;
+                    await saveTaskDB(note);
+                }
+            }, 100);
+        }
+
         // ==========================================
-        // 🖼️ 核心突破 2：本地文件拖放交互
+        // 🖼️ 本地文件拖放交互
         // ==========================================
         window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
         window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
@@ -452,17 +457,14 @@
                 for (let file of files) {
                     if (file.type.startsWith('image/')) {
                         const base64 = await compressImage(file, 1024);
-                        const spawnX = (e.clientX - transform.x) / transform.scale + offset;
-                        const spawnY = (e.clientY - transform.y) / transform.scale + offset;
-                        
                         const newLocalNode = {
                             id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                            type: 'local_image',
-                            src: base64,
-                            x: spawnX, y: spawnY, timestamp: Date.now()
+                            type: 'local_image', src: base64,
+                            x: (e.clientX - transform.x) / transform.scale + offset, 
+                            y: (e.clientY - transform.y) / transform.scale + offset, 
+                            timestamp: Date.now()
                         };
-                        await saveTaskDB(newLocalNode);
-                        offset += 40; 
+                        await saveTaskDB(newLocalNode); offset += 40; 
                     }
                 }
                 renderBoard();
@@ -475,22 +477,19 @@
             slot.addEventListener('dragleave', (e) => { e.preventDefault(); slot.classList.remove('drag-over'); });
             slot.addEventListener('drop', async (e) => {
                 e.preventDefault(); slot.classList.remove('drag-over');
-                
                 let srcToUse = null;
                 const textData = e.dataTransfer.getData('text/plain');
-                if (textData && textData.startsWith('data:image')) {
-                    srcToUse = textData;
-                } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                if (textData && textData.startsWith('data:image')) { srcToUse = textData; } 
+                else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                     const file = e.dataTransfer.files[0];
                     if (file.type.startsWith('image/')) srcToUse = await compressImage(file, 1024);
                 }
 
                 if (srcToUse) {
                     if (stateKey === 'references') {
-                        const maxAllowed = 3;
-                        if (payloadState.references.length < maxAllowed) payloadState.references.push(srcToUse);
+                        if (payloadState.references.length < 3) payloadState.references.push(srcToUse);
                         renderReferences();
-                        document.getElementById('ref-popover').style.display = 'flex'; // 拖入后自动展示气泡
+                        document.getElementById('ref-popover').style.display = 'flex'; 
                     } else {
                         payloadState[stateKey] = srcToUse;
                         const t = stateKey === 'firstFrame' ? 'first' : 'last';
@@ -501,11 +500,8 @@
             });
         }
 
-        // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
-            await initDB();
-            updateCanvas();
-            await renderBoard();
+            await initDB(); updateCanvas(); await renderBoard();
             setupDropZone('slot-ref-box', 'references');
             setupDropZone('slot-first-box', 'firstFrame');
             setupDropZone('slot-last-box', 'lastFrame');
@@ -516,12 +512,8 @@
         // ==============================
         function toggleRefPopover(e) {
             e.stopPropagation();
-            if (payloadState.references.length === 0) {
-                document.getElementById('ref-file').click();
-            } else {
-                const p = document.getElementById('ref-popover');
-                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-            }
+            if (payloadState.references.length === 0) document.getElementById('ref-file').click();
+            else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; }
         }
 
         function switchMode(mode) {
@@ -536,6 +528,7 @@
         function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; }
         function updateEnhance(select) { payloadState.enhancePrompt = select.value === 'true'; document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text; }
         function updateUpsample(select) { payloadState.enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
+        function updateAutoRetry(select) { payloadState.autoRetry = select.value === 'true'; document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; }
 
         async function compressImage(file, maxWidth = 1024) {
             return new Promise((resolve) => {
@@ -559,18 +552,12 @@
             input.value = ''; renderReferences();
             if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
         }
-        function removeReference(event, index) {
-            event.stopPropagation();
-            payloadState.references.splice(index, 1);
-            renderReferences();
-            if(payloadState.references.length === 0) document.getElementById('ref-popover').style.display = 'none';
-        }
+        function removeReference(event, index) { event.stopPropagation(); payloadState.references.splice(index, 1); renderReferences(); if(payloadState.references.length === 0) document.getElementById('ref-popover').style.display = 'none'; }
         function clearReferences(e) { e.stopPropagation(); payloadState.references = []; renderReferences(); document.getElementById('ref-popover').style.display = 'none'; }
         function renderReferences() {
             const box = document.getElementById('slot-ref-box'), imgEl = document.getElementById('ref-img'), countBadge = document.getElementById('ref-count-badge');
             if (payloadState.references.length === 0) { box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; } 
             else { box.classList.add('has-img'); imgEl.src = payloadState.references[0]; countBadge.style.display = payloadState.references.length > 1 ? 'flex' : 'none'; countBadge.innerText = payloadState.references.length; }
-            
             const listContainer = document.getElementById('ref-list-container');
             listContainer.innerHTML = payloadState.references.map((b64, index) => `<div class="popover-img-item"><img src="${b64}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
             document.getElementById('ref-popover-add').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
@@ -582,7 +569,8 @@
             document.getElementById(`${t}-img`).src = payloadState[type]; document.getElementById(`slot-${t}-box`).classList.add('has-img'); input.value = '';
         }
         function clearFrame(event, type) {
-            event.preventDefault(); event.stopPropagation(); payloadState[type] = null;
+            if(event) { event.preventDefault(); event.stopPropagation(); }
+            payloadState[type] = null;
             const t = type === 'firstFrame' ? 'first' : 'last';
             document.getElementById(`slot-${t}-box`).classList.remove('has-img'); document.getElementById(`${t}-img`).src = '';
         }
@@ -605,6 +593,7 @@
             const basePayload = {
                 model: payloadState.model, prompt: prompt, aspectRatio: payloadState.aspectRatio,
                 enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample,
+                autoRetry: payloadState.autoRetry, // 记录当前卡片是否开启了自动重试
                 firstFrame: submitFirst, lastFrame: submitLast, references: submitRef
             };
 
@@ -630,6 +619,7 @@
                         id: data.taskId, prompt: payload.prompt,
                         modelStr: payload.references && payload.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast',
                         modelVal: payload.model, ratio: payload.aspectRatio,
+                        autoRetry: payload.autoRetry, retryCount: 0,
                         rawImages: { firstFrame: payload.firstFrame, lastFrame: payload.lastFrame, references: payload.references || [] },
                         mode: payload.references && payload.references.length > 0 ? 'ref' : 'frame',
                         status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}),
@@ -643,14 +633,12 @@
             } catch (error) { console.error('提交失败:', error); }
         }
 
-        // 🌟 核心突破 3：真正的原地重试且带 UI 动画
+        // 🌟 核心突破 3：真正的静默重试逻辑
         async function retryTask(taskId, btnElement) {
-            // 点击瞬间将按钮变为旋转 loading 状态，防止重复点击
             if (btnElement) {
                 btnElement.disabled = true;
                 btnElement.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:var(--text-sub);"><circle cx="25" cy="25" r="20"></circle></svg>`;
             }
-
             const task = await getTaskDB(taskId);
             if(!task) return;
             const payload = {
@@ -658,34 +646,27 @@
                 enhancePrompt: true, enableUpsample: false,
                 firstFrame: task.rawImages.firstFrame, lastFrame: task.rawImages.lastFrame, references: task.rawImages.references || []
             };
-            
             try {
-                // 静默发起重新提交请求
                 const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': adminPwd }, body: JSON.stringify(payload) });
                 if (response.status === 401 || response.status === 403) throw new Error("密码错误");
                 const data = await response.json();
 
                 if (data.taskId) {
-                    // 🌟 拿到新 ID 后，原地替换旧数据，保留 X/Y 坐标不移动！
-                    await deleteTaskDB(taskId); // 删掉旧 ID 的壳
-                    task.id = data.taskId;      // 换上新 ID
+                    await deleteTaskDB(taskId); 
+                    task.id = data.taskId;      
                     task.status = 'processing';
+                    task.retryCount = (task.retryCount || 0) + 1;
                     task.timestamp = Date.now();
                     task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'});
                     
-                    await saveTaskDB(task);     // 存入新数据
-                    await renderBoard();        // 重新渲染画布
+                    await saveTaskDB(task);     
+                    await renderBoard();        
                     startTaskPolling(task.id);
-                } else {
-                    throw new Error("无返回 ID");
-                }
+                } else throw new Error("无返回 ID");
             } catch (error) {
                 console.error("重试失败", error);
-                alert("重试失败，请检查网络！");
-                if (btnElement) {
-                    btnElement.disabled = false;
-                    btnElement.innerHTML = `<span class="material-symbols-outlined">refresh</span>`;
-                }
+                task.status = 'failed'; task.autoRetry = false; // 阻断死循环
+                await saveTaskDB(task); renderBoard();
             }
         }
 
@@ -702,13 +683,70 @@
                     if (!task) return; 
 
                     if (data.status === 'success' && data.videoUrl) { task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
-                    if (data.status === 'failed') { task.status = 'failed'; await saveTaskDB(task); renderBoard(); return; }
+                    if (data.status === 'failed') { 
+                        // 🌟 核心突破 1：触发自动挂机重试
+                        if (task.autoRetry) {
+                            task.status = 'processing'; await saveTaskDB(task); renderBoard();
+                            retryTask(task.id, null); // 自动静默发起重试
+                            return;
+                        } else {
+                            task.status = 'failed'; await saveTaskDB(task); renderBoard(); return; 
+                        }
+                    }
                     
                     if (attempts < 240) setTimeout(poll, 15000); 
-                    else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); }
+                    else { 
+                        if (task.autoRetry) { retryTask(task.id, null); return; } // 超时也自动重试
+                        task.status = 'failed'; await saveTaskDB(task); renderBoard(); 
+                    }
                 } catch (error) { setTimeout(poll, 15000); }
             };
             poll();
+        }
+
+        // ==============================
+        // 🌟 满血版：提取同款 (包含图片)
+        // ==============================
+        async function reuseTask(taskId) {
+            const task = await getTaskDB(taskId);
+            if(!task) return;
+            
+            document.getElementById('prompt-input').value = task.prompt || '';
+            
+            if (task.modelVal) {
+                const modelSelect = document.getElementById('model-select');
+                if(modelSelect.querySelector(`option[value="${task.modelVal}"]`)) {
+                    modelSelect.value = task.modelVal; updateModel(modelSelect);
+                }
+            }
+            if (task.ratio) {
+                document.getElementById('ratio-select').value = task.ratio; updateRatio(document.getElementById('ratio-select'));
+            }
+
+            // 完整恢复图片数据
+            if (task.rawImages) {
+                payloadState.firstFrame = task.rawImages.firstFrame || null;
+                payloadState.lastFrame = task.rawImages.lastFrame || null;
+                payloadState.references = [...(task.rawImages.references || [])];
+                
+                switchMode(task.mode || 'ref');
+                
+                if (payloadState.firstFrame) {
+                    document.getElementById('first-img').src = payloadState.firstFrame;
+                    document.getElementById('slot-first-box').classList.add('has-img');
+                } else clearFrame(null, 'firstFrame');
+                
+                if (payloadState.lastFrame) {
+                    document.getElementById('last-img').src = payloadState.lastFrame;
+                    document.getElementById('slot-last-box').classList.add('has-img');
+                } else clearFrame(null, 'lastFrame');
+                
+                renderReferences();
+            }
+            
+            // 如果控制台是缩小状态，自动展开
+            document.getElementById('floating-console').classList.remove('minimized');
+            document.getElementById('prompt-input').focus();
         }
 
         // ==============================
@@ -718,10 +756,10 @@
             const tasks = await getAllTasksDB();
             board.innerHTML = tasks.map((task) => {
                 
-                // 便签节点
+                // 🌟 便签节点 (加上了 onmouseup 监听器保存缩放)
                 if (task.type === 'note') {
                     return `
-                    <div class="video-card sticky-note" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px;">
+                    <div class="video-card sticky-note" id="card-${task.id}" style="left: ${task.x}px; top: ${task.y}px; width: ${task.width || 260}px; height: ${task.height || 180}px;" onmouseup="saveNoteSize('${task.id}', this.offsetWidth, this.offsetHeight)">
                         <div class="card-header">
                             <span style="color:#ffca28; display:flex; align-items:center; gap:4px;">
                                 <span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签
@@ -752,7 +790,8 @@
                 let statusBadge = '', mediaHtml = '';
 
                 if (task.status === 'processing') {
-                    statusBadge = `<span class="status-badge processing">排队生成中...</span>`;
+                    const retryTxt = task.retryCount ? ` (重试 ${task.retryCount} 次)` : '';
+                    statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`;
                     mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`;
                 } else if (task.status === 'failed') {
                     statusBadge = `<span class="status-badge failed">失败</span>`;
@@ -772,13 +811,17 @@
                         ${statusBadge}
                     </div>
                     <div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div>
-                    <div class="card-tags"><span class="card-tag">${task.ratio}</span></div>
+                    <div class="card-tags">
+                        <span class="card-tag">${task.ratio}</span>
+                        ${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}
+                    </div>
                     ${mediaHtml}
                     <div class="card-actions">
                         ${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}
                         
                         ${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}
                         
+                        <button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button>
                         <button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button>
                     </div>
                 </div>

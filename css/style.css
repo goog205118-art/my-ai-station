@@ -130,3 +130,22 @@ body {
 .spinner circle { stroke: currentColor; stroke-width: 3; stroke-dasharray: 1, 200; stroke-dashoffset: 0; animation: dash 1.5s ease-in-out infinite; stroke-linecap: round; fill: none; }
 @keyframes rotate { 100% { transform: rotate(360deg); } }
 @keyframes dash { 0% { stroke-dasharray: 1, 200; stroke-dashoffset: 0; } 50% { stroke-dasharray: 90, 200; stroke-dashoffset: -35px; } 100% { stroke-dasharray: 90, 200; stroke-dashoffset: -124px; } }
+/* 🎨 AI 生图工具专属样式 */
+.tool-image-gen { width: 340px; background: rgba(20, 20, 22, 0.95); border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 12px; }
+.img-gen-slots { display: flex; gap: 6px; padding: 0 12px; flex-wrap: wrap; }
+.img-gen-slot { width: 52px; height: 52px; border: 1px dashed rgba(255,255,255,0.2); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: all 0.2s; overflow: hidden; background: rgba(255,255,255,0.02); }
+.img-gen-slot:hover, .img-gen-slot.drag-over { border-color: var(--accent); background: rgba(10, 132, 255, 0.1); }
+.img-gen-slot img { width: 100%; height: 100%; object-fit: cover; }
+.img-gen-slot .remove-badge { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; font-size: 10px; }
+
+.img-gen-controls { display: flex; gap: 8px; padding: 0 12px; }
+.img-gen-select { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 12px; padding: 6px; border-radius: 6px; outline: none; }
+.img-gen-select option { background: var(--surface); }
+
+.img-gen-prompt { margin: 0 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; height: 60px; color: var(--text-main); font-size: 13px; resize: none; outline: none; }
+.img-gen-btn { margin: 0 12px 12px 12px; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px; }
+.img-gen-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.img-gen-btn:disabled { background: var(--border); color: var(--text-sub); cursor: not-allowed; }
+
+.img-gen-result { width: 100%; min-height: 120px; background: #0b0b0c; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+.img-gen-result img { width: 100%; height: auto; display: block; object-fit: contain; max-height: 400px; }

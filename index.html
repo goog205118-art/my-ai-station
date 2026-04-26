@@ -6,7 +6,6 @@
     <title>Veo Studio - Infinity Flow</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-    
     <link rel="stylesheet" href="css/style.css">
     
     <script>
@@ -49,6 +48,7 @@
         <div class="drawer-title">
             <span class="material-symbols-outlined" style="font-size:18px;">apps</span> 拖拽组件至画布
         </div>
+        
         <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'generator')">
             <div style="background: rgba(79, 70, 229, 0.2); color: #818cf8; padding: 6px; border-radius: 6px; display: flex;">
                 <span class="material-symbols-outlined">auto_awesome</span>
@@ -56,6 +56,16 @@
             <div>
                 <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">社媒灵感生成器</div>
                 <div style="font-size: 11px; color: var(--text-sub);">一键生成爆款剧本四要素</div>
+            </div>
+        </div>
+
+        <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'image_gen')">
+            <div style="background: rgba(10, 132, 255, 0.2); color: var(--accent); padding: 6px; border-radius: 6px; display: flex;">
+                <span class="material-symbols-outlined">brush</span>
+            </div>
+            <div>
+                <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">AI 多模生图</div>
+                <div style="font-size: 11px; color: var(--text-sub);">支持 1-5 张垫图合并创作</div>
             </div>
         </div>
     </div>

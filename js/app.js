@@ -190,7 +190,6 @@ viewport.addEventListener('drop', async (e) => {
         let newTool = null;
         if (pluginType === 'generator') newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
         else if (pluginType === 'image_gen') {
-            // 🌟 生图卡片默认状态扩充：通道选择 & 自动重试
             newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null, channel: 'channel_1', autoRetry: false }, retryCount: 0 };
         }
         if (newTool) { await saveTaskDB(newTool); renderBoard(); document.getElementById('tool-drawer').classList.remove('open'); return; }
@@ -478,7 +477,7 @@ async function submitImgGen(id) {
 }
 
 // ==============================
-// 🚀 智能 DOM 对比引擎
+// 🚀 智能 DOM 对比引擎 (已加入垫图数量热更新锁)
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
@@ -492,7 +491,6 @@ function generateCardHTML(task) {
             `<div class="img-gen-result"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'gen_result'}))" title="按住拖拽至控制台或画板"></div>` : '';
         
         let slotsHtml = task.state.images.map((img, i) => `<div class="img-gen-slot" style="border:none;"><img src="${getBlobUrl(task.id+'_img_'+i, img)}"><div class="popover-rm-btn remove-badge" onclick="removeGenImage(event, '${task.id}', ${i})">×</div></div>`).join('');
-        // 🌟 更新：添加了 onclick，点击后触发下方隐藏的 input:file
         if (task.state.images.length < 5) {
             slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" title="点击上传或拖入垫图" onclick="document.getElementById('file-input-${task.id}').click()"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span><input type="file" id="file-input-${task.id}" style="display:none;" multiple accept="image/*" onchange="handleGenImageUpload(this, '${task.id}')" onclick="event.stopPropagation()"></div>`;
         }
@@ -534,23 +532,52 @@ function generateCardHTML(task) {
 }
 
 async function renderBoard() {
-    const tasks = await getAllTasksDB(), taskIds = new Set(tasks.map(t => 'card-' + t.id)), existingCards = Array.from(board.children);
+    const tasks = await getAllTasksDB();
+    const taskIds = new Set(tasks.map(t => 'card-' + t.id));
+    const existingCards = Array.from(board.children);
+
     existingCards.forEach(card => { if (!taskIds.has(card.id)) card.remove(); });
+
     tasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
+        
+        // 🌟 新增：获取当前卡片的垫图数量
+        const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
+
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
-            if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; } else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card'; else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator'; else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; else cardEl.className = 'video-card';
-            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`; cardEl.innerHTML = generateCardHTML(task); board.appendChild(cardEl); bindCardDrag(cardEl, task);
+            if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
+            else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
+            else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
+            else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; 
+            else cardEl.className = 'video-card';
+            
+            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
+            cardEl.innerHTML = generateCardHTML(task); 
+            board.appendChild(cardEl); 
+            bindCardDrag(cardEl, task);
+            
             if (task.type === 'note') cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
             if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); }
         } else {
             cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
             if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
-            const oldStatus = cardEl.getAttribute('data-sync-status'), oldRetry = cardEl.getAttribute('data-sync-retry');
-            if (oldStatus !== task.status || oldRetry != task.retryCount) { cardEl.innerHTML = generateCardHTML(task); bindCardDrag(cardEl, task); }
+            
+            // 🌟 核心修复：读取旧状态，并将图片的数量变化 (oldImgLen != currentImgLen) 加入重绘拦截器
+            const oldStatus = cardEl.getAttribute('data-sync-status');
+            const oldRetry = cardEl.getAttribute('data-sync-retry');
+            const oldImgLen = cardEl.getAttribute('data-sync-img-len');
+
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen) { 
+                cardEl.innerHTML = generateCardHTML(task); 
+                bindCardDrag(cardEl, task); 
+            }
         }
-        cardEl.setAttribute('data-sync-status', task.status || 'static'); cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
+        
+        // 更新所有的同步状态锁
+        cardEl.setAttribute('data-sync-status', task.status || 'static'); 
+        cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
+        cardEl.setAttribute('data-sync-img-len', currentImgLen); 
     });
 }
 

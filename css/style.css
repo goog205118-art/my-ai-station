@@ -149,3 +149,19 @@ body {
 
 .img-gen-result { width: 100%; min-height: 120px; background: #0b0b0c; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border-radius: 0 0 var(--radius-md) var(--radius-md); }
 .img-gen-result img { width: 100%; height: auto; display: block; object-fit: contain; max-height: 400px; }
+/* ============================== */
+/* 🔍 全局图片放大查看器 (Lightbox) */
+/* ============================== */
+.image-lightbox {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px);
+    z-index: 9999; display: none; align-items: center; justify-content: center;
+    cursor: zoom-out; opacity: 0; transition: opacity 0.2s ease;
+}
+.image-lightbox.show { display: flex; opacity: 1; }
+.image-lightbox img {
+    max-width: 90vw; max-height: 90vh; object-fit: contain;
+    border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.image-lightbox.show img { transform: scale(1); }

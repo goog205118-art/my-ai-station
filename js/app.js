@@ -619,7 +619,7 @@ async function renderBoard() {
             if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
             else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
             else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
-            else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; 
+            else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; 
             else cardEl.className = 'video-card';
             
             cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;

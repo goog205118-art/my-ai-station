@@ -26,19 +26,24 @@
             <span class="material-symbols-outlined">account_tree</span> Veo Studio <span style="font-size:12px; color:var(--text-sub); font-weight:normal;">/ Infinity Flow</span>
         </div>
         <div class="top-actions">
-            <button class="top-btn" id="export-btn" onclick="exportWorkspace()">
+            <button class="top-btn" onclick="openHelpModal()" data-tip="查看 Infinity Flow 使用指南与快捷键">
+                <span class="material-symbols-outlined" style="font-size: 16px;">help</span> 使用教程
+            </button>
+            <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 8px;"></div>
+
+            <button class="top-btn" id="export-btn" onclick="exportWorkspace()" data-tip="将当前画布所有素材与记录打包为 .veo 文件">
                 <span class="material-symbols-outlined" style="font-size: 16px;">download</span> 导出工程
             </button>
-            <label class="top-btn" style="cursor: pointer; margin: 0;">
+            <label class="top-btn" style="cursor: pointer; margin: 0;" data-tip="导入本地的 .veo 工程文件，恢复工作流">
                 <span class="material-symbols-outlined" style="font-size: 16px;">upload</span> 导入工程
                 <input type="file" accept=".veo" style="display: none;" onchange="importWorkspace(this)">
             </label>
             <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 8px;"></div>
 
-            <button class="top-btn" onclick="toggleDrawer()">
+            <button class="top-btn" onclick="toggleDrawer()" data-tip="展开工具箱，拖拽 AI 插件组件至画布">
                 <span class="material-symbols-outlined" style="font-size: 16px;">grid_view</span> 工具箱
             </button>
-            <button class="top-btn" onclick="createStickyNote()">
+            <button class="top-btn" onclick="createStickyNote()" data-tip="在画布中心新建一个可缩放的文本便签">
                 <span class="material-symbols-outlined" style="font-size: 16px;">sticky_note_2</span> 新建便签
             </button>
         </div>
@@ -70,20 +75,20 @@
         </div>
     </div>
 
-    <div class="canvas-viewport" id="canvas-viewport">
+    <div class="canvas-viewport" id="canvas-viewport" data-tip="双击空白处：快速新建文本便签">
         <div class="canvas-board" id="canvas-board"></div>
     </div>
 
     <div class="floating-console" id="floating-console">
         <div class="prompt-container">
             <div class="mode-tabs">
-                <div class="mode-tab active" onclick="switchMode('ref')" id="tab-ref"><span class="material-symbols-outlined">image</span> 参考图</div>
-                <div class="mode-tab" onclick="switchMode('frame')" id="tab-frame"><span class="material-symbols-outlined">movie</span> 首尾帧</div>
+                <div class="mode-tab active" onclick="switchMode('ref')" id="tab-ref" data-tip="输入最多 3 张参考图，控制画面风格走向"><span class="material-symbols-outlined">image</span> 参考图</div>
+                <div class="mode-tab" onclick="switchMode('frame')" id="tab-frame" data-tip="输入首帧或尾帧图片，精准控制视频起始与结束画面"><span class="material-symbols-outlined">movie</span> 首尾帧</div>
             </div>
 
             <div class="input-wrapper">
                 <div class="slot-group active" id="slots-ref">
-                    <div class="img-slot" id="slot-ref-box" onclick="toggleRefPopover(event)">
+                    <div class="img-slot" id="slot-ref-box" onclick="toggleRefPopover(event)" data-tip="点击上传或从画布拖入参考图 (最多3张)">
                         <span class="material-symbols-outlined" id="ref-icon-placeholder">add_photo_alternate</span>
                         <span id="ref-text-placeholder">参考图</span>
                         <img id="ref-img">
@@ -98,13 +103,13 @@
                 </div>
 
                 <div class="slot-group" id="slots-frame">
-                    <div class="img-slot" id="slot-first-box" onclick="document.getElementById('first-file').click()">
+                    <div class="img-slot" id="slot-first-box" onclick="document.getElementById('first-file').click()" data-tip="设置视频的起始画面">
                         <span class="material-symbols-outlined">add</span><span>首帧</span>
                         <img id="first-img"><div class="remove-badge" onclick="clearFrame(event, 'firstFrame')">×</div>
                         <input type="file" id="first-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'firstFrame')">
                     </div>
                     <span class="material-symbols-outlined" style="color: #666;">swap_horiz</span>
-                    <div class="img-slot" id="slot-last-box" onclick="document.getElementById('last-file').click()">
+                    <div class="img-slot" id="slot-last-box" onclick="document.getElementById('last-file').click()" data-tip="设置视频的结束画面">
                         <span class="material-symbols-outlined">add</span><span>尾帧</span>
                         <img id="last-img"><div class="remove-badge" onclick="clearFrame(event, 'lastFrame')">×</div>
                         <input type="file" id="last-file" class="hidden-input" accept="image/*" onchange="handleSingleFrame(this, 'lastFrame')">
@@ -117,32 +122,69 @@
 
         <div class="console-actions-row">
             <div class="pill-group">
-                <div class="action-pill">
+                <div class="action-pill" data-tip="切换底层视频生成模型">
                     <span class="material-symbols-outlined">model_training</span><span id="model-text">Veo 3.1 Fast</span>
                     <select id="model-select" onchange="updateModel(this)"><option value="veo_3_1_fast">Veo 3.1 Fast</option></select>
                 </div>
-                <div class="action-pill">
+                <div class="action-pill" data-tip="选择视频的输出比例">
                     <span class="material-symbols-outlined" id="ratio-icon">crop_portrait</span><span id="ratio-text">竖屏 9:16</span>
                     <select id="ratio-select" onchange="updateRatio(this)"><option value="9:16">竖屏 9:16</option><option value="16:9">横屏 16:9</option></select>
                 </div>
-                <div class="action-pill" id="pill-enhance">
+                <div class="action-pill" id="pill-enhance" data-tip="开启后，系统会自动为您扩写丰富提示词细节">
                     <span class="material-symbols-outlined">auto_fix_high</span><span id="enhance-text">AI 扩写提示词</span>
                     <select id="enhance-select" onchange="updateEnhance(this)"><option value="true">AI 扩写提示词</option><option value="false">原词生成</option></select>
                 </div>
-                <div class="action-pill" id="pill-upsample">
+                <div class="action-pill" id="pill-upsample" data-tip="开启超分辨率提升画质（生成时间会变长）">
                     <span class="material-symbols-outlined">high_quality</span><span id="upsample-text">标准画质</span>
                     <select id="upsample-select" onchange="updateUpsample(this)"><option value="false">标准画质</option><option value="true">开启超分 (更慢)</option></select>
                 </div>
-                <div class="action-pill">
+                <div class="action-pill" data-tip="同时发起多个任务，支持并行生成排队">
                     <span class="material-symbols-outlined" style="color:var(--accent)">layers</span><span id="batch-text" style="color:var(--accent)">单次 (x1)</span>
                     <select id="batch-select" onchange="document.getElementById('batch-text').innerText = this.options[this.selectedIndex].text;"><option value="1">单次 (x1)</option><option value="2">并行 (x2)</option></select>
                 </div>
-                <div class="action-pill" style="border-color: rgba(50, 215, 75, 0.4);">
+                <div class="action-pill" style="border-color: rgba(50, 215, 75, 0.4);" data-tip="挂机神器：遇网络波动失败时，系统将自动重新发起生成">
                     <span class="material-symbols-outlined" style="color:var(--success)">autorenew</span><span id="retry-text" style="color:var(--success)">不自动重试</span>
                     <select id="retry-select" onchange="updateAutoRetry(this)"><option value="false">不自动重试</option><option value="true">失败自动重试</option></select>
                 </div>
             </div>
-            <button class="submit-btn" id="generate-btn" onclick="submitBatchTask()"><span class="material-symbols-outlined">arrow_upward</span></button>
+            <button class="submit-btn" id="generate-btn" onclick="submitBatchTask()" data-tip="发送任务至服务器生成"><span class="material-symbols-outlined">arrow_upward</span></button>
+        </div>
+    </div>
+
+    <div id="global-tooltip" class="global-tooltip"></div>
+
+    <div id="help-modal" class="help-modal" onclick="closeHelpModal()">
+        <div class="help-content" onclick="event.stopPropagation()">
+            <button class="help-close" onclick="closeHelpModal()">&times;</button>
+            <h2><span class="material-symbols-outlined" style="color:var(--accent);">explore</span> Infinity Flow 创作者指南</h2>
+            
+            <div class="help-section">
+                <h3>🎨 画布基础操作</h3>
+                <ul>
+                    <li><strong>平移与缩放</strong>：按住左键拖动空白处平移；滚轮上下滚动无级缩放。</li>
+                    <li><strong>极速落图 (Ctrl+V)</strong>：在任意处截图后，直接在画布按 <code>Ctrl+V</code> 粘贴，瞬间落图。</li>
+                    <li><strong>沉浸式放大</strong>：双击任意图片（本地/生成结果/缩略图），即可全屏高清模糊预览。</li>
+                    <li><strong>快捷便签</strong>：双击画布空白处，即可新建文本排版便签。</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>🎬 视频与生图流转</h3>
+                <ul>
+                    <li><strong>素材直连拖拽</strong>：按住画布上的图片，可直接拖入底部控制台或生图组件中。</li>
+                    <li><strong>双通道生图</strong>：生图组件内置主备双通道 API，拥堵时下拉一键热切换。</li>
+                    <li><strong>夜间全自动挂机</strong>：生图与视频均支持【失败自动重试】，配合【并行生成】无脑产出。</li>
+                    <li><strong>一键提取参数</strong>：点击历史生成卡片的 📝 图标，参数与垫图瞬间反填至控制台。</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>💡 灵感提取插件</h3>
+                <ul>
+                    <li><strong>摇骰子玩法</strong>：从左侧工具箱拖出【社媒灵感生成器】，点击随机抽取爆款属性。</li>
+                    <li><strong>极速反填</strong>：点击【应用至控制台】，结构化剧本瞬间自动填入底部 Prompt 输入框。</li>
+                </ul>
+            </div>
         </div>
     </div>
 

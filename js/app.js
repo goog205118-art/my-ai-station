@@ -3,8 +3,8 @@
 // ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
-// 🌟 新增：图像生成专用 API 断点
-const API_IMAGE_GEN = 'https://yunwu.ai/v1/images/generations'; 
+// 🌟 修改：更新为你的 n8n 生图中转 Webhook 地址
+const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
 
 let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, autoRetry: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
 let activeTasks = [];
@@ -164,7 +164,6 @@ async function exportWorkspace() {
         for (let t of tasks) {
             let clone = { ...t };
             if (clone.type === 'local_image' && clone.src) clone.src = await blobToBase64(clone.src);
-            // 🌟 导出时也处理生图工具里的图片 Blob
             if (clone.type === 'tool_image_gen' && clone.state) {
                 if(clone.state.images) clone.state.images = await Promise.all(clone.state.images.map(b => blobToBase64(b)));
                 if(clone.state.resultBlob) clone.state.resultBlob = await blobToBase64(clone.state.resultBlob);
@@ -196,7 +195,6 @@ async function importWorkspace(input) {
             if (confirm(`📦 解析成功！包含 ${data.length} 个节点。\n这会与您当前的画布合并，是否继续？`)) {
                 for (let t of data) {
                     if (t.type === 'local_image' && typeof t.src === 'string') t.src = await fetch(t.src).then(r => r.blob());
-                    // 🌟 导入时还原生图工具的 Blob
                     if (t.type === 'tool_image_gen' && t.state) {
                         if(t.state.images) t.state.images = await Promise.all(t.state.images.map(async b => typeof b === 'string' ? await fetch(b).then(r => r.blob()) : b));
                         if(t.state.resultBlob && typeof t.state.resultBlob === 'string') t.state.resultBlob = await fetch(t.state.resultBlob).then(r => r.blob());
@@ -224,7 +222,6 @@ async function importWorkspace(input) {
 window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
 window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
 
-// 【1】拖入空白画布
 viewport.addEventListener('drop', async (e) => {
     e.preventDefault();
     const pluginType = e.dataTransfer.getData('plugin');
@@ -237,7 +234,6 @@ viewport.addEventListener('drop', async (e) => {
             newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
         } 
         else if (pluginType === 'image_gen') {
-            // 🌟 实例化生图节点
             newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null } };
         }
 
@@ -260,7 +256,6 @@ viewport.addEventListener('drop', async (e) => {
     }
 });
 
-// 【2】统一解析拖拽图片逻辑提取器
 async function parseDroppedImage(e) {
     let srcToUse = null;
     try {
@@ -271,7 +266,7 @@ async function parseDroppedImage(e) {
             if (t) {
                 if (meta.type === 'local') srcToUse = t.src;
                 else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]);
-                else if (meta.type === 'gen_result') srcToUse = t.state.resultBlob; // 🌟 支持拖拽刚刚生成的图片
+                else if (meta.type === 'gen_result') srcToUse = t.state.resultBlob; 
             }
         }
     } catch(err) {}
@@ -286,7 +281,6 @@ async function parseDroppedImage(e) {
     return srcToUse;
 }
 
-// 绑定主控制台底部槽位
 function bindMainConsoleDrop(slotId, stateKey) {
     const slot = document.getElementById(slotId);
     slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
@@ -307,18 +301,6 @@ function bindMainConsoleDrop(slotId, stateKey) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await initDB(); 
-    board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
-    document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
-    await renderBoard(); 
-    
-    bindMainConsoleDrop('slot-ref-box', 'references'); 
-    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
-    bindMainConsoleDrop('slot-last-box', 'lastFrame');
-});
-
-// UI 控制函数
 function toggleRefPopover(e) { e.stopPropagation(); if (payloadState.references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 function switchMode(mode) { payloadState.currentMode = mode; document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); document.getElementById(`tab-${mode}`).classList.add('active'); document.getElementById(`slots-${mode}`).classList.add('active'); }
 function updateModel(select) { payloadState.model = select.value; document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; }
@@ -513,7 +495,7 @@ function buildGeneratorOptions(arr, selected) {
     return html;
 }
 
-// 🌟 新增：AI 生图卡片底层逻辑
+// 🌟 修改：AI 生图卡片底层逻辑，接管鉴权并发往 n8n
 async function handleGenImageDrop(e, id) {
     e.preventDefault(); e.stopPropagation();
     const dropZone = document.getElementById(`img-gen-zone-${id}`);
@@ -540,6 +522,7 @@ async function updateImgGenState(id, key, value) {
     if(task) { task.state[key] = value; await saveTaskDB(task); }
 }
 
+// 🌟 核心修改：通过 x-studio-pwd 将格式化后的 Payload 发给 n8n
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
@@ -549,27 +532,36 @@ async function submitImgGen(id) {
     await saveTaskDB(task); renderBoard();
 
     try {
+        // 构造发送给 n8n 的极简 Payload
         const apiPayload = {
-            model: "gpt-image-2-all",
-            size: task.state.size, n: 1, prompt: task.state.prompt,
-            image: await Promise.all(task.state.images.map(b => blobToBase64(b))) // 将存放的Blob转Base64送出
+            size: task.state.size, 
+            prompt: task.state.prompt,
+            images: await Promise.all(task.state.images.map(b => blobToBase64(b))) 
         };
 
         const response = await fetch(API_IMAGE_GEN, { 
             method: 'POST', 
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('veo_admin_pwd')}` }, 
+            // 🌟 核心：鉴权统一采用 Veo 控制台的输入密码，拦截器拦截
+            headers: { 
+                'Content-Type': 'application/json', 
+                'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') 
+            }, 
             body: JSON.stringify(apiPayload) 
         });
 
+        if (response.status === 401 || response.status === 403) throw new Error("控制台安全密码错误");
         if (!response.ok) throw new Error("生图接口报错: " + response.status);
+        
         const data = await response.json();
 
+        // 原样提取 n8n 抛回来的云雾数据结构
         if (data.data && data.data[0] && data.data[0].url) {
-            // 拿到返回公网 URL 后，用 fetch 极速转成底层 Blob 存入数据库，告别外链失效烦恼
             task.state.resultUrl = data.data[0].url;
             task.state.resultBlob = await fetch(data.data[0].url).then(r => r.blob());
             task.status = 'success';
-        } else throw new Error("API 未返回图片 URL");
+        } else {
+            throw new Error(data.error?.message || "API 未返回有效图片 URL");
+        }
 
     } catch (e) {
         alert("生图失败: " + e.message);
@@ -588,7 +580,6 @@ function generateCardHTML(task) {
     
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
-    // 🌟 新增：AI生图工具 UI 渲染
     if (task.type === 'tool_image_gen') {
         const isProcessing = task.status === 'processing';
         const resultHtml = task.status === 'success' && task.state.resultBlob ? 
@@ -609,7 +600,6 @@ function generateCardHTML(task) {
         `;
     }
 
-    // 常规视频卡片
     let statusBadge = '', mediaHtml = '';
     const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]));
     const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
@@ -645,7 +635,7 @@ async function renderBoard() {
             if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
             else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
             else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
-            else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; // 🌟 挂载生图卡片 CSS
+            else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; 
             else cardEl.className = 'video-card';
             
             cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;

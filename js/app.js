@@ -28,14 +28,24 @@ document.addEventListener('mouseover', (e) => {
         globalTooltip.innerText = tipText;
         const rect = target.getBoundingClientRect();
         
-        // 精准计算：在目标元素的绝对水平中心，垂直紧贴上方
+        // 计算水平绝对居中
         let x = rect.left + rect.width / 2;
         let y = rect.top;
+        
+        // 🌟 核心修复：智能边缘探测
+        // 如果目标元素距离顶部小于 60px (例如顶部导航栏)，则让提示框在它【下方】弹出
+        if (y < 60) {
+            y = rect.bottom; 
+            globalTooltip.classList.add('tooltip-bottom');
+        } else {
+            // 否则正常在【上方】弹出
+            globalTooltip.classList.remove('tooltip-bottom');
+        }
         
         globalTooltip.style.left = `${x}px`;
         globalTooltip.style.top = `${y}px`;
         globalTooltip.classList.add('show');
-    }, 500); // 停留 0.5 秒触发
+    }, 500); 
 });
 
 document.addEventListener('mouseout', (e) => {

@@ -138,8 +138,8 @@ body {
 .img-gen-slot img { width: 100%; height: 100%; object-fit: cover; }
 .img-gen-slot .remove-badge { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; font-size: 10px; }
 
-.img-gen-controls { display: flex; gap: 8px; padding: 0 12px; }
-.img-gen-select { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 12px; padding: 6px; border-radius: 6px; outline: none; }
+.img-gen-controls { display: flex; gap: 8px; padding: 0 12px; flex-wrap: wrap; }
+.img-gen-select { flex: 1; min-width: 80px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 11px; padding: 6px; border-radius: 6px; outline: none; }
 .img-gen-select option { background: var(--surface); }
 
 .img-gen-prompt { margin: 0 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; height: 60px; color: var(--text-main); font-size: 13px; resize: none; outline: none; }

@@ -72,15 +72,34 @@ function bindCardDrag(cardEl, task) {
 }
 
 // ==============================
+// 🔍 全局图片放大查看器 (Lightbox)
+// ==============================
+let lightboxEl = null;
+function openLightbox(src) {
+    if (!lightboxEl) {
+        lightboxEl = document.createElement('div');
+        lightboxEl.className = 'image-lightbox';
+        lightboxEl.innerHTML = `<img>`;
+        // 点击任意位置关闭
+        lightboxEl.onclick = () => {
+            lightboxEl.classList.remove('show');
+            setTimeout(() => lightboxEl.style.display = 'none', 200);
+        };
+        document.body.appendChild(lightboxEl);
+    }
+    lightboxEl.querySelector('img').src = src;
+    lightboxEl.style.display = 'flex';
+    lightboxEl.offsetHeight; // 强制重排以触发 CSS 过渡动画
+    lightboxEl.classList.add('show');
+}
+
+// ==============================
 // 📋 剪贴板全局粘贴引擎 (Ctrl+V)
 // ==============================
 window.addEventListener('paste', async (e) => {
-    // 防止在输入框内粘贴时触发画布生图
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    
     const items = e.clipboardData?.items;
     if (!items) return;
-    
     let offset = 0;
     for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
@@ -89,13 +108,9 @@ window.addEventListener('paste', async (e) => {
             const blob = await compressImageToBlob(file, 1024);
             const spawnX = (-transform.x + window.innerWidth/2) / transform.scale + offset;
             const spawnY = (-transform.y + window.innerHeight/2) / transform.scale + offset;
-            
-            const newLocalNode = {
-                id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                type: 'local_image', src: blob, x: spawnX, y: spawnY, timestamp: Date.now()
-            };
+            const newLocalNode = { id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, x: spawnX, y: spawnY, timestamp: Date.now() };
             await saveTaskDB(newLocalNode);
-            offset += 40; // 如果同时粘贴多张图，错开位置
+            offset += 40; 
         }
     }
     if (offset > 0) renderBoard();
@@ -389,7 +404,7 @@ async function applyGeneratorToPrompt(id, btnElement) {
 function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
 
 
-// 🌟 AI 生图工具底层增强 (通道切换、本地选择、自动重试)
+// 🌟 AI 生图工具底层增强
 async function handleGenImageDrop(e, id) {
     e.preventDefault(); e.stopPropagation();
     const dropZone = document.getElementById(`img-gen-zone-${id}`); if(dropZone) dropZone.classList.remove('drag-over');
@@ -401,7 +416,6 @@ async function handleGenImageDrop(e, id) {
     }
 }
 
-// 本地选择文件直传生图
 async function handleGenImageUpload(input, id) {
     if (!input.files || input.files.length === 0) return;
     const task = await getTaskDB(id); if (!task) return;
@@ -412,23 +426,21 @@ async function handleGenImageUpload(input, id) {
         added++;
     }
     if (added > 0) { await saveTaskDB(task); renderBoard(); } else alert("最多只支持 5 张合并生图！");
-    input.value = ''; // Reset input
+    input.value = ''; 
 }
 
 async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
 async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 
-// 🌟 全新强化版生图调度中心
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
     if(!task.state.prompt) return alert("请填写生图提示词！");
 
     task.status = 'processing';
-    task.retryCount = 0; // 重置重试次数
+    task.retryCount = 0; 
     await saveTaskDB(task); renderBoard();
 
-    // 构造 payload，附加新选中的 channel
     const apiPayload = {
         size: task.state.size, 
         prompt: task.state.prompt,
@@ -438,7 +450,7 @@ async function submitImgGen(id) {
 
     let success = false;
     let attempts = 0;
-    const maxAttempts = task.state.autoRetry ? 3 : 1; // 开启重试最多跑3次
+    const maxAttempts = task.state.autoRetry ? 3 : 1; 
 
     while (attempts < maxAttempts && !success) {
         attempts++;
@@ -466,7 +478,6 @@ async function submitImgGen(id) {
             if (attempts >= maxAttempts) {
                 task.status = 'failed';
             } else {
-                // 等待 2 秒后自动发起重试，更新 UI 展示重试状态
                 task.retryCount = attempts;
                 await saveTaskDB(task); renderBoard();
                 await new Promise(r => setTimeout(r, 2000));
@@ -477,18 +488,23 @@ async function submitImgGen(id) {
 }
 
 // ==============================
-// 🚀 智能 DOM 对比引擎 (已加入垫图数量热更新锁)
+// 🚀 智能 DOM 对比引擎 (已加入所有缩略图双击放大逻辑)
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
-    if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'local'}))" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片拖拽复用">`;
+    
+    // 🌟 修改：支持双击放大本地素材
+    if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'local'}))" ondblclick="openLightbox(this.src)" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="双击放大查看细节，按住图片拖拽复用">`;
+    
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
     if (task.type === 'tool_image_gen') {
         const isProcessing = task.status === 'processing';
         const isFailed = task.status === 'failed';
+        
+        // 🌟 修改：支持双击放大生成的图片结果
         const resultHtml = task.status === 'success' && task.state.resultBlob ? 
-            `<div class="img-gen-result"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'gen_result'}))" title="按住拖拽至控制台或画板"></div>` : '';
+            `<div class="img-gen-result"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'gen_result'}))" ondblclick="openLightbox(this.src)" title="双击放大查看细节，按住拖拽复用"></div>` : '';
         
         let slotsHtml = task.state.images.map((img, i) => `<div class="img-gen-slot" style="border:none;"><img src="${getBlobUrl(task.id+'_img_'+i, img)}"><div class="popover-rm-btn remove-badge" onclick="removeGenImage(event, '${task.id}', ${i})">×</div></div>`).join('');
         if (task.state.images.length < 5) {
@@ -524,10 +540,12 @@ function generateCardHTML(task) {
         `;
     }
 
-    // 视频卡片生成...
     let statusBadge = '', mediaHtml = ''; const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0])); const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
     if (task.status === 'processing') { const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`; } else if (task.status === 'failed') { statusBadge = `<span class="status-badge failed">失败</span>`; mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`; } else { statusBadge = `<span class="status-badge success">已完成</span>`; mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()" title="双击全屏播放"></video></div>`; }
-    const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'thumb'}))" title="按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
+    
+    // 🌟 修改：支持双击放大视频的首尾帧参考图缩略图
+    const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'thumb'}))" ondblclick="openLightbox(this.src)" title="双击放大查看细节，按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
+    
     return `<div class="card-header"><div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>${statusBadge}</div><div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div><div class="card-tags"><span class="card-tag">${task.ratio}</span>${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}</div>${mediaHtml}<div class="card-actions">${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}<button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button><button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button></div>`;
 }
 
@@ -540,8 +558,6 @@ async function renderBoard() {
 
     tasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
-        
-        // 🌟 新增：获取当前卡片的垫图数量
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
 
         if (!cardEl) {
@@ -563,7 +579,6 @@ async function renderBoard() {
             cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
             if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
             
-            // 🌟 核心修复：读取旧状态，并将图片的数量变化 (oldImgLen != currentImgLen) 加入重绘拦截器
             const oldStatus = cardEl.getAttribute('data-sync-status');
             const oldRetry = cardEl.getAttribute('data-sync-retry');
             const oldImgLen = cardEl.getAttribute('data-sync-img-len');
@@ -574,7 +589,6 @@ async function renderBoard() {
             }
         }
         
-        // 更新所有的同步状态锁
         cardEl.setAttribute('data-sync-status', task.status || 'static'); 
         cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
         cardEl.setAttribute('data-sync-img-len', currentImgLen); 

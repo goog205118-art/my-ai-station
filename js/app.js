@@ -3,18 +3,13 @@
 // ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
-// 🌟 修改：更新为你的 n8n 生图中转 Webhook 地址
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
 
 let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, autoRetry: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
 let activeTasks = [];
 let activeRetries = new Set(); 
 
-function removeActiveTask(id) {
-    const index = activeTasks.indexOf(id);
-    if (index > -1) activeTasks.splice(index, 1);
-}
-
+function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index > -1) activeTasks.splice(index, 1); }
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 
 // ==============================
@@ -22,25 +17,19 @@ function toggleDrawer() { document.getElementById('tool-drawer').classList.toggl
 // ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
-
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
-let isPanning = false, startPanX = 0, startPanY = 0;
-let ticking = false; 
-
-let draggingCardInfo = null; 
-let highestZIndex = 10; 
+let isPanning = false, startPanX = 0, startPanY = 0, ticking = false; 
+let draggingCardInfo = null, highestZIndex = 10; 
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
         requestAnimationFrame(() => {
             if (isPanning) {
-                transform.x = e.clientX - startPanX; 
-                transform.y = e.clientY - startPanY; 
+                transform.x = e.clientX - startPanX; transform.y = e.clientY - startPanY; 
                 board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
-            } 
-            else if (draggingCardInfo) {
+            } else if (draggingCardInfo) {
                 draggingCardInfo.task.x = (e.clientX - draggingCardInfo.startX) / transform.scale;
                 draggingCardInfo.task.y = (e.clientY - draggingCardInfo.startY) / transform.scale;
                 draggingCardInfo.el.style.transform = `translate3d(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px, 0)`;
@@ -51,32 +40,14 @@ window.addEventListener('mousemove', (e) => {
     }
 });
 
-viewport.addEventListener('mousedown', (e) => {
-    if (e.target === viewport || e.target === board) {
-        isPanning = true; startPanX = e.clientX - transform.x; startPanY = e.clientY - transform.y;
-    }
-});
-
-window.addEventListener('mouseup', () => { 
-    isPanning = false; 
-    if (draggingCardInfo) {
-        saveTaskDB(draggingCardInfo.task);
-        draggingCardInfo = null;
-    }
-});
+viewport.addEventListener('mousedown', (e) => { if (e.target === viewport || e.target === board) { isPanning = true; startPanX = e.clientX - transform.x; startPanY = e.clientY - transform.y; } });
+window.addEventListener('mouseup', () => { isPanning = false; if (draggingCardInfo) { saveTaskDB(draggingCardInfo.task); draggingCardInfo = null; } });
 
 viewport.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    if (ticking) return; 
-    const zoomSensitivity = 0.001;
-    const delta = e.deltaY * zoomSensitivity;
-    let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
-    const rect = viewport.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    transform.x = mouseX - (mouseX - transform.x) * (newScale / transform.scale);
-    transform.y = mouseY - (mouseY - transform.y) * (newScale / transform.scale);
-    transform.scale = newScale;
+    e.preventDefault(); if (ticking) return; 
+    const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
+    const mouseX = e.clientX - viewport.getBoundingClientRect().left, mouseY = e.clientY - viewport.getBoundingClientRect().top;
+    transform.x = mouseX - (mouseX - transform.x) * (newScale / transform.scale); transform.y = mouseY - (mouseY - transform.y) * (newScale / transform.scale); transform.scale = newScale;
     
     if (!ticking) {
         requestAnimationFrame(() => {
@@ -93,74 +64,71 @@ function bindCardDrag(cardEl, task) {
     const header = cardEl.querySelector('.card-header');
     if(header) {
         header.onmousedown = (e) => {
-            highestZIndex++; 
-            cardEl.style.zIndex = highestZIndex;
-
-            draggingCardInfo = {
-                el: cardEl, task: task,
-                startX: e.clientX - (task.x || 0) * transform.scale,
-                startY: e.clientY - (task.y || 0) * transform.scale
-            };
+            highestZIndex++; cardEl.style.zIndex = highestZIndex;
+            draggingCardInfo = { el: cardEl, task: task, startX: e.clientX - (task.x || 0) * transform.scale, startY: e.clientY - (task.y || 0) * transform.scale };
             e.stopPropagation(); 
         };
     }
 }
 
 // ==============================
+// 📋 剪贴板全局粘贴引擎 (Ctrl+V)
+// ==============================
+window.addEventListener('paste', async (e) => {
+    // 防止在输入框内粘贴时触发画布生图
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    let offset = 0;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const file = items[i].getAsFile();
+            if(!file) continue;
+            const blob = await compressImageToBlob(file, 1024);
+            const spawnX = (-transform.x + window.innerWidth/2) / transform.scale + offset;
+            const spawnY = (-transform.y + window.innerHeight/2) / transform.scale + offset;
+            
+            const newLocalNode = {
+                id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                type: 'local_image', src: blob, x: spawnX, y: spawnY, timestamp: Date.now()
+            };
+            await saveTaskDB(newLocalNode);
+            offset += 40; // 如果同时粘贴多张图，错开位置
+        }
+    }
+    if (offset > 0) renderBoard();
+});
+
+// ==============================
 // 📝 便签与防误触
 // ==============================
 const consoleEl = document.getElementById('floating-console');
 document.addEventListener('click', (e) => {
-    const popover = document.getElementById('ref-popover');
-    const slotBox = document.getElementById('slot-ref-box');
+    const popover = document.getElementById('ref-popover'), slotBox = document.getElementById('slot-ref-box');
     if (popover && popover.style.display === 'flex' && !popover.contains(e.target) && !slotBox.contains(e.target)) popover.style.display = 'none';
-    if (e.target === viewport || e.target === board) {
-        consoleEl.classList.add('minimized');
-        document.getElementById('tool-drawer').classList.remove('open'); 
-    } else if (consoleEl.contains(e.target)) consoleEl.classList.remove('minimized');
+    if (e.target === viewport || e.target === board) { consoleEl.classList.add('minimized'); document.getElementById('tool-drawer').classList.remove('open'); } else if (consoleEl.contains(e.target)) consoleEl.classList.remove('minimized');
 });
 
 async function createStickyNote(spawnX, spawnY) {
     if (spawnX === undefined) spawnX = (-transform.x + window.innerWidth/2 - 120) / transform.scale;
     if (spawnY === undefined) spawnY = (-transform.y + window.innerHeight/2 - 80) / transform.scale;
-    const newNote = {
-        id: 'note_' + Date.now() + Math.random().toString(36).substr(2, 5),
-        type: 'note', text: '', x: spawnX, y: spawnY, width: 260, height: 200, timestamp: Date.now()
-    };
-    await saveTaskDB(newNote); renderBoard();
+    await saveTaskDB({ id: 'note_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'note', text: '', x: spawnX, y: spawnY, width: 260, height: 200, timestamp: Date.now() }); renderBoard();
 }
-
-viewport.addEventListener('dblclick', (e) => {
-    if (e.target === viewport || e.target === board) createStickyNote((e.clientX - transform.x) / transform.scale, (e.clientY - transform.y) / transform.scale);
-});
+viewport.addEventListener('dblclick', (e) => { if (e.target === viewport || e.target === board) createStickyNote((e.clientX - transform.x) / transform.scale, (e.clientY - transform.y) / transform.scale); });
 
 let noteTimeout;
-async function updateNoteText(id, text) {
-    clearTimeout(noteTimeout);
-    noteTimeout = setTimeout(async () => {
-        const note = await getTaskDB(id);
-        if (note) { note.text = text; await saveTaskDB(note); }
-    }, 500);
-}
-
-function saveNoteSize(id, w, h) {
-    setTimeout(async () => {
-        const note = await getTaskDB(id);
-        if (note && (note.width !== w || note.height !== h)) { note.width = w; note.height = h; await saveTaskDB(note); }
-    }, 100);
-}
+async function updateNoteText(id, text) { clearTimeout(noteTimeout); noteTimeout = setTimeout(async () => { const note = await getTaskDB(id); if (note) { note.text = text; await saveTaskDB(note); } }, 500); }
+function saveNoteSize(id, w, h) { setTimeout(async () => { const note = await getTaskDB(id); if (note && (note.width !== w || note.height !== h)) { note.width = w; note.height = h; await saveTaskDB(note); } }, 100); }
 
 // ==============================
-// 📦 工程导入与导出 
+// 📦 工程导入与导出
 // ==============================
 async function exportWorkspace() {
-    const btn = document.getElementById('export-btn');
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:16px;height:16px;stroke:currentColor;margin-right:6px;"><circle cx="25" cy="25" r="20"></circle></svg> 打包中...`;
-    
+    const btn = document.getElementById('export-btn'); const originalHTML = btn.innerHTML; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:16px;height:16px;stroke:currentColor;margin-right:6px;"><circle cx="25" cy="25" r="20"></circle></svg> 打包中...`;
     try {
-        const tasks = await getAllTasksDB();
-        const exportData = [];
+        const tasks = await getAllTasksDB(); const exportData = [];
         for (let t of tasks) {
             let clone = { ...t };
             if (clone.type === 'local_image' && clone.src) clone.src = await blobToBase64(clone.src);
@@ -171,23 +139,17 @@ async function exportWorkspace() {
             if (clone.rawImages) {
                 if (clone.rawImages.firstFrame) clone.rawImages.firstFrame = await blobToBase64(clone.rawImages.firstFrame);
                 if (clone.rawImages.lastFrame) clone.rawImages.lastFrame = await blobToBase64(clone.rawImages.lastFrame);
-                if (clone.rawImages.references) {
-                    clone.rawImages.references = await Promise.all(clone.rawImages.references.map(b => blobToBase64(b)));
-                }
+                if (clone.rawImages.references) clone.rawImages.references = await Promise.all(clone.rawImages.references.map(b => blobToBase64(b)));
             }
             exportData.push(clone);
         }
-        const blob = new Blob([JSON.stringify(exportData)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `VeoStudio_Flow_${Date.now()}.veo`; a.click();
-        URL.revokeObjectURL(url);
-    } catch (e) { alert('导出失败: ' + e.message); } 
-    finally { btn.innerHTML = originalHTML; }
+        const blob = new Blob([JSON.stringify(exportData)], {type: 'application/json'}); const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `VeoStudio_Flow_${Date.now()}.veo`; a.click(); URL.revokeObjectURL(url);
+    } catch (e) { alert('导出失败: ' + e.message); } finally { btn.innerHTML = originalHTML; }
 }
 
 async function importWorkspace(input) {
-    const file = input.files[0];
-    if (!file) return;
+    if (!input.files[0]) return;
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
@@ -202,9 +164,7 @@ async function importWorkspace(input) {
                     if (t.rawImages) {
                         if (typeof t.rawImages.firstFrame === 'string') t.rawImages.firstFrame = await fetch(t.rawImages.firstFrame).then(r => r.blob());
                         if (typeof t.rawImages.lastFrame === 'string') t.rawImages.lastFrame = await fetch(t.rawImages.lastFrame).then(r => r.blob());
-                        if (t.rawImages.references) {
-                            t.rawImages.references = await Promise.all(t.rawImages.references.map(async b => typeof b === 'string' ? await fetch(b).then(r => r.blob()) : b));
-                        }
+                        if (t.rawImages.references) t.rawImages.references = await Promise.all(t.rawImages.references.map(async b => typeof b === 'string' ? await fetch(b).then(r => r.blob()) : b));
                     }
                     await saveTaskDB(t);
                 }
@@ -213,7 +173,7 @@ async function importWorkspace(input) {
         } catch(err) { alert('❌ 文件解析失败，请确保导入的是有效的 .veo 格式文件'); }
         input.value = '';
     };
-    reader.readAsText(file);
+    reader.readAsText(input.files[0]);
 }
 
 // ==============================
@@ -226,20 +186,14 @@ viewport.addEventListener('drop', async (e) => {
     e.preventDefault();
     const pluginType = e.dataTransfer.getData('plugin');
     if (pluginType) {
-        const spawnX = (e.clientX - transform.x) / transform.scale;
-        const spawnY = (e.clientY - transform.y) / transform.scale;
-        
+        const spawnX = (e.clientX - transform.x) / transform.scale, spawnY = (e.clientY - transform.y) / transform.scale;
         let newTool = null;
-        if (pluginType === 'generator') {
-            newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
-        } 
+        if (pluginType === 'generator') newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
         else if (pluginType === 'image_gen') {
-            newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null } };
+            // 🌟 生图卡片默认状态扩充：通道选择 & 自动重试
+            newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null, channel: 'channel_1', autoRetry: false }, retryCount: 0 };
         }
-
-        if (newTool) {
-            await saveTaskDB(newTool); renderBoard(); document.getElementById('tool-drawer').classList.remove('open'); return;
-        }
+        if (newTool) { await saveTaskDB(newTool); renderBoard(); document.getElementById('tool-drawer').classList.remove('open'); return; }
     }
 
     const files = e.dataTransfer.files;
@@ -248,8 +202,8 @@ viewport.addEventListener('drop', async (e) => {
         for (let file of files) {
             if (file.type.startsWith('image/')) {
                 const blob = await compressImageToBlob(file, 1024);
-                const newLocalNode = { id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, x: (e.clientX - transform.x) / transform.scale + offset, y: (e.clientY - transform.y) / transform.scale + offset, timestamp: Date.now() };
-                await saveTaskDB(newLocalNode); offset += 40; 
+                await saveTaskDB({ id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, x: (e.clientX - transform.x) / transform.scale + offset, y: (e.clientY - transform.y) / transform.scale + offset, timestamp: Date.now() });
+                offset += 40; 
             }
         }
         renderBoard();
@@ -261,8 +215,7 @@ async function parseDroppedImage(e) {
     try {
         const jsonStr = e.dataTransfer.getData('application/json');
         if (jsonStr) {
-            const meta = JSON.parse(jsonStr);
-            const t = await getTaskDB(meta.taskId);
+            const meta = JSON.parse(jsonStr), t = await getTaskDB(meta.taskId);
             if (t) {
                 if (meta.type === 'local') srcToUse = t.src;
                 else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]);
@@ -271,13 +224,8 @@ async function parseDroppedImage(e) {
         }
     } catch(err) {}
 
-    if (!srcToUse) {
-        let textData = e.dataTransfer.getData('text/plain');
-        if (textData && textData.startsWith('data:image')) srcToUse = textData;
-    }
-    if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) {
-        srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
-    }
+    if (!srcToUse) { let textData = e.dataTransfer.getData('text/plain'); if (textData && textData.startsWith('data:image')) srcToUse = textData; }
+    if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
     return srcToUse;
 }
 
@@ -341,97 +289,53 @@ function clearFrame(event, type) {
 }
 
 // ==============================
-// 🚀 批处理与提交调度
+// 🚀 视频生成 - 批处理与提交调度
 // ==============================
 async function submitBatchTask() {
     const prompt = document.getElementById('prompt-input').value.trim();
     if (!prompt) return alert('请填写提示词');
     
-    const batchCount = parseInt(document.getElementById('batch-select').value);
-    const btn = document.getElementById('generate-btn');
+    const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
     
     let submitRef = [...payloadState.references], submitFirst = payloadState.firstFrame, submitLast = payloadState.lastFrame;
-    if (payloadState.currentMode === 'ref') { submitFirst = null; submitLast = null; } 
-    else submitRef = [];
+    if (payloadState.currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
 
-    const taskParams = {
-        model: payloadState.model, aspectRatio: payloadState.aspectRatio,
-        enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample,
-        autoRetry: payloadState.autoRetry, 
-        firstFrame: submitFirst, lastFrame: submitLast, references: submitRef
-    };
-
-    let promises = [];
-    for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
+    const taskParams = { model: payloadState.model, aspectRatio: payloadState.aspectRatio, enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample, autoRetry: payloadState.autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
+    let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
     
     await Promise.allSettled(promises);
-    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
-    document.getElementById('prompt-input').value = ''; 
+    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; document.getElementById('prompt-input').value = ''; 
 }
 
 async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
-        const apiPayload = {
-            model: params.model, prompt: promptText, aspectRatio: params.aspectRatio,
-            enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample,
-            firstFrame: await blobToBase64(params.firstFrame),
-            lastFrame: await blobToBase64(params.lastFrame),
-            references: await Promise.all(params.references.map(b => blobToBase64(b)))
-        };
-
+        const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
         if (response.status === 401 || response.status === 403) throw new Error("密码错误");
         const data = await response.json();
 
         if (data.taskId) {
-            const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360);
-            const spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
-            
-            const newTask = {
-                id: data.taskId, prompt: promptText,
-                modelStr: params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast',
-                modelVal: params.model, ratio: params.aspectRatio,
-                autoRetry: params.autoRetry, retryCount: 0,
-                rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] },
-                mode: params.references && params.references.length > 0 ? 'ref' : 'frame',
-                status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}),
-                videoUrl: null, x: spawnX, y: spawnY
-            };
-            
-            await saveTaskDB(newTask);
-            await renderBoard(); 
+            const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
+            const newTask = { id: data.taskId, prompt: promptText, modelStr: params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast', modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
+            await saveTaskDB(newTask); await renderBoard(); 
         }
     } catch (error) { console.error('提交失败:', error); }
 }
 
 async function retryTask(taskId, btnElement) {
-    if (activeRetries.has(taskId)) return; 
-    activeRetries.add(taskId);
+    if (activeRetries.has(taskId)) return; activeRetries.add(taskId);
     if (btnElement) { btnElement.disabled = true; btnElement.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:var(--text-sub);"><circle cx="25" cy="25" r="20"></circle></svg>`; }
-    
-    const task = await getTaskDB(taskId);
-    if(!task) { activeRetries.delete(taskId); return; }
+    const task = await getTaskDB(taskId); if(!task) { activeRetries.delete(taskId); return; }
 
     try {
-        const apiPayload = {
-            model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false,
-            firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame),
-            references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b)))
-        };
-
+        const apiPayload = { model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false, firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame), references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
         if (response.status === 401 || response.status === 403) throw new Error("密码错误");
         const data = await response.json();
 
-        if (data.taskId) {
-            await deleteTaskDB(taskId); removeActiveTask(taskId); 
-            task.id = data.taskId; task.status = 'processing'; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'});
-            await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard();        
-        } else throw new Error("无返回 ID");
-    } catch (error) {
-        task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard();
-    }
+        if (data.taskId) { await deleteTaskDB(taskId); removeActiveTask(taskId); task.id = data.taskId; task.status = 'processing'; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); } else throw new Error("无返回 ID");
+    } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
 }
 
 function startTaskPolling(taskId) {
@@ -441,31 +345,26 @@ function startTaskPolling(taskId) {
         try {
             const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId }) });
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); return; }
-            const data = await response.json();
-            const task = await getTaskDB(taskId);
+            const data = await response.json(), task = await getTaskDB(taskId);
             if (!task) { removeActiveTask(taskId); return; }
 
             if (data.status === 'success' && data.videoUrl) { removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
             if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) { retryTask(task.id, null); } else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
             
-            if (attempts < 240) setTimeout(poll, 15000); 
-            else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } }
+            if (attempts < 240) setTimeout(poll, 15000); else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } }
         } catch (error) { setTimeout(poll, 15000); }
     };
     poll();
 }
 
 async function reuseTask(taskId) {
-    const task = await getTaskDB(taskId);
-    if(!task) return;
+    const task = await getTaskDB(taskId); if(!task) return;
     document.getElementById('prompt-input').value = task.prompt || '';
     if (task.modelVal) { const modelSelect = document.getElementById('model-select'); if(modelSelect.querySelector(`option[value="${task.modelVal}"]`)) { modelSelect.value = task.modelVal; updateModel(modelSelect); } }
     if (task.ratio) { document.getElementById('ratio-select').value = task.ratio; updateRatio(document.getElementById('ratio-select')); }
 
     if (task.rawImages) {
-        payloadState.firstFrame = task.rawImages.firstFrame || null; payloadState.lastFrame = task.rawImages.lastFrame || null; payloadState.references = [...(task.rawImages.references || [])];
-        switchMode(task.mode || 'ref');
-        
+        payloadState.firstFrame = task.rawImages.firstFrame || null; payloadState.lastFrame = task.rawImages.lastFrame || null; payloadState.references = [...(task.rawImages.references || [])]; switchMode(task.mode || 'ref');
         if (payloadState.firstFrame) { document.getElementById('first-img').src = getBlobUrl('temp_first', payloadState.firstFrame); document.getElementById('slot-first-box').classList.add('has-img'); } else clearFrame(null, 'firstFrame');
         if (payloadState.lastFrame) { document.getElementById('last-img').src = getBlobUrl('temp_last', payloadState.lastFrame); document.getElementById('slot-last-box').classList.add('has-img'); } else clearFrame(null, 'lastFrame');
         renderReferences();
@@ -486,86 +385,94 @@ async function applyGeneratorToPrompt(id, btnElement) {
     if (!format || !opening || !attribute || !general) return alert("请先点击【随机抽取】生成完整的组合");
     document.getElementById('prompt-input').value = `【带货形式】${format} | 【开头】${opening} | 【属性】${attribute} | 【通用】${general} \n\n围绕以上要求，帮我生成...`;
     document.getElementById('floating-console').classList.remove('minimized');
-    const originalText = btnElement.innerHTML; btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`; btnElement.style.color = 'var(--success)';
-    setTimeout(() => { btnElement.innerHTML = originalText; btnElement.style.color = ''; }, 1500);
+    const originalText = btnElement.innerHTML; btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`; btnElement.style.color = 'var(--success)'; setTimeout(() => { btnElement.innerHTML = originalText; btnElement.style.color = ''; }, 1500);
 }
-function buildGeneratorOptions(arr, selected) {
-    let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`;
-    arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; });
-    return html;
-}
+function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
 
-// 🌟 修改：AI 生图卡片底层逻辑，接管鉴权并发往 n8n
+
+// 🌟 AI 生图工具底层增强 (通道切换、本地选择、自动重试)
 async function handleGenImageDrop(e, id) {
     e.preventDefault(); e.stopPropagation();
-    const dropZone = document.getElementById(`img-gen-zone-${id}`);
-    if(dropZone) dropZone.classList.remove('drag-over');
-
+    const dropZone = document.getElementById(`img-gen-zone-${id}`); if(dropZone) dropZone.classList.remove('drag-over');
     const srcToUse = await parseDroppedImage(e);
     if (srcToUse) {
         const task = await getTaskDB(id);
-        if (task && task.state.images.length < 5) {
-            task.state.images.push(srcToUse);
-            await saveTaskDB(task); renderBoard();
-        } else if(task) alert("最多只支持 5 张合并生图！");
+        if (task && task.state.images.length < 5) { task.state.images.push(srcToUse); await saveTaskDB(task); renderBoard(); } 
+        else if(task) alert("最多只支持 5 张合并生图！");
     }
 }
 
-async function removeGenImage(e, id, index) {
-    e.stopPropagation();
-    const task = await getTaskDB(id);
-    if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); }
+// 本地选择文件直传生图
+async function handleGenImageUpload(input, id) {
+    if (!input.files || input.files.length === 0) return;
+    const task = await getTaskDB(id); if (!task) return;
+    let added = 0;
+    for (let file of Array.from(input.files)) {
+        if (task.state.images.length >= 5) break;
+        task.state.images.push(await compressImageToBlob(file, 1024));
+        added++;
+    }
+    if (added > 0) { await saveTaskDB(task); renderBoard(); } else alert("最多只支持 5 张合并生图！");
+    input.value = ''; // Reset input
 }
 
-async function updateImgGenState(id, key, value) {
-    const task = await getTaskDB(id);
-    if(task) { task.state[key] = value; await saveTaskDB(task); }
-}
+async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
+async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 
-// 🌟 核心修改：通过 x-studio-pwd 将格式化后的 Payload 发给 n8n
+// 🌟 全新强化版生图调度中心
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
     if(!task.state.prompt) return alert("请填写生图提示词！");
 
     task.status = 'processing';
+    task.retryCount = 0; // 重置重试次数
     await saveTaskDB(task); renderBoard();
 
-    try {
-        // 构造发送给 n8n 的极简 Payload
-        const apiPayload = {
-            size: task.state.size, 
-            prompt: task.state.prompt,
-            images: await Promise.all(task.state.images.map(b => blobToBase64(b))) 
-        };
+    // 构造 payload，附加新选中的 channel
+    const apiPayload = {
+        size: task.state.size, 
+        prompt: task.state.prompt,
+        channel: task.state.channel || 'channel_1', 
+        images: await Promise.all(task.state.images.map(b => blobToBase64(b))) 
+    };
 
-        const response = await fetch(API_IMAGE_GEN, { 
-            method: 'POST', 
-            // 🌟 核心：鉴权统一采用 Veo 控制台的输入密码，拦截器拦截
-            headers: { 
-                'Content-Type': 'application/json', 
-                'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') 
-            }, 
-            body: JSON.stringify(apiPayload) 
-        });
+    let success = false;
+    let attempts = 0;
+    const maxAttempts = task.state.autoRetry ? 3 : 1; // 开启重试最多跑3次
 
-        if (response.status === 401 || response.status === 403) throw new Error("控制台安全密码错误");
-        if (!response.ok) throw new Error("生图接口报错: " + response.status);
-        
-        const data = await response.json();
+    while (attempts < maxAttempts && !success) {
+        attempts++;
+        try {
+            const response = await fetch(API_IMAGE_GEN, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, 
+                body: JSON.stringify(apiPayload) 
+            });
 
-        // 原样提取 n8n 抛回来的云雾数据结构
-        if (data.data && data.data[0] && data.data[0].url) {
-            task.state.resultUrl = data.data[0].url;
-            task.state.resultBlob = await fetch(data.data[0].url).then(r => r.blob());
-            task.status = 'success';
-        } else {
-            throw new Error(data.error?.message || "API 未返回有效图片 URL");
+            if (response.status === 401 || response.status === 403) throw new Error("控制台安全密码错误");
+            if (!response.ok) throw new Error("生图接口报错: " + response.status);
+            
+            const data = await response.json();
+
+            if (data.data && data.data[0] && data.data[0].url) {
+                task.state.resultUrl = data.data[0].url;
+                task.state.resultBlob = await fetch(data.data[0].url).then(r => r.blob());
+                task.status = 'success';
+                success = true;
+            } else {
+                throw new Error(data.error?.message || "API 未返回有效图片");
+            }
+        } catch (e) {
+            if (attempts >= maxAttempts) {
+                task.status = 'failed';
+            } else {
+                // 等待 2 秒后自动发起重试，更新 UI 展示重试状态
+                task.retryCount = attempts;
+                await saveTaskDB(task); renderBoard();
+                await new Promise(r => setTimeout(r, 2000));
+            }
         }
-
-    } catch (e) {
-        alert("生图失败: " + e.message);
-        task.status = 'idle'; 
     }
     await saveTaskDB(task); renderBoard();
 }
@@ -575,74 +482,66 @@ async function submitImgGen(id) {
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
-    
     if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'local'}))" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);" title="按住图片拖拽复用">`;
-    
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
     if (task.type === 'tool_image_gen') {
         const isProcessing = task.status === 'processing';
+        const isFailed = task.status === 'failed';
         const resultHtml = task.status === 'success' && task.state.resultBlob ? 
             `<div class="img-gen-result"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'gen_result'}))" title="按住拖拽至控制台或画板"></div>` : '';
         
-        let slotsHtml = task.state.images.map((img, i) => `
-            <div class="img-gen-slot" style="border:none;"><img src="${getBlobUrl(task.id+'_img_'+i, img)}"><div class="popover-rm-btn remove-badge" onclick="removeGenImage(event, '${task.id}', ${i})">×</div></div>
-        `).join('');
-        if (task.state.images.length < 5) slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" title="拖入图片垫图"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span></div>`;
+        let slotsHtml = task.state.images.map((img, i) => `<div class="img-gen-slot" style="border:none;"><img src="${getBlobUrl(task.id+'_img_'+i, img)}"><div class="popover-rm-btn remove-badge" onclick="removeGenImage(event, '${task.id}', ${i})">×</div></div>`).join('');
+        // 🌟 更新：添加了 onclick，点击后触发下方隐藏的 input:file
+        if (task.state.images.length < 5) {
+            slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" title="点击上传或拖入垫图" onclick="document.getElementById('file-input-${task.id}').click()"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span><input type="file" id="file-input-${task.id}" style="display:none;" multiple accept="image/*" onchange="handleGenImageUpload(this, '${task.id}')" onclick="event.stopPropagation()"></div>`;
+        }
+
+        const retryStatusTxt = task.retryCount > 0 ? `(第 ${task.retryCount} 次重试...)` : '绘制中...';
+        let btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像';
+        if (isProcessing) btnContent = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> ${retryStatusTxt}`;
+        if (isFailed) btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试';
 
         return `
         <div class="card-header"><span style="color:var(--accent); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">brush</span> AI 多模生图</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div>
         <div class="img-gen-slots" ondragover="event.preventDefault(); document.getElementById('img-gen-zone-${task.id}')?.classList.add('drag-over');" ondragleave="document.getElementById('img-gen-zone-${task.id}')?.classList.remove('drag-over');" ondrop="handleGenImageDrop(event, '${task.id}')">${slotsHtml}</div>
-        <div class="img-gen-controls"><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)"><option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1 (1024x1024)</option><option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>横版 16:9</option><option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>竖版 9:16</option></select></div>
+        <div class="img-gen-controls">
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)">
+                <option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option>
+                <option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option>
+                <option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option>
+            </select>
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;">
+                <option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option>
+                <option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option>
+            </select>
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'autoRetry', this.value === 'true')">
+                <option value="false" ${!task.state.autoRetry?'selected':''}>单次</option>
+                <option value="true" ${task.state.autoRetry?'selected':''}>自动重试</option>
+            </select>
+        </div>
         <textarea class="img-gen-prompt" onchange="updateImgGenState('${task.id}', 'prompt', this.value)" placeholder="输入画面提示词，可垫入 1-5 张图配合描述...">${task.state.prompt||''}</textarea>
-        <button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''}>${isProcessing ? '<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> 绘制中...' : '<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像'}</button>
+        <button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''} style="${isFailed ? 'background: var(--danger);' : ''}">${btnContent}</button>
         ${resultHtml}
         `;
     }
 
-    let statusBadge = '', mediaHtml = '';
-    const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0]));
-    const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
-
-    if (task.status === 'processing') {
-        const retryTxt = task.retryCount ? ` (重试 ${task.retryCount} 次)` : '';
-        statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`;
-        mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`;
-    } else if (task.status === 'failed') {
-        statusBadge = `<span class="status-badge failed">失败</span>`;
-        mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`;
-    } else {
-        statusBadge = `<span class="status-badge success">已完成</span>`;
-        mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()" title="双击全屏播放"></video></div>`;
-    }
-
+    // 视频卡片生成...
+    let statusBadge = '', mediaHtml = ''; const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0])); const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
+    if (task.status === 'processing') { const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`; } else if (task.status === 'failed') { statusBadge = `<span class="status-badge failed">失败</span>`; mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`; } else { statusBadge = `<span class="status-badge success">已完成</span>`; mediaHtml = `<div class="card-media"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()" title="双击全屏播放"></video></div>`; }
     const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'thumb'}))" title="按住拖拽复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
-
     return `<div class="card-header"><div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>${statusBadge}</div><div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div><div class="card-tags"><span class="card-tag">${task.ratio}</span>${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}</div>${mediaHtml}<div class="card-actions">${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" title="下载视频"><span class="material-symbols-outlined">download</span></button>` : ''}${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" title="原地重试"><span class="material-symbols-outlined">refresh</span></button>` : ''}<button class="reuse-btn" onclick="reuseTask('${task.id}')" title="完整提取图文参数"><span class="material-symbols-outlined">edit_note</span></button><button onclick="removeTask('${task.id}')" title="删除记录"><span class="material-symbols-outlined">delete</span></button></div>`;
 }
 
 async function renderBoard() {
-    const tasks = await getAllTasksDB();
-    const taskIds = new Set(tasks.map(t => 'card-' + t.id));
-    const existingCards = Array.from(board.children);
-
+    const tasks = await getAllTasksDB(), taskIds = new Set(tasks.map(t => 'card-' + t.id)), existingCards = Array.from(board.children);
     existingCards.forEach(card => { if (!taskIds.has(card.id)) card.remove(); });
-
     tasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
-            if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
-            else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
-            else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
-            else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; 
-            else cardEl.className = 'video-card';
-            
-            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
-            
-            cardEl.innerHTML = generateCardHTML(task);
-            board.appendChild(cardEl);
-            bindCardDrag(cardEl, task);
+            if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; } else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card'; else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator'; else if (task.type === 'tool_image_gen') cardEl.className = 'tool-image-gen'; else cardEl.className = 'video-card';
+            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`; cardEl.innerHTML = generateCardHTML(task); board.appendChild(cardEl); bindCardDrag(cardEl, task);
             if (task.type === 'note') cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
             if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); }
         } else {
@@ -655,23 +554,10 @@ async function renderBoard() {
     });
 }
 
-async function removeTask(id) {
-    if(confirm('确定删除这张卡片吗？')) { 
-        await deleteTaskDB(id); 
-        const card = document.getElementById('card-' + id);
-        if (card) card.remove();
-    }
-}
-
+async function removeTask(id) { if(confirm('确定删除这张卡片吗？')) { await deleteTaskDB(id); const card = document.getElementById('card-' + id); if (card) card.remove(); } }
 function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB(); 
-    board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
-    document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
-    await renderBoard(); 
-    
-    bindMainConsoleDrop('slot-ref-box', 'references'); 
-    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
-    bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await initDB(); board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`; document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; await renderBoard(); 
+    bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
 });

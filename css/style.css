@@ -142,7 +142,27 @@ body {
 .img-gen-select { flex: 1; min-width: 80px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 11px; padding: 6px; border-radius: 6px; outline: none; }
 .img-gen-select option { background: var(--surface); }
 
-.img-gen-prompt { margin: 0 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; height: 60px; color: var(--text-main); font-size: 13px; resize: none; outline: none; }
+/* 🌟 增强版提示词框：支持垂直拖拽缩放、设定了极限高度、顺手加了聚焦高亮 */
+.img-gen-prompt { 
+    margin: 0 12px; 
+    background: rgba(0,0,0,0.3); 
+    border: 1px solid rgba(255,255,255,0.1); 
+    border-radius: 8px; 
+    padding: 8px; 
+    min-height: 60px; /* 默认最小高度 */
+    max-height: 400px; /* 防止用户拉得无限长顶破天际 */
+    color: var(--text-main); 
+    font-size: 13px; 
+    resize: vertical; /* 核心：开启底部拖拽条，且只允许上下拉伸，保护卡片宽度 */
+    outline: none; 
+    transition: border-color 0.2s ease;
+}
+
+/* 顺手优化的交互细节：输入时边框高亮，更专注 */
+.img-gen-prompt:focus {
+    border-color: var(--accent);
+    background: rgba(0,0,0,0.5);
+}
 .img-gen-btn { margin: 0 12px 12px 12px; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px; }
 .img-gen-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .img-gen-btn:disabled { background: var(--border); color: var(--text-sub); cursor: not-allowed; }

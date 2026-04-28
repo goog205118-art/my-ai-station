@@ -489,6 +489,7 @@ async function handleGenImageUpload(input, id) {
 async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
 async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 
+// 🌟 全新强化版生图调度中心 (已修复同卡片连续生图缓存 Bug)
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
@@ -528,6 +529,13 @@ async function submitImgGen(id) {
                 task.state.resultBlob = await fetch(data.data[0].url).then(r => r.blob());
                 task.status = 'success';
                 success = true;
+
+                // 🌟 核心修复：踢掉旧图的 URL 缓存，强制渲染引擎读取新 Blob
+                if (typeof blobUrlCache !== 'undefined' && blobUrlCache.has(task.id + '_res')) {
+                    URL.revokeObjectURL(blobUrlCache.get(task.id + '_res'));
+                    blobUrlCache.delete(task.id + '_res');
+                }
+
             } else {
                 throw new Error(data.error?.message || "API 未返回有效图片");
             }

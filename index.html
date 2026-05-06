@@ -124,7 +124,10 @@
             <div class="pill-group">
                 <div class="action-pill" data-tip="切换底层视频生成模型">
                     <span class="material-symbols-outlined">model_training</span><span id="model-text">Veo 3.1 Fast</span>
-                    <select id="model-select" onchange="updateModel(this)"><option value="veo_3_1_fast">Veo 3.1 Fast</option></select>
+                    <select id="model-select" onchange="updateModel(this)">
+    <option value="veo_3_1_fast">Veo 3.1 Fast (标准)</option>
+    <option value="veo_3_1-fast-components-4k">Veo 3.1 4K (支持垫图)</option>
+</select>
                 </div>
                 <div class="action-pill" data-tip="选择视频的输出比例">
                     <span class="material-symbols-outlined" id="ratio-icon">crop_portrait</span><span id="ratio-text">竖屏 9:16</span>

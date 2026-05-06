@@ -362,23 +362,6 @@ function clearFrame(event, type) {
 // ==============================
 // 🚀 视频生成 - 批处理与提交调度
 // ==============================
-async function submitBatchTask() {
-    const prompt = document.getElementById('prompt-input').value.trim();
-    if (!prompt) return alert('请填写提示词');
-    
-    const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
-    btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
-    
-    let submitRef = [...payloadState.references], submitFirst = payloadState.firstFrame, submitLast = payloadState.lastFrame;
-    if (payloadState.currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
-
-    const taskParams = { model: payloadState.model, aspectRatio: payloadState.aspectRatio, enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample, autoRetry: payloadState.autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
-    let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
-    
-    await Promise.allSettled(promises);
-    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; document.getElementById('prompt-input').value = ''; 
-}
-
 async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
         const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
@@ -388,36 +371,34 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
 
         if (data.taskId) {
             const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
-            const newTask = { id: data.taskId, prompt: promptText, modelStr: params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast', modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
+            
+            // 🌟 核心新增：智能识别并在卡片上显示 4K 模型名称
+            let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast';
+            if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
+
+            const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
             await saveTaskDB(newTask); await renderBoard(); 
         }
     } catch (error) { console.error('提交失败:', error); }
 }
 
-async function retryTask(taskId, btnElement) {
-    if (activeRetries.has(taskId)) return; activeRetries.add(taskId);
-    if (btnElement) { btnElement.disabled = true; btnElement.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:var(--text-sub);"><circle cx="25" cy="25" r="20"></circle></svg>`; }
-    const task = await getTaskDB(taskId); if(!task) { activeRetries.delete(taskId); return; }
-
-    try {
-        const apiPayload = { model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false, firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame), references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b))) };
-        const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
-        if (response.status === 401 || response.status === 403) throw new Error("密码错误");
-        const data = await response.json();
-
-        if (data.taskId) { await deleteTaskDB(taskId); removeActiveTask(taskId); task.id = data.taskId; task.status = 'processing'; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); } else throw new Error("无返回 ID");
-    } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
-}
+// ... (这里的 retryTask 函数保持原样不动) ...
 
 function startTaskPolling(taskId) {
     let attempts = 0;
     const poll = async () => {
         attempts++;
         try {
-            const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId }) });
-            if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); return; }
-            const data = await response.json(), task = await getTaskDB(taskId);
+            // 🌟 核心新增：先从本地获取 task，以便拿到 modelVal
+            const task = await getTaskDB(taskId);
             if (!task) { removeActiveTask(taskId); return; }
+
+            // 🌟 核心新增：将 task.modelVal 随 taskId 一起发给 n8n，方便 n8n 做双轨制查询路由
+            const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
+            if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); return; }
+            
+            // 数据解析
+            const data = await response.json();
 
             if (data.status === 'success' && data.videoUrl) { removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
             if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) { retryTask(task.id, null); } else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }

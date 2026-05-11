@@ -94,13 +94,14 @@ function closeHelpModal() {
 }
 
 // ==============================
-// 🚀 核心优化：单例模式硬件加速拖拽引擎 (防漂移版)
+// 🚀 核心优化：动态离合硬件加速拖拽引擎
 // ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
 let isPanning = false, startPanX = 0, startPanY = 0, ticking = false; 
 let draggingCardInfo = null, highestZIndex = 10; 
+let scrollTimeout; // 新增：用于滚轮的防抖计时器
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
@@ -111,12 +112,10 @@ window.addEventListener('mousemove', (e) => {
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } else if (draggingCardInfo) {
-                // 🌟 物理位移绝对计算法：彻底消灭缩放状态下的鼠标拖拽漂移
                 const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale;
                 const dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
                 draggingCardInfo.task.x = draggingCardInfo.initialX + dx;
                 draggingCardInfo.task.y = draggingCardInfo.initialY + dy;
-                
                 draggingCardInfo.el.style.transform = `translate(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px)`;
             }
             ticking = false;
@@ -125,11 +124,33 @@ window.addEventListener('mousemove', (e) => {
     }
 });
 
-viewport.addEventListener('mousedown', (e) => { if (e.target === viewport || e.target === board) { isPanning = true; startPanX = e.clientX - transform.x; startPanY = e.clientY - transform.y; } });
-window.addEventListener('mouseup', () => { isPanning = false; if (draggingCardInfo) { saveTaskDB(draggingCardInfo.task); draggingCardInfo = null; } });
+viewport.addEventListener('mousedown', (e) => { 
+    if (e.target === viewport || e.target === board) { 
+        isPanning = true; 
+        board.classList.add('is-moving'); // 🌟 踩下油门：拖动画布时开启全局 GPU 加速
+        startPanX = e.clientX - transform.x; 
+        startPanY = e.clientY - transform.y; 
+    } 
+});
+
+window.addEventListener('mouseup', () => { 
+    isPanning = false; 
+    board.classList.remove('is-moving'); // 🌟 松开油门：停止拖动瞬间切回 CPU 极致清晰渲染
+    
+    if (draggingCardInfo) { 
+        draggingCardInfo.el.style.willChange = 'auto'; // 关闭单卡加速
+        saveTaskDB(draggingCardInfo.task); 
+        draggingCardInfo = null; 
+    } 
+});
 
 viewport.addEventListener('wheel', (e) => {
     e.preventDefault(); if (ticking) return; 
+    
+    board.classList.add('is-moving'); // 🌟 滚轮缩放时开启全局加速
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); // 停滚150毫秒后恢复清晰
+    
     const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
     const mouseX = e.clientX - viewport.getBoundingClientRect().left, mouseY = e.clientY - viewport.getBoundingClientRect().top;
     transform.x = mouseX - (mouseX - transform.x) * (newScale / transform.scale); transform.y = mouseY - (mouseY - transform.y) * (newScale / transform.scale); transform.scale = newScale;
@@ -150,6 +171,8 @@ function bindCardDrag(cardEl, task) {
     if(header) {
         header.onmousedown = (e) => {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
+            cardEl.style.willChange = 'transform'; // 🌟 拖拽单张卡片时，只给这张卡片单独开启 GPU 加速
+            
             draggingCardInfo = { 
                 el: cardEl, 
                 task: task, 

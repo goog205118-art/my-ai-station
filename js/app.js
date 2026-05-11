@@ -1,5 +1,5 @@
 // ==========================================
-// 🟢 核心应用逻辑
+// 🟢 核心应用逻辑 (已接入 EventBus 架构)
 // ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
@@ -36,8 +36,7 @@ function showToast(message, type = 'info') {
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
-
-// 🚀 架构师魔法：一键劫持全局原生的 alert()，让所有旧代码自动享用新 UI！
+// 一键劫持全局原生的 alert()
 window.alert = (msg) => showToast(msg, 'error');
 
 // ==============================
@@ -95,7 +94,7 @@ function closeHelpModal() {
 }
 
 // ==============================
-// 🚀 核心优化：单例模式硬件加速拖拽引擎
+// 🚀 核心优化：单例模式硬件加速拖拽引擎 (防漂移版)
 // ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
@@ -112,8 +111,7 @@ window.addEventListener('mousemove', (e) => {
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } else if (draggingCardInfo) {
-                // 🌟 核心引擎升级：弃用之前的误差累积公式。
-                // 改用：鼠标真实物理位移(dx/dy) ÷ 当前缩放率 + 卡片初始绝对坐标
+                // 🌟 物理位移绝对计算法：彻底消灭缩放状态下的鼠标拖拽漂移
                 const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale;
                 const dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
                 draggingCardInfo.task.x = draggingCardInfo.initialX + dx;
@@ -152,15 +150,13 @@ function bindCardDrag(cardEl, task) {
     if(header) {
         header.onmousedown = (e) => {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
-            
-            // 🌟 核心引擎升级：记录鼠标点下的“物理绝对位置”和卡片的“初始绝对坐标”
             draggingCardInfo = { 
                 el: cardEl, 
                 task: task, 
-                startMouseX: e.clientX,   // 记录鼠标屏幕坐标 X
-                startMouseY: e.clientY,   // 记录鼠标屏幕坐标 Y
-                initialX: task.x || 0,    // 记录卡片当前画布坐标 X
-                initialY: task.y || 0     // 记录卡片当前画布坐标 Y
+                startMouseX: e.clientX,   
+                startMouseY: e.clientY,   
+                initialX: task.x || 0,    
+                initialY: task.y || 0     
             };
             e.stopPropagation(); 
         };
@@ -347,10 +343,10 @@ function bindMainConsoleDrop(slotId, stateKey) {
         const srcToUse = await parseDroppedImage(e);
         if (srcToUse) {
             if (stateKey === 'references') {
-                if (payloadState.references.length < 3) payloadState.references.push(srcToUse);
+                if (globalStore.getState().references.length < 3) globalStore.getState().references.push(srcToUse);
                 renderReferences(); document.getElementById('ref-popover').style.display = 'flex'; 
             } else {
-                payloadState[stateKey] = srcToUse;
+                globalStore.getState()[stateKey] = srcToUse;
                 const t = stateKey === 'firstFrame' ? 'first' : 'last';
                 document.getElementById(`${t}-img`).src = getBlobUrl('temp_'+t, srcToUse); document.getElementById(`slot-${t}-box`).classList.add('has-img');
             }
@@ -358,70 +354,101 @@ function bindMainConsoleDrop(slotId, stateKey) {
     });
 }
 
-function toggleRefPopover(e) { e.stopPropagation(); if (payloadState.references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
-function switchMode(mode) { payloadState.currentMode = mode; document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); document.getElementById(`tab-${mode}`).classList.add('active'); document.getElementById(`slots-${mode}`).classList.add('active'); }
+function toggleRefPopover(e) { e.stopPropagation(); if (globalStore.getState().references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 
-// 🌟 核心更新：切换 4K 模型时动态禁用首尾帧与优雅提示
+// ==============================
+// 🎮 视图层 (View)：通过 EventBus 派发状态，不写硬逻辑
+// ==============================
+function switchMode(mode) { globalStore.dispatch('SET_MODE', mode); }
+
 function updateModel(select) { 
-    payloadState.model = select.value; 
-    document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; 
-    
-    // 针对 4K 模型的特殊限制：动态禁用首尾帧
+    globalStore.dispatch('SET_MODEL', { value: select.value, text: select.options[select.selectedIndex].text }); 
+}
+
+function updateRatio(select) { 
+    globalStore.dispatch('SET_RATIO', { value: select.value, text: select.options[select.selectedIndex].text }); 
+}
+
+function updateEnhance(select) { 
+    globalStore.dispatch('SET_ENHANCE', { value: select.value, text: select.options[select.selectedIndex].text }); 
+}
+
+// 简单配置直接读取状态机即可
+function updateUpsample(select) { 
+    globalStore.getState().enableUpsample = select.value === 'true'; 
+    document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; 
+}
+
+function updateAutoRetry(select) { 
+    globalStore.getState().autoRetry = select.value === 'true'; 
+    document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; 
+}
+
+// ==============================
+// 🎧 订阅层 (Subscribers)：听到广播后自动更新 UI
+// ==============================
+sysBus.on('UI:SWITCH_MODE', (mode) => {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); 
+    document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); 
+    document.getElementById(`tab-${mode}`).classList.add('active'); 
+    document.getElementById(`slots-${mode}`).classList.add('active');
+});
+
+sysBus.on('UI:UPDATE_MODEL_TEXT', (text) => document.getElementById('model-text').innerText = text);
+
+sysBus.on('UI:UPDATE_RATIO', (data) => {
+    document.getElementById('ratio-text').innerText = data.text; 
+    document.getElementById('ratio-icon').innerText = data.value === '16:9' ? 'crop_16_9' : 'crop_portrait';
+});
+
+sysBus.on('UI:UPDATE_ENHANCE_TEXT', (text) => document.getElementById('enhance-text').innerText = text);
+
+// 🌟 高级业务逻辑：自动监听模型变更并处理 4K 互斥
+sysBus.on('SYSTEM:MODEL_CHANGED', (modelValue) => {
     const frameTab = document.getElementById('tab-frame');
-    if (select.value.toLowerCase().includes('4k')) {
-        
-        // 优化：只要切到 4K，就必然弹出蓝色温馨提示
+    if (modelValue.toLowerCase().includes('4k')) {
         showToast("Veo 3.1 4K 模型不支持首尾帧，请使用参考图模式。", "info");
+        if (globalStore.getState().currentMode === 'frame') switchMode('ref'); 
         
-        // 如果当前正好在首尾帧模式，强制切回参考图
-        if (payloadState.currentMode === 'frame') {
-            switchMode('ref'); 
-        }
-        
-        // 将首尾帧按钮置灰并禁用点击
         frameTab.style.opacity = '0.3';
         frameTab.style.pointerEvents = 'none';
         frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)');
     } else {
-        // 切回普通模型，恢复首尾帧按钮
         frameTab.style.opacity = '1';
         frameTab.style.pointerEvents = 'auto';
         frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');
     }
-}
+});
 
-function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; }
-function updateEnhance(select) { payloadState.enhancePrompt = select.value === 'true'; document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text; }
-function updateUpsample(select) { payloadState.enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
-function updateAutoRetry(select) { payloadState.autoRetry = select.value === 'true'; document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; }
 
 async function handleMultiRefs(input) {
     if (!input.files || input.files.length === 0) return;
-    if (payloadState.references.length + input.files.length > 3) { input.value = ''; return alert(`最多仅支持 3 张图。`); }
-    for (let file of Array.from(input.files)) payloadState.references.push(await compressImageToBlob(file));
+    if (globalStore.getState().references.length + input.files.length > 3) { input.value = ''; return alert(`最多仅支持 3 张图。`); }
+    for (let file of Array.from(input.files)) globalStore.getState().references.push(await compressImageToBlob(file));
     input.value = ''; renderReferences();
-    if(payloadState.references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
+    if(globalStore.getState().references.length > 0) document.getElementById('ref-popover').style.display = 'flex';
 }
-function removeReference(event, index) { event.stopPropagation(); payloadState.references.splice(index, 1); renderReferences(); if(payloadState.references.length === 0) document.getElementById('ref-popover').style.display = 'none'; }
-function clearReferences(e) { e.stopPropagation(); payloadState.references = []; renderReferences(); document.getElementById('ref-popover').style.display = 'none'; }
+function removeReference(event, index) { event.stopPropagation(); globalStore.getState().references.splice(index, 1); renderReferences(); if(globalStore.getState().references.length === 0) document.getElementById('ref-popover').style.display = 'none'; }
+function clearReferences(e) { e.stopPropagation(); globalStore.getState().references = []; renderReferences(); document.getElementById('ref-popover').style.display = 'none'; }
 function renderReferences() {
     const box = document.getElementById('slot-ref-box'), imgEl = document.getElementById('ref-img'), countBadge = document.getElementById('ref-count-badge');
-    if (payloadState.references.length === 0) { box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; } 
-    else { box.classList.add('has-img'); imgEl.src = getBlobUrl('temp_ref_main', payloadState.references[0]); countBadge.style.display = payloadState.references.length > 1 ? 'flex' : 'none'; countBadge.innerText = payloadState.references.length; }
+    const state = globalStore.getState();
+    if (state.references.length === 0) { box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; } 
+    else { box.classList.add('has-img'); imgEl.src = getBlobUrl('temp_ref_main', state.references[0]); countBadge.style.display = state.references.length > 1 ? 'flex' : 'none'; countBadge.innerText = state.references.length; }
     const listContainer = document.getElementById('ref-list-container');
-    listContainer.innerHTML = payloadState.references.map((b, index) => `<div class="popover-img-item"><img src="${getBlobUrl('temp_ref_'+index, b)}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
-    document.getElementById('ref-popover-add').style.display = payloadState.references.length >= 3 ? 'none' : 'flex';
+    listContainer.innerHTML = state.references.map((b, index) => `<div class="popover-img-item"><img src="${getBlobUrl('temp_ref_'+index, b)}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
+    document.getElementById('ref-popover-add').style.display = state.references.length >= 3 ? 'none' : 'flex';
 }
 
 async function handleSingleFrame(input, type) {
     if (!input.files[0]) return;
-    payloadState[type] = await compressImageToBlob(input.files[0]);
+    globalStore.getState()[type] = await compressImageToBlob(input.files[0]);
     const t = type === 'firstFrame' ? 'first' : 'last';
-    document.getElementById(`${t}-img`).src = getBlobUrl(`temp_${t}`, payloadState[type]); document.getElementById(`slot-${t}-box`).classList.add('has-img'); input.value = '';
+    document.getElementById(`${t}-img`).src = getBlobUrl(`temp_${t}`, globalStore.getState()[type]); document.getElementById(`slot-${t}-box`).classList.add('has-img'); input.value = '';
 }
 function clearFrame(event, type) {
     if(event) { event.preventDefault(); event.stopPropagation(); }
-    payloadState[type] = null;
+    globalStore.getState()[type] = null;
     const t = type === 'firstFrame' ? 'first' : 'last';
     document.getElementById(`slot-${t}-box`).classList.remove('has-img'); document.getElementById(`${t}-img`).src = '';
 }
@@ -436,10 +463,10 @@ async function submitBatchTask() {
     const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
     
-    let submitRef = [...payloadState.references], submitFirst = payloadState.firstFrame, submitLast = payloadState.lastFrame;
-    if (payloadState.currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
+    let submitRef = [...globalStore.getState().references], submitFirst = globalStore.getState().firstFrame, submitLast = globalStore.getState().lastFrame;
+    if (globalStore.getState().currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
 
-    const taskParams = { model: payloadState.model, aspectRatio: payloadState.aspectRatio, enhancePrompt: payloadState.enhancePrompt, enableUpsample: payloadState.enableUpsample, autoRetry: payloadState.autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
+    const taskParams = { model: globalStore.getState().model, aspectRatio: globalStore.getState().aspectRatio, enhancePrompt: globalStore.getState().enhancePrompt, enableUpsample: globalStore.getState().enableUpsample, autoRetry: globalStore.getState().autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
     let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
     
     await Promise.allSettled(promises);
@@ -459,7 +486,6 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
             let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast';
             if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
 
-            // 加入了进度属性 (progress) 的初始化
             const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
             await saveTaskDB(newTask); await renderBoard(); 
         }
@@ -481,7 +507,6 @@ async function retryTask(taskId, btnElement) {
     } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
 }
 
-// 🌟 核心更新：加入进度条数据捕获
 function startTaskPolling(taskId) {
     let attempts = 0;
     const poll = async () => {
@@ -498,12 +523,11 @@ function startTaskPolling(taskId) {
             if (data.status === 'success' && data.videoUrl) { removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
             if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) { retryTask(task.id, null); } else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
             
-            // 🌟 核心新增：捕获并更新生成进度条
             if (data.status === 'processing' || data.status === 'pending') {
                 if (data.progress && task.progress !== data.progress) {
-                    task.progress = data.progress; // 保存百分比
+                    task.progress = data.progress; 
                     await saveTaskDB(task);
-                    renderBoard(); // 刷新 UI
+                    renderBoard(); 
                 }
             }
             
@@ -520,9 +544,13 @@ async function reuseTask(taskId) {
     if (task.ratio) { document.getElementById('ratio-select').value = task.ratio; updateRatio(document.getElementById('ratio-select')); }
 
     if (task.rawImages) {
-        payloadState.firstFrame = task.rawImages.firstFrame || null; payloadState.lastFrame = task.rawImages.lastFrame || null; payloadState.references = [...(task.rawImages.references || [])]; switchMode(task.mode || 'ref');
-        if (payloadState.firstFrame) { document.getElementById('first-img').src = getBlobUrl('temp_first', payloadState.firstFrame); document.getElementById('slot-first-box').classList.add('has-img'); } else clearFrame(null, 'firstFrame');
-        if (payloadState.lastFrame) { document.getElementById('last-img').src = getBlobUrl('temp_last', payloadState.lastFrame); document.getElementById('slot-last-box').classList.add('has-img'); } else clearFrame(null, 'lastFrame');
+        globalStore.getState().firstFrame = task.rawImages.firstFrame || null; 
+        globalStore.getState().lastFrame = task.rawImages.lastFrame || null; 
+        globalStore.getState().references = [...(task.rawImages.references || [])]; 
+        switchMode(task.mode || 'ref');
+        
+        if (globalStore.getState().firstFrame) { document.getElementById('first-img').src = getBlobUrl('temp_first', globalStore.getState().firstFrame); document.getElementById('slot-first-box').classList.add('has-img'); } else clearFrame(null, 'firstFrame');
+        if (globalStore.getState().lastFrame) { document.getElementById('last-img').src = getBlobUrl('temp_last', globalStore.getState().lastFrame); document.getElementById('slot-last-box').classList.add('has-img'); } else clearFrame(null, 'lastFrame');
         renderReferences();
     }
     document.getElementById('floating-console').classList.remove('minimized'); document.getElementById('prompt-input').focus();
@@ -574,7 +602,7 @@ async function handleGenImageUpload(input, id) {
 async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
 async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 
-// 🌟 全新强化版生图调度中心 (已修复同卡片连续生图缓存 Bug)
+// 🌟 全新强化版生图调度中心
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
@@ -615,7 +643,6 @@ async function submitImgGen(id) {
                 task.status = 'success';
                 success = true;
 
-                // 🌟 核心修复：踢掉旧图的 URL 缓存，强制渲染引擎读取新 Blob
                 if (typeof blobUrlCache !== 'undefined' && blobUrlCache.has(task.id + '_res')) {
                     const cacheObj = blobUrlCache.get(task.id + '_res');
                     URL.revokeObjectURL(cacheObj.url || cacheObj);
@@ -632,8 +659,7 @@ async function submitImgGen(id) {
                 task.retryCount = attempts;
                 await saveTaskDB(task); renderBoard();
                 await new Promise(r => setTimeout(r, 2000));
-                // 🌟 核心修复：僵尸节点拦截雷达
-                // 挂机苏醒后，查一下卡片是不是已经被用户手动删了，如果删了就赶紧撤退！
+                
                 const checkExists = await getTaskDB(task.id);
                 if (!checkExists) return;
             }
@@ -643,7 +669,7 @@ async function submitImgGen(id) {
 }
 
 // ==============================
-// 🚀 智能 DOM 对比引擎 (已加入进度条UI)
+// 🚀 智能 DOM 对比引擎
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
@@ -699,7 +725,6 @@ function generateCardHTML(task) {
         const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; 
         statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; 
         
-        // 🌟 核心新增：进度条 UI 渲染
         let progressHtml = '';
         if (task.progress) {
             progressHtml = `
@@ -766,7 +791,6 @@ async function renderBoard() {
             const oldImgLen = cardEl.getAttribute('data-sync-img-len');
             const oldProgress = cardEl.getAttribute('data-sync-progress');
 
-            // 🌟 核心更新：加入进度比对，进度有变化时触发局部渲染
             if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress) { 
                 cardEl.innerHTML = generateCardHTML(task); 
                 bindCardDrag(cardEl, task); 

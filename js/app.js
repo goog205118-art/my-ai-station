@@ -2,17 +2,97 @@
 // 🟢 核心应用逻辑
 // ==========================================
 
-// ==============================
-// 🎬 登录舱与系统初始化逻辑 (Login Gate)
-// ==============================
+// ==========================================
+// 🎬 登录舱与系统初始化逻辑 (Login Gate & Particle Engine)
+// ==========================================
+let loginAnimationId = null;
+
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
     const savedPwd = sessionStorage.getItem('veo_admin_pwd');
     
-    // 如果已经有缓存的密码，直接隐藏大门，无缝进入工作台
+    // 如果已有密码，直接销毁大门，秒进工作台
     if (savedPwd) {
         gate.style.display = 'none';
         return;
+    }
+
+    // 🌟 启动光影尘埃粒子引擎
+    const canvas = document.getElementById('login-canvas');
+    if (canvas && gate.style.display !== 'none') {
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+        let mouse = { x: null, y: null };
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 鼠标追踪
+        gate.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        gate.addEventListener('mouseleave', () => { mouse.x = null; mouse.y = null; });
+
+        // 尘埃粒子类
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 1.5 + 0.5; // 极小的微尘
+                this.speedX = Math.random() * 0.5 - 0.25;
+                this.speedY = Math.random() * 0.5 - 0.25;
+                this.baseOpacity = Math.random() * 0.3 + 0.1;
+                this.opacity = this.baseOpacity;
+            }
+            update() {
+                this.x += this.speedX; this.y += this.speedY;
+                if (this.x < 0 || this.x > width) this.speedX *= -1;
+                if (this.y < 0 || this.y > height) this.speedY *= -1;
+
+                // 鼠标排斥与高光反应
+                if (mouse.x && mouse.y) {
+                    let dx = mouse.x - this.x;
+                    let dy = mouse.y - this.y;
+                    let distance = Math.sqrt(dx*dx + dy*dy);
+                    if (distance < 120) {
+                        this.x -= dx * 0.02; // 缓慢排开
+                        this.y -= dy * 0.02;
+                        this.opacity = 0.8;  // 靠近鼠标时变亮
+                    } else {
+                        this.opacity = Math.max(this.baseOpacity, this.opacity - 0.02);
+                    }
+                }
+            }
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // 生成 120 颗环境尘埃
+        for (let i = 0; i < 120; i++) particles.push(new Particle());
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 绘制鼠标的全局柔和光晕
+            if (mouse.x && mouse.y) {
+                let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 250);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.04)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            particles.forEach(p => { p.update(); p.draw(); });
+            loginAnimationId = requestAnimationFrame(animate);
+        }
+        animate();
     }
 });
 
@@ -51,6 +131,8 @@ function handleLoginSubmit(e) {
             gate.classList.add('unlocked');
             
             setTimeout(() => {
+                // 🌟 核心卸载：关闭粒子引擎，彻底释放 GPU 给系统工作台！
+                if (loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
                 showToast("欢迎回来，指挥官。", "success");
             }, 800);

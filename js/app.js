@@ -113,8 +113,13 @@ window.addEventListener('mousemove', (e) => {
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } else if (draggingCardInfo) {
-                draggingCardInfo.task.x = (e.clientX - draggingCardInfo.startX) / transform.scale;
-                draggingCardInfo.task.y = (e.clientY - draggingCardInfo.startY) / transform.scale;
+                // 🌟 核心引擎升级：弃用之前的误差累积公式。
+                // 改用：鼠标真实物理位移(dx/dy) ÷ 当前缩放率 + 卡片初始绝对坐标
+                const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale;
+                const dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
+                draggingCardInfo.task.x = draggingCardInfo.initialX + dx;
+                draggingCardInfo.task.y = draggingCardInfo.initialY + dy;
+                
                 draggingCardInfo.el.style.transform = `translate3d(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px, 0)`;
             }
             ticking = false;
@@ -148,7 +153,16 @@ function bindCardDrag(cardEl, task) {
     if(header) {
         header.onmousedown = (e) => {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
-            draggingCardInfo = { el: cardEl, task: task, startX: e.clientX - (task.x || 0) * transform.scale, startY: e.clientY - (task.y || 0) * transform.scale };
+            
+            // 🌟 核心引擎升级：记录鼠标点下的“物理绝对位置”和卡片的“初始绝对坐标”
+            draggingCardInfo = { 
+                el: cardEl, 
+                task: task, 
+                startMouseX: e.clientX,   // 记录鼠标屏幕坐标 X
+                startMouseY: e.clientY,   // 记录鼠标屏幕坐标 Y
+                initialX: task.x || 0,    // 记录卡片当前画布坐标 X
+                initialY: task.y || 0     // 记录卡片当前画布坐标 Y
+            };
             e.stopPropagation(); 
         };
     }

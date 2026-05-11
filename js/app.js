@@ -12,6 +12,33 @@ function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 
 // ==============================
+// 💰 全局账单与费用统计 UI 控制
+// ==============================
+async function updateBillingUI() {
+    const stats = await getBillingStats();
+    const txtEl = document.getElementById('top-bill-text');
+    if(txtEl) txtEl.innerText = `￥${stats.totalCost}`;
+}
+
+async function openBillingModal() {
+    const stats = await getBillingStats();
+    document.getElementById('bill-total').innerText = '￥' + stats.totalCost;
+    document.getElementById('bill-video-count').innerText = stats.videoCount;
+    document.getElementById('bill-image-count').innerText = stats.imageCount;
+    
+    const modal = document.getElementById('billing-modal');
+    modal.style.display = 'flex';
+    modal.offsetHeight; 
+    modal.classList.add('show');
+}
+
+function closeBillingModal() {
+    const modal = document.getElementById('billing-modal');
+    modal.classList.remove('show');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+// ==============================
 // 🍞 全局 Toast 消息系统
 // ==============================
 function showToast(message, type = 'info') {
@@ -36,8 +63,6 @@ function showToast(message, type = 'info') {
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
-
-// 🚀 架构师魔法：一键劫持全局原生的 alert()，让所有旧代码自动享用新 UI！
 window.alert = (msg) => showToast(msg, 'error');
 
 // ==============================
@@ -99,14 +124,13 @@ function closeHelpModal() {
 // ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
-const marquee = document.getElementById('selection-marquee'); // 🌟 新增选框DOM
+const marquee = document.getElementById('selection-marquee'); 
 
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
 let isPanning = false, startPanX = 0, startPanY = 0, ticking = false; 
 let draggingCardInfo = null, highestZIndex = 10; 
 let scrollTimeout; 
 
-// 🌟 新增：全局多选状态管理
 let selectedTasks = new Set();
 function clearSelection() {
     selectedTasks.clear();
@@ -124,7 +148,6 @@ window.addEventListener('mousemove', (e) => {
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } 
-            // 🌟 新增：渲染框选范围，并实时进行碰撞计算
             else if (isSelecting) {
                 const currentX = e.clientX, currentY = e.clientY;
                 const left = Math.min(startSelX, currentX), top = Math.min(startSelY, currentY);
@@ -133,7 +156,6 @@ window.addEventListener('mousemove', (e) => {
                 marquee.style.left = left + 'px'; marquee.style.top = top + 'px';
                 marquee.style.width = width + 'px'; marquee.style.height = height + 'px';
 
-                // 物理碰撞检测：判断哪些卡片在选框内
                 const selRect = { left, top, right: left + width, bottom: top + height };
                 document.querySelectorAll('.video-card').forEach(card => {
                     const rect = card.getBoundingClientRect();
@@ -162,14 +184,12 @@ window.addEventListener('mousemove', (e) => {
 viewport.addEventListener('mousedown', (e) => { 
     if (e.target === viewport || e.target === board) { 
         if (e.shiftKey) { 
-            // 🌟 按住 Shift 并在空白处拖动 = 激活框选
             isSelecting = true;
             startSelX = e.clientX; startSelY = e.clientY;
             marquee.style.left = startSelX + 'px'; marquee.style.top = startSelY + 'px';
             marquee.style.width = '0'; marquee.style.height = '0';
             marquee.style.display = 'block';
         } else {
-            // 普通拖动 = 取消所有选择并平移画布
             clearSelection();
             isPanning = true; 
             board.classList.add('is-moving'); 
@@ -183,7 +203,6 @@ window.addEventListener('mouseup', () => {
     isPanning = false; 
     board.classList.remove('is-moving'); 
     
-    // 🌟 结束框选隐藏遮罩
     if (isSelecting) {
         isSelecting = false;
         marquee.style.display = 'none';
@@ -225,7 +244,6 @@ function bindCardDrag(cardEl, task) {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
             cardEl.style.willChange = 'transform'; 
 
-            // 🌟 单击卡片时的多选判定逻辑
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 if (selectedTasks.has(task.id)) {
                     selectedTasks.delete(task.id);
@@ -252,12 +270,10 @@ function bindCardDrag(cardEl, task) {
 // ⌨️ 全局键盘监听 (一键删除 / Ctrl+A 全选)
 // ==============================
 window.addEventListener('keydown', async (e) => {
-    // 防误触：如果焦点在输入框或文本域内，屏蔽快捷键
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
-    // 🌟 全选 (Ctrl+A 或 Cmd+A)
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault(); // 阻止浏览器默认的全选网页文本
+        e.preventDefault(); 
         document.querySelectorAll('.video-card').forEach(card => {
             selectedTasks.add(card.id.replace('card-', ''));
             card.classList.add('selected');
@@ -265,11 +281,9 @@ window.addEventListener('keydown', async (e) => {
         showToast(`已全选 ${selectedTasks.size} 个节点`, "info");
     }
 
-    // 🌟 批量删除 (Backspace 或 Delete)
     if (e.key === 'Backspace' || e.key === 'Delete') {
         if (selectedTasks.size > 0) {
             if (confirm(`🗑️ 确定要彻底删除选中的 ${selectedTasks.size} 个组件吗？`)) {
-                // 并发执行数据库删除，提高删除速度
                 const deletePromises = Array.from(selectedTasks).map(async (id) => {
                     await deleteTaskDB(id);
                     const card = document.getElementById('card-' + id);
@@ -359,14 +373,11 @@ async function exportWorkspace() {
         for (let t of tasks) {
             let clone = { ...t };
             if (clone.type === 'local_image' && clone.src) clone.src = await blobToBase64(clone.src);
-            
-            // 兼容各类生图/裁切组件的存储
             if (clone.state) {
                 if(clone.state.images) clone.state.images = await Promise.all(clone.state.images.map(b => blobToBase64(b)));
                 if(clone.state.resultBlob) clone.state.resultBlob = await blobToBase64(clone.state.resultBlob);
                 if(clone.state.sourceBlob) clone.state.sourceBlob = await blobToBase64(clone.state.sourceBlob);
             }
-            
             if (clone.rawImages) {
                 if (clone.rawImages.firstFrame) clone.rawImages.firstFrame = await blobToBase64(clone.rawImages.firstFrame);
                 if (clone.rawImages.lastFrame) clone.rawImages.lastFrame = await blobToBase64(clone.rawImages.lastFrame);
@@ -401,6 +412,8 @@ async function importWorkspace(input) {
                     await saveTaskDB(t);
                 }
                 renderBoard();
+                // 导入可能包含历史账单的卡片，刷新一次UI
+                await updateBillingUI();
             }
         } catch(err) { alert('❌ 文件解析失败，请确保导入的是有效的 .veo 格式文件'); }
         input.value = '';
@@ -425,7 +438,6 @@ viewport.addEventListener('drop', async (e) => {
         } else if (pluginType === 'image_gen') {
             newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null, channel: 'channel_1', autoRetry: false }, retryCount: 0 };
         } else if (pluginType === 'cropper') {
-            // 🌟 注入图片裁切器的基础数据模型
             newTool = { id: 'tool_crop_' + Date.now(), type: 'tool_cropper', x: spawnX, y: spawnY, timestamp: Date.now(), state: { sourceBlob: null, resultBlob: null, cropParams: { left: 10, top: 10, width: 80, height: 80 } } };
         }
 
@@ -456,7 +468,6 @@ async function parseDroppedImage(e) {
                 if (meta.type === 'local') srcToUse = t.src;
                 else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]);
                 else if (meta.type === 'gen_result') srcToUse = t.state.resultBlob; 
-                // 🌟 支持从裁切组件提取结果
                 else if (meta.type === 'crop_result') srcToUse = t.state.resultBlob;
             }
         }
@@ -493,29 +504,11 @@ function toggleRefPopover(e) { e.stopPropagation(); if (globalStore.getState().r
 // 🎮 视图层 (View)：通过 EventBus 派发状态，不写硬逻辑
 // ==============================
 function switchMode(mode) { globalStore.dispatch('SET_MODE', mode); }
-
-function updateModel(select) { 
-    globalStore.dispatch('SET_MODEL', { value: select.value, text: select.options[select.selectedIndex].text }); 
-}
-
-function updateRatio(select) { 
-    globalStore.dispatch('SET_RATIO', { value: select.value, text: select.options[select.selectedIndex].text }); 
-}
-
-function updateEnhance(select) { 
-    globalStore.dispatch('SET_ENHANCE', { value: select.value, text: select.options[select.selectedIndex].text }); 
-}
-
-// 简单配置直接读取状态机即可
-function updateUpsample(select) { 
-    globalStore.getState().enableUpsample = select.value === 'true'; 
-    document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; 
-}
-
-function updateAutoRetry(select) { 
-    globalStore.getState().autoRetry = select.value === 'true'; 
-    document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; 
-}
+function updateModel(select) { globalStore.dispatch('SET_MODEL', { value: select.value, text: select.options[select.selectedIndex].text }); }
+function updateRatio(select) { globalStore.dispatch('SET_RATIO', { value: select.value, text: select.options[select.selectedIndex].text }); }
+function updateEnhance(select) { globalStore.dispatch('SET_ENHANCE', { value: select.value, text: select.options[select.selectedIndex].text }); }
+function updateUpsample(select) { globalStore.getState().enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
+function updateAutoRetry(select) { globalStore.getState().autoRetry = select.value === 'true'; document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; }
 
 // ==============================
 // 🎧 订阅层 (Subscribers)：听到广播后自动更新 UI
@@ -526,30 +519,20 @@ sysBus.on('UI:SWITCH_MODE', (mode) => {
     document.getElementById(`tab-${mode}`).classList.add('active'); 
     document.getElementById(`slots-${mode}`).classList.add('active');
 });
-
 sysBus.on('UI:UPDATE_MODEL_TEXT', (text) => document.getElementById('model-text').innerText = text);
-
 sysBus.on('UI:UPDATE_RATIO', (data) => {
     document.getElementById('ratio-text').innerText = data.text; 
     document.getElementById('ratio-icon').innerText = data.value === '16:9' ? 'crop_16_9' : 'crop_portrait';
 });
-
 sysBus.on('UI:UPDATE_ENHANCE_TEXT', (text) => document.getElementById('enhance-text').innerText = text);
-
-// 🌟 高级业务逻辑：自动监听模型变更并处理 4K 互斥
 sysBus.on('SYSTEM:MODEL_CHANGED', (modelValue) => {
     const frameTab = document.getElementById('tab-frame');
     if (modelValue.toLowerCase().includes('4k')) {
         showToast("Veo 3.1 4K 模型不支持首尾帧，请使用参考图模式。", "info");
         if (globalStore.getState().currentMode === 'frame') switchMode('ref'); 
-        
-        frameTab.style.opacity = '0.3';
-        frameTab.style.pointerEvents = 'none';
-        frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)');
+        frameTab.style.opacity = '0.3'; frameTab.style.pointerEvents = 'none'; frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)');
     } else {
-        frameTab.style.opacity = '1';
-        frameTab.style.pointerEvents = 'auto';
-        frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');
+        frameTab.style.opacity = '1'; frameTab.style.pointerEvents = 'auto'; frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');
     }
 });
 
@@ -619,7 +602,12 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
             let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast';
             if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
 
-            const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
+            const newTask = { 
+                id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, 
+                rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', 
+                status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY,
+                isBilled: false // 🌟 初始化计费锁
+            };
             await saveTaskDB(newTask); await renderBoard(); 
         }
     } catch (error) { console.error('提交失败:', error); }
@@ -636,7 +624,14 @@ async function retryTask(taskId, btnElement) {
         if (response.status === 401 || response.status === 403) throw new Error("密码错误");
         const data = await response.json();
 
-        if (data.taskId) { await deleteTaskDB(taskId); removeActiveTask(taskId); task.id = data.taskId; task.status = 'processing'; task.progress = null; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); } else throw new Error("无返回 ID");
+        if (data.taskId) { 
+            await deleteTaskDB(taskId); removeActiveTask(taskId); 
+            task.id = data.taskId; task.status = 'processing'; task.progress = null; 
+            task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); 
+            task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); 
+            task.isBilled = false; // 🌟 重新发起任务时解锁计费
+            await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); 
+        } else throw new Error("无返回 ID");
     } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
 }
 
@@ -653,7 +648,27 @@ function startTaskPolling(taskId) {
             
             const data = await response.json();
 
-            if (data.status === 'success' && data.videoUrl) { removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
+            if (data.status === 'success' && data.videoUrl) { 
+                removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
+                
+                // 🌟 计费探针：视频通道扣费
+                if (!task.isBilled) {
+                    let cost = 0.13; // 默认 veo 3.1 垫图
+                    let detailDesc = "Veo 3.1 Fast (参考图)";
+                    if (task.modelVal.toLowerCase().includes('4k')) {
+                        cost = 0.43;
+                        detailDesc = "Veo 3.1 Fast 4K";
+                    } else if (task.mode === 'frame') {
+                        cost = 0.35;
+                        detailDesc = "Veo 3.1 Fast (首尾帧)";
+                    }
+                    await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'video', cost: cost, detail: detailDesc });
+                    task.isBilled = true;
+                    updateBillingUI();
+                }
+
+                await saveTaskDB(task); renderBoard(); return; 
+            }
             if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) { retryTask(task.id, null); } else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
             
             if (data.status === 'processing' || data.status === 'pending') {
@@ -700,12 +715,11 @@ async function applyGeneratorToPrompt(id, btnElement) {
     const task = await getTaskDB(id); if(!task) return;
     const { format, opening, attribute, general } = task.state;
     if (!format || !opening || !attribute || !general) return alert("请先点击【随机抽取】生成完整的组合");
-    document.getElementById('prompt-input').value = `【带货形式】${format} | 【开头】${opening} | 【属性】${attribute} | 【通用】${general} \n围绕以上要求，帮我生成...`;
+    document.getElementById('prompt-input').value = `【带货形式】${format} | 【开头】${opening} | 【属性】${attribute} | 【通用】${general} \n\n围绕以上要求，帮我生成...`;
     document.getElementById('floating-console').classList.remove('minimized');
     const originalText = btnElement.innerHTML; btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`; btnElement.style.color = 'var(--success)'; setTimeout(() => { btnElement.innerHTML = originalText; btnElement.style.color = ''; }, 1500);
 }
 function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
-
 
 // ==============================
 // 🌟 AI 生图工具底层增强
@@ -744,6 +758,7 @@ async function submitImgGen(id) {
 
     task.status = 'processing';
     task.retryCount = 0; 
+    task.isBilled = false; // 🌟 重新发起生成时重置计费锁
     await saveTaskDB(task); renderBoard();
 
     const apiPayload = {
@@ -777,6 +792,17 @@ async function submitImgGen(id) {
                 task.status = 'success';
                 success = true;
 
+                // 🌟 计费探针：生图通道扣费
+                if (!task.isBilled) {
+                    const isChannel2 = task.state.channel === 'channel_2';
+                    const cost = isChannel2 ? 0.060 : 0.084;
+                    const cName = isChannel2 ? '备用节点' : '主节点';
+                    // 用当前时间戳防止重复记账
+                    await addBillingRecord({ id: 'bill_img_' + task.id + '_' + Date.now(), taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${cName})` });
+                    task.isBilled = true;
+                    updateBillingUI();
+                }
+
                 if (typeof blobUrlCache !== 'undefined' && blobUrlCache.has(task.id + '_res')) {
                     URL.revokeObjectURL(blobUrlCache.get(task.id + '_res'));
                     blobUrlCache.delete(task.id + '_res');
@@ -807,7 +833,7 @@ async function submitImgGen(id) {
 async function handleCropperUpload(input, id) {
     if (!input.files[0]) return;
     const task = await getTaskDB(id);
-    task.state.sourceBlob = await compressImageToBlob(input.files[0], 2048); // 保留高分辨率供裁切
+    task.state.sourceBlob = await compressImageToBlob(input.files[0], 2048); 
     task.state.resultBlob = null;
     await saveTaskDB(task); renderBoard();
 }
@@ -840,14 +866,13 @@ async function generateCrop(id) {
     const imgEl = document.getElementById(`crop-img-${id}`);
     if (!imgEl || !task) return;
 
-    const p = task.state.cropParams; // 存储的是基于图片的百分比
+    const p = task.state.cropParams; 
     const img = new Image();
     img.src = imgEl.src;
     img.onload = async () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        // 将百分比还原为自然像素值
         const sx = (p.left / 100) * img.naturalWidth;
         const sy = (p.top / 100) * img.naturalHeight;
         const sWidth = (p.width / 100) * img.naturalWidth;
@@ -860,26 +885,24 @@ async function generateCrop(id) {
         canvas.toBlob(async (blob) => {
             task.state.resultBlob = blob;
             await saveTaskDB(task); renderBoard();
-        }, 'image/png'); // 使用 png 保证复用的极致画质
+        }, 'image/png'); 
     };
 }
 
-// 🌟 全局事件委托：完美兼容无限缩放画布的“百分比”裁切引擎
 let activeCrop = null;
-
 window.addEventListener('pointerdown', (e) => {
     const handle = e.target.closest('.crop-handle');
     const box = e.target.closest('.crop-box');
 
     if (handle || box) {
-        e.stopPropagation(); // 阻止向下传递给卡片拖拽
-        isPanning = false;   // 强行阻止画布拖拽
+        e.stopPropagation(); 
+        isPanning = false;   
         board.classList.remove('is-moving');
 
         const targetBox = box || handle.closest('.crop-box');
         const taskId = targetBox.dataset.taskId;
         const workspace = document.getElementById(`crop-workspace-${taskId}`);
-        const rect = workspace.getBoundingClientRect(); // 获取元素在当前屏幕上的真实渲染尺寸（含缩放）
+        const rect = workspace.getBoundingClientRect(); 
 
         activeCrop = {
             taskId,
@@ -887,7 +910,6 @@ window.addEventListener('pointerdown', (e) => {
             dir: handle ? handle.dataset.dir : null,
             startX: e.clientX,
             startY: e.clientY,
-            // 核心魔法：记录当前屏幕上的物理宽度和高度，完全无需再除以 scale！
             rectW: rect.width,  
             rectH: rect.height, 
             startLeft: parseFloat(targetBox.style.left),
@@ -903,11 +925,9 @@ window.addEventListener('pointermove', (e) => {
     if (activeCrop) {
         e.stopPropagation();
         
-        // 计算鼠标在屏幕上移动的绝对像素差
         const dx = e.clientX - activeCrop.startX;
         const dy = e.clientY - activeCrop.startY;
 
-        // 直接算出移动的百分比：屏幕像素差 ÷ 元素屏幕总尺寸
         const dpX = (dx / activeCrop.rectW) * 100;
         const dpY = (dy / activeCrop.rectH) * 100;
 
@@ -937,7 +957,6 @@ window.addEventListener('pointermove', (e) => {
         activeCrop.boxEl.style.width = newWidth + '%';
         activeCrop.boxEl.style.height = newHeight + '%';
         
-        // 暂存至对象中，松开时保存
         activeCrop.currentLeft = newLeft;
         activeCrop.currentTop = newTop;
         activeCrop.currentWidth = newWidth;
@@ -1015,7 +1034,6 @@ function generateCardHTML(task) {
         `;
     }
 
-    // 🌟 图片裁切器视图构建
     if (task.type === 'tool_cropper') {
         const hasSource = !!task.state.sourceBlob;
         const hasResult = !!task.state.resultBlob;
@@ -1106,7 +1124,6 @@ async function renderBoard() {
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
         const currentProgress = task.progress || '';
 
-        // 🌟 为了区分 UI 刷新，加入裁切器的图片状态
         const cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc';
         const cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes';
 
@@ -1156,6 +1173,12 @@ async function removeTask(id) { if(confirm('确定删除这张卡片吗？')) { 
 function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB(); board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; await renderBoard(); 
-    bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await initDB(); 
+    board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; 
+    document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; 
+    await renderBoard(); 
+    bindMainConsoleDrop('slot-ref-box', 'references'); 
+    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
+    bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await updateBillingUI(); // 初始化加载计费数据
 });

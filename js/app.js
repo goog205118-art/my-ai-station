@@ -28,17 +28,13 @@ document.addEventListener('mouseover', (e) => {
         globalTooltip.innerText = tipText;
         const rect = target.getBoundingClientRect();
         
-        // 计算水平绝对居中
         let x = rect.left + rect.width / 2;
         let y = rect.top;
         
-        // 🌟 核心修复：智能边缘探测
-        // 如果目标元素距离顶部小于 60px (例如顶部导航栏)，则让提示框在它【下方】弹出
         if (y < 60) {
             y = rect.bottom; 
             globalTooltip.classList.add('tooltip-bottom');
         } else {
-            // 否则正常在【上方】弹出
             globalTooltip.classList.remove('tooltip-bottom');
         }
         
@@ -322,7 +318,29 @@ function bindMainConsoleDrop(slotId, stateKey) {
 
 function toggleRefPopover(e) { e.stopPropagation(); if (payloadState.references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 function switchMode(mode) { payloadState.currentMode = mode; document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); document.getElementById(`tab-${mode}`).classList.add('active'); document.getElementById(`slots-${mode}`).classList.add('active'); }
-function updateModel(select) { payloadState.model = select.value; document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; }
+
+// 🌟 核心更新：切换 4K 模型时动态禁用首尾帧
+function updateModel(select) { 
+    payloadState.model = select.value; 
+    document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; 
+    
+    // 🌟 针对 4K 模型的特殊限制：动态禁用首尾帧
+    const frameTab = document.getElementById('tab-frame');
+    if (select.value.toLowerCase().includes('4k')) {
+        if (payloadState.currentMode === 'frame') {
+            switchMode('ref'); // 强制切回参考图模式
+            setTimeout(() => alert("Veo 3.1 4K 模型不支持首尾帧，已自动为您切换至参考图模式。"), 50);
+        }
+        frameTab.style.opacity = '0.3';
+        frameTab.style.pointerEvents = 'none';
+        frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)');
+    } else {
+        frameTab.style.opacity = '1';
+        frameTab.style.pointerEvents = 'auto';
+        frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');
+    }
+}
+
 function updateRatio(select) { payloadState.aspectRatio = select.value; document.getElementById('ratio-text').innerText = select.options[select.selectedIndex].text; document.getElementById('ratio-icon').innerText = select.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; }
 function updateEnhance(select) { payloadState.enhancePrompt = select.value === 'true'; document.getElementById('enhance-text').innerText = select.options[select.selectedIndex].text; }
 function updateUpsample(select) { payloadState.enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
@@ -389,11 +407,11 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
         if (data.taskId) {
             const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
             
-            // 🌟 核心新增：智能识别并在卡片上显示 4K 模型名称
             let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast';
             if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
 
-            const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
+            // 加入了进度属性 (progress) 的初始化
+            const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY };
             await saveTaskDB(newTask); await renderBoard(); 
         }
     } catch (error) { console.error('提交失败:', error); }
@@ -410,28 +428,35 @@ async function retryTask(taskId, btnElement) {
         if (response.status === 401 || response.status === 403) throw new Error("密码错误");
         const data = await response.json();
 
-        if (data.taskId) { await deleteTaskDB(taskId); removeActiveTask(taskId); task.id = data.taskId; task.status = 'processing'; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); } else throw new Error("无返回 ID");
+        if (data.taskId) { await deleteTaskDB(taskId); removeActiveTask(taskId); task.id = data.taskId; task.status = 'processing'; task.progress = null; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); } else throw new Error("无返回 ID");
     } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
 }
 
+// 🌟 核心更新：加入进度条数据捕获
 function startTaskPolling(taskId) {
     let attempts = 0;
     const poll = async () => {
         attempts++;
         try {
-            // 🌟 核心新增：先从本地获取 task，以便拿到 modelVal
             const task = await getTaskDB(taskId);
             if (!task) { removeActiveTask(taskId); return; }
 
-            // 🌟 核心新增：将 task.modelVal 随 taskId 一起发给 n8n，方便 n8n 做双轨制查询路由
             const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); return; }
             
-            // 数据解析
             const data = await response.json();
 
             if (data.status === 'success' && data.videoUrl) { removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; await saveTaskDB(task); renderBoard(); return; }
             if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) { retryTask(task.id, null); } else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
+            
+            // 🌟 核心新增：捕获并更新生成进度条
+            if (data.status === 'processing' || data.status === 'pending') {
+                if (data.progress && task.progress !== data.progress) {
+                    task.progress = data.progress; // 保存百分比
+                    await saveTaskDB(task);
+                    renderBoard(); // 刷新 UI
+                }
+            }
             
             if (attempts < 240) setTimeout(poll, 15000); else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } }
         } catch (error) { setTimeout(poll, 15000); }
@@ -543,7 +568,8 @@ async function submitImgGen(id) {
 
                 // 🌟 核心修复：踢掉旧图的 URL 缓存，强制渲染引擎读取新 Blob
                 if (typeof blobUrlCache !== 'undefined' && blobUrlCache.has(task.id + '_res')) {
-                    URL.revokeObjectURL(blobUrlCache.get(task.id + '_res'));
+                    const cacheObj = blobUrlCache.get(task.id + '_res');
+                    URL.revokeObjectURL(cacheObj.url || cacheObj);
                     blobUrlCache.delete(task.id + '_res');
                 }
 
@@ -564,7 +590,7 @@ async function submitImgGen(id) {
 }
 
 // ==============================
-// 🚀 智能 DOM 对比引擎 (已加入悬浮提示 data-tip)
+// 🚀 智能 DOM 对比引擎 (已加入进度条UI)
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
@@ -615,7 +641,36 @@ function generateCardHTML(task) {
     }
 
     let statusBadge = '', mediaHtml = ''; const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0])); const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
-    if (task.status === 'processing') { const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')};"><div style="display:flex; flex-direction:column; align-items:center; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text">视频生成中...</div></div></div>`; } else if (task.status === 'failed') { statusBadge = `<span class="status-badge failed">失败</span>`; mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`; } else { statusBadge = `<span class="status-badge success">已完成</span>`; mediaHtml = `<div class="card-media" data-tip="双击全屏播放视频"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()"></video></div>`; }
+    
+    if (task.status === 'processing') { 
+        const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; 
+        statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; 
+        
+        // 🌟 核心新增：进度条 UI 渲染
+        let progressHtml = '';
+        if (task.progress) {
+            progressHtml = `
+            <div style="width: 80%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 16px; overflow: hidden; position: relative;">
+                <div style="height: 100%; background: var(--accent); width: ${task.progress}; transition: width 0.5s ease-out; box-shadow: 0 0 10px var(--accent);"></div>
+            </div>
+            <div style="font-size: 11px; color: var(--accent); margin-top: 8px; font-weight: 600; font-family: monospace;">${task.progress}</div>`;
+        }
+
+        mediaHtml = `
+        <div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')}; padding: 20px;">
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; color: var(--accent);">
+                <svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg>
+                <div class="generating-text" style="margin-top: ${task.progress ? '12px' : '16px'};">视频生成中...</div>
+                ${progressHtml}
+            </div>
+        </div>`; 
+    } else if (task.status === 'failed') { 
+        statusBadge = `<span class="status-badge failed">失败</span>`; 
+        mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`; 
+    } else { 
+        statusBadge = `<span class="status-badge success">已完成</span>`; 
+        mediaHtml = `<div class="card-media" data-tip="双击全屏播放视频"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()"></video></div>`; 
+    }
     
     const thumbHtml = thumbImg ? `<img src="${thumbUrl}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'thumb'}))" ondblclick="openLightbox(this.src)" data-tip="双击全屏高清预览，按住可拖动复用">` : `<div style="width:44px;height:44px;border-radius:4px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="color:#666;">image</span></div>`;
     
@@ -632,6 +687,7 @@ async function renderBoard() {
     tasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
+        const currentProgress = task.progress || '';
 
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
@@ -655,8 +711,10 @@ async function renderBoard() {
             const oldStatus = cardEl.getAttribute('data-sync-status');
             const oldRetry = cardEl.getAttribute('data-sync-retry');
             const oldImgLen = cardEl.getAttribute('data-sync-img-len');
+            const oldProgress = cardEl.getAttribute('data-sync-progress');
 
-            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen) { 
+            // 🌟 核心更新：加入进度比对，进度有变化时触发局部渲染
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress) { 
                 cardEl.innerHTML = generateCardHTML(task); 
                 bindCardDrag(cardEl, task); 
             }
@@ -665,6 +723,7 @@ async function renderBoard() {
         cardEl.setAttribute('data-sync-status', task.status || 'static'); 
         cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
         cardEl.setAttribute('data-sync-img-len', currentImgLen); 
+        cardEl.setAttribute('data-sync-progress', currentProgress); 
     });
 }
 

@@ -95,14 +95,25 @@ function closeHelpModal() {
 }
 
 // ==============================
-// 🚀 核心优化：动态离合硬件加速拖拽引擎
+// 🚀 核心优化：多选引擎 + 动态离合拖拽
 // ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
+const marquee = document.getElementById('selection-marquee'); // 🌟 新增选框DOM
+
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
 let isPanning = false, startPanX = 0, startPanY = 0, ticking = false; 
 let draggingCardInfo = null, highestZIndex = 10; 
 let scrollTimeout; 
+
+// 🌟 新增：全局多选状态管理
+let selectedTasks = new Set();
+function clearSelection() {
+    selectedTasks.clear();
+    document.querySelectorAll('.video-card.selected').forEach(c => c.classList.remove('selected'));
+}
+
+let isSelecting = false, startSelX = 0, startSelY = 0;
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
@@ -112,7 +123,30 @@ window.addEventListener('mousemove', (e) => {
                 board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
-            } else if (draggingCardInfo) {
+            } 
+            // 🌟 新增：渲染框选范围，并实时进行碰撞计算
+            else if (isSelecting) {
+                const currentX = e.clientX, currentY = e.clientY;
+                const left = Math.min(startSelX, currentX), top = Math.min(startSelY, currentY);
+                const width = Math.abs(currentX - startSelX), height = Math.abs(currentY - startSelY);
+
+                marquee.style.left = left + 'px'; marquee.style.top = top + 'px';
+                marquee.style.width = width + 'px'; marquee.style.height = height + 'px';
+
+                // 物理碰撞检测：判断哪些卡片在选框内
+                const selRect = { left, top, right: left + width, bottom: top + height };
+                document.querySelectorAll('.video-card').forEach(card => {
+                    const rect = card.getBoundingClientRect();
+                    if (rect.left < selRect.right && rect.right > selRect.left && rect.top < selRect.bottom && rect.bottom > selRect.top) {
+                        card.classList.add('selected');
+                        selectedTasks.add(card.id.replace('card-', ''));
+                    } else {
+                        card.classList.remove('selected');
+                        selectedTasks.delete(card.id.replace('card-', ''));
+                    }
+                });
+            } 
+            else if (draggingCardInfo) {
                 const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale;
                 const dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
                 draggingCardInfo.task.x = draggingCardInfo.initialX + dx;
@@ -127,10 +161,21 @@ window.addEventListener('mousemove', (e) => {
 
 viewport.addEventListener('mousedown', (e) => { 
     if (e.target === viewport || e.target === board) { 
-        isPanning = true; 
-        board.classList.add('is-moving'); 
-        startPanX = e.clientX - transform.x; 
-        startPanY = e.clientY - transform.y; 
+        if (e.shiftKey) { 
+            // 🌟 按住 Shift 并在空白处拖动 = 激活框选
+            isSelecting = true;
+            startSelX = e.clientX; startSelY = e.clientY;
+            marquee.style.left = startSelX + 'px'; marquee.style.top = startSelY + 'px';
+            marquee.style.width = '0'; marquee.style.height = '0';
+            marquee.style.display = 'block';
+        } else {
+            // 普通拖动 = 取消所有选择并平移画布
+            clearSelection();
+            isPanning = true; 
+            board.classList.add('is-moving'); 
+            startPanX = e.clientX - transform.x; 
+            startPanY = e.clientY - transform.y; 
+        }
     } 
 });
 
@@ -138,6 +183,12 @@ window.addEventListener('mouseup', () => {
     isPanning = false; 
     board.classList.remove('is-moving'); 
     
+    // 🌟 结束框选隐藏遮罩
+    if (isSelecting) {
+        isSelecting = false;
+        marquee.style.display = 'none';
+    }
+
     if (draggingCardInfo) { 
         draggingCardInfo.el.style.willChange = 'auto'; 
         saveTaskDB(draggingCardInfo.task); 
@@ -146,11 +197,8 @@ window.addEventListener('mouseup', () => {
 });
 
 viewport.addEventListener('wheel', (e) => {
-    // 🌟 终极修复：如果鼠标放在 textarea 或是文本框区域，允许正常上下滚动，拦截画布缩放！
     if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
-
     e.preventDefault(); if (ticking) return; 
-    
     board.classList.add('is-moving'); 
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); 
@@ -176,19 +224,65 @@ function bindCardDrag(cardEl, task) {
         header.onmousedown = (e) => {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
             cardEl.style.willChange = 'transform'; 
+
+            // 🌟 单击卡片时的多选判定逻辑
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                if (selectedTasks.has(task.id)) {
+                    selectedTasks.delete(task.id);
+                    cardEl.classList.remove('selected');
+                } else {
+                    selectedTasks.add(task.id);
+                    cardEl.classList.add('selected');
+                }
+            } else {
+                if (!selectedTasks.has(task.id)) {
+                    clearSelection();
+                    selectedTasks.add(task.id);
+                    cardEl.classList.add('selected');
+                }
+            }
             
-            draggingCardInfo = { 
-                el: cardEl, 
-                task: task, 
-                startMouseX: e.clientX,   
-                startMouseY: e.clientY,   
-                initialX: task.x || 0,    
-                initialY: task.y || 0     
-            };
+            draggingCardInfo = { el: cardEl, task: task, startMouseX: e.clientX, startMouseY: e.clientY, initialX: task.x || 0, initialY: task.y || 0 };
             e.stopPropagation(); 
         };
     }
 }
+
+// ==============================
+// ⌨️ 全局键盘监听 (一键删除 / Ctrl+A 全选)
+// ==============================
+window.addEventListener('keydown', async (e) => {
+    // 防误触：如果焦点在输入框或文本域内，屏蔽快捷键
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+
+    // 🌟 全选 (Ctrl+A 或 Cmd+A)
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault(); // 阻止浏览器默认的全选网页文本
+        document.querySelectorAll('.video-card').forEach(card => {
+            selectedTasks.add(card.id.replace('card-', ''));
+            card.classList.add('selected');
+        });
+        showToast(`已全选 ${selectedTasks.size} 个节点`, "info");
+    }
+
+    // 🌟 批量删除 (Backspace 或 Delete)
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (selectedTasks.size > 0) {
+            if (confirm(`🗑️ 确定要彻底删除选中的 ${selectedTasks.size} 个组件吗？`)) {
+                // 并发执行数据库删除，提高删除速度
+                const deletePromises = Array.from(selectedTasks).map(async (id) => {
+                    await deleteTaskDB(id);
+                    const card = document.getElementById('card-' + id);
+                    if (card) card.remove();
+                });
+                await Promise.all(deletePromises);
+                
+                showToast(`批量清理完成`, "success");
+                selectedTasks.clear();
+            }
+        }
+    }
+});
 
 // ==============================
 // 🔍 全局图片放大查看器 (Lightbox)

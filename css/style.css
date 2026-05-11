@@ -238,3 +238,35 @@ body {
 .help-section ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .help-section li { font-size: 13px; color: #d1d1d6; line-height: 1.6; position: relative; padding-left: 16px; }
 .help-section li::before { content: '✦'; position: absolute; left: 0; top: -1px; color: rgba(255,255,255,0.3); font-size: 14px;}
+/* ============================== */
+/* 🍞 全局 Toast 消息提示系统 */
+/* ============================== */
+#toast-container {
+    position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 10px; z-index: 10000;
+    pointer-events: none;
+}
+.veo-toast {
+    background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(16px);
+    border: 1px solid var(--border); border-radius: 100px;
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    color: var(--text-main); display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: toastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    pointer-events: auto;
+}
+.veo-toast.toast-error { border-color: rgba(255, 69, 58, 0.3); }
+.veo-toast.toast-error span.icon { color: var(--danger); }
+.veo-toast.toast-success { border-color: rgba(50, 215, 75, 0.3); }
+.veo-toast.toast-success span.icon { color: var(--success); }
+.veo-toast.toast-info span.icon { color: var(--accent); }
+.veo-toast.fade-out { animation: toastFadeOut 0.3s ease forwards; }
+
+@keyframes toastSlideDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes toastFadeOut {
+    from { transform: translateY(0); opacity: 1; }
+    to { transform: translateY(-10px); opacity: 0; }
+}

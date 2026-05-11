@@ -3,7 +3,7 @@
 // ==========================================
 const DB_NAME = 'VeoInfinityDB';
 let db;
-const blobUrlCache = new Map(); // 🌟 URL 缓存锁，彻底杜绝内存泄漏
+const blobUrlCache = new Map(); // 🌟 URL 缓存锁：现在存储 { url, blob } 实现精准对比
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -23,10 +23,15 @@ function getBlobUrl(id, blobData) {
     if (!blobData) return '';
     if (typeof blobData === 'string') return blobData; 
     
-    if (blobUrlCache.has(id)) return blobUrlCache.get(id);
+    if (blobUrlCache.has(id)) {
+        const cached = blobUrlCache.get(id);
+        // 🌟 终极修复：严格比对内存对象。如果位置相同但图片换了，直接销毁旧缓存！
+        if (cached.blob === blobData) return cached.url; 
+        URL.revokeObjectURL(cached.url);
+    }
     
     const url = URL.createObjectURL(blobData);
-    blobUrlCache.set(id, url);
+    blobUrlCache.set(id, { url: url, blob: blobData });
     return url;
 }
 
@@ -89,10 +94,10 @@ async function deleteTaskDB(id) {
         const tx = db.transaction('tasks', 'readwrite');
         tx.objectStore('tasks').delete(id);
         tx.oncomplete = () => {
-            // 🌟 核心修复：连根拔起！清理该任务名下关联的所有 Blob URL (包括缩略图和原图)
-            for (let [key, url] of blobUrlCache.entries()) {
+            // 🌟 连根拔起：适配最新的 cacheObj 数据结构
+            for (let [key, cacheObj] of blobUrlCache.entries()) {
                 if (key.toString().startsWith(id)) {
-                    URL.revokeObjectURL(url);
+                    URL.revokeObjectURL(cacheObj.url || cacheObj); 
                     blobUrlCache.delete(key);
                 }
             }

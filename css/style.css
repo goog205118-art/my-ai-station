@@ -32,13 +32,16 @@ body {
 .video-card { 
     position: absolute; left: 0; top: 0; 
     width: 340px; 
-    background: #1c1c1e; /* 换成优雅的纯深色系 */
+    background: #1c1c1e; 
     border: 1px solid var(--border); 
     border-radius: var(--radius-md); 
     padding: 12px; display: flex; flex-direction: column; gap: 12px; 
     box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
     cursor: default; 
-    /* 删除了 backdrop-filter 和 will-change */
+    
+    /* 🌟 核心优化：智能剔除屏幕外的节点，并预留尺寸防 Bug */
+    content-visibility: auto;
+    contain-intrinsic-size: 340px 400px;
 }
 
 .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); cursor: grab; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -275,4 +278,8 @@ body {
 @keyframes toastFadeOut {
     from { transform: translateY(0); opacity: 1; }
     to { transform: translateY(-10px); opacity: 0; }
+}
+/* 🌟 动态硬件加速离合器 */
+.canvas-board.is-moving .video-card {
+    will-change: transform;
 }

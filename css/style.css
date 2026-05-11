@@ -283,35 +283,47 @@ body {
 
 .login-gate {
     position: fixed; inset: 0; z-index: 99999;
-    background: #0f0f11; /* 深邃纯黑背景 */
-    background-image: radial-gradient(circle at center, rgba(10, 132, 255, 0.1) 0%, transparent 70%);
+    /* 🌟 替换为你的 2K 光影神图 */
+    background: url('../变清晰_突出光影感_2K_202605120056.jpg') no-repeat center center;
+    background-size: cover;
     display: flex; justify-content: center; align-items: center;
-    perspective: 1000px; /* 开启 3D 透视视距 */
+    perspective: 1000px; 
     transition: opacity 0.8s cubic-bezier(0.8, 0, 0.2, 1), backdrop-filter 0.8s;
 }
 
+/* 🌟 新增：环境暗场遮罩，压暗四周，突出中心光影，保证表单清晰度 */
+.login-gate::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at center, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%);
+    z-index: 1; pointer-events: none;
+}
+
+/* 🌟 新增：粒子画布层，垫在背景上、遮罩下 */
+.login-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 2; pointer-events: none; 
+}
+
 .login-gate.unlocked {
-    opacity: 0;
-    pointer-events: none;
-    backdrop-filter: blur(0px);
+    opacity: 0; pointer-events: none; backdrop-filter: blur(0px);
 }
 
 .gate-step {
-    position: absolute;
+    position: absolute; z-index: 10; /* 确保交互面板在最上层 */
     display: flex; justify-content: center; align-items: center;
     opacity: 0; pointer-events: none;
-    transform: translateZ(-200px) scale(0.8); /* 默认在远处 */
+    transform: translateZ(-200px) scale(0.8); 
     transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gate-step.step-active {
     opacity: 1; pointer-events: auto;
-    transform: translateZ(0) scale(1); /* 移动到正常焦距 */
+    transform: translateZ(0) scale(1); 
 }
 
 .gate-step.step-passed {
     opacity: 0; pointer-events: none;
-    transform: translateZ(300px) scale(1.5); /* 运镜：向屏幕外飞出 */
+    transform: translateZ(300px) scale(1.5); 
 }
 
 /* 启动按钮样式 */

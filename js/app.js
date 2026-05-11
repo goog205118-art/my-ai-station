@@ -13,6 +13,35 @@ function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 
 // ==============================
+// 🍞 全局 Toast 消息系统
+// ==============================
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `veo-toast toast-${type}`;
+    
+    let icon = 'info';
+    if (type === 'error') icon = 'error';
+    if (type === 'success') icon = 'check_circle';
+
+    toast.innerHTML = `<span class="material-symbols-outlined icon" style="font-size: 16px;">${icon}</span> ${message}`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// 🚀 架构师魔法：一键劫持全局原生的 alert()，让所有旧代码自动享用新 UI！
+window.alert = (msg) => showToast(msg, 'error');
+
+// ==============================
 // 💡 全局智能悬浮提示引擎 (Smart Tooltip)
 // ==============================
 let tooltipTimer = null;
@@ -329,7 +358,11 @@ function updateModel(select) {
     if (select.value.toLowerCase().includes('4k')) {
         if (payloadState.currentMode === 'frame') {
             switchMode('ref'); // 强制切回参考图模式
-            setTimeout(() => alert("Veo 3.1 4K 模型不支持首尾帧，已自动为您切换至参考图模式。"), 50);
+            if (payloadState.currentMode === 'frame') {
+            switchMode('ref'); // 强制切回参考图模式
+            // 🌟 换成专属的 Info 级别提示
+            setTimeout(() => showToast("Veo 3.1 4K 模型不支持首尾帧，已为您切换至参考图模式。", "info"), 50);
+        }
         }
         frameTab.style.opacity = '0.3';
         frameTab.style.pointerEvents = 'none';
@@ -583,6 +616,10 @@ async function submitImgGen(id) {
                 task.retryCount = attempts;
                 await saveTaskDB(task); renderBoard();
                 await new Promise(r => setTimeout(r, 2000));
+                // 🌟 核心修复：僵尸节点拦截雷达
+                // 挂机苏醒后，查一下卡片是不是已经被用户手动删了，如果删了就赶紧撤退！
+                const checkExists = await getTaskDB(task.id);
+                if (!checkExists) return;
             }
         }
     }

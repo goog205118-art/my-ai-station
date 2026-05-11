@@ -107,7 +107,7 @@ window.addEventListener('mousemove', (e) => {
         requestAnimationFrame(() => {
             if (isPanning) {
                 transform.x = e.clientX - startPanX; transform.y = e.clientY - startPanY; 
-                board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+                board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
                 document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
                 document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             } else if (draggingCardInfo) {
@@ -136,7 +136,7 @@ viewport.addEventListener('wheel', (e) => {
     
     if (!ticking) {
         requestAnimationFrame(() => {
-            board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+            board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
             document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`;
             document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
             ticking = false;
@@ -808,6 +808,6 @@ async function removeTask(id) { if(confirm('确定删除这张卡片吗？')) { 
 function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB(); board.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`; document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; await renderBoard(); 
+    await initDB(); board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; await renderBoard(); 
     bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
 });

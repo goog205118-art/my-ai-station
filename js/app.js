@@ -52,15 +52,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (this.x < 0 || this.x > width) this.speedX *= -1;
                 if (this.y < 0 || this.y > height) this.speedY *= -1;
 
-                // 鼠标排斥与高光反应
+                // 🌟 优化 1：缩小粒子对鼠标的感应半径 (120 改为 80)，显得更加克制
                 if (mouse.x && mouse.y) {
                     let dx = mouse.x - this.x;
                     let dy = mouse.y - this.y;
                     let distance = Math.sqrt(dx*dx + dy*dy);
-                    if (distance < 120) {
-                        this.x -= dx * 0.02; // 缓慢排开
-                        this.y -= dy * 0.02;
-                        this.opacity = 0.8;  // 靠近鼠标时变亮
+                    if (distance < 80) {
+                        this.x -= dx * 0.015; // 排开速度变柔和
+                        this.y -= dy * 0.015;
+                        this.opacity = 0.9;   // 靠近中心时高亮更清晰
                     } else {
                         this.opacity = Math.max(this.baseOpacity, this.opacity - 0.02);
                     }
@@ -80,10 +80,13 @@ document.addEventListener('DOMContentLoaded', () => {
         function animate() {
             ctx.clearRect(0, 0, width, height);
 
-            // 绘制鼠标的全局柔和光晕
+            // 🌟 优化 2：重写鼠标光晕，缩小范围、提升质感边缘衰减
             if (mouse.x && mouse.y) {
-                let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 250);
-                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.04)');
+                // 半径从 250 大幅缩小到 120
+                let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 120);
+                // 中心亮度略微提升，但边缘极速衰减，形成高级的“点发光”
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+                gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.02)');
                 gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, width, height);

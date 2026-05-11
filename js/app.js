@@ -1,5 +1,5 @@
 // ==========================================
-// 🟢 核心应用逻辑 (已接入 EventBus 架构)
+// 🟢 核心应用逻辑
 // ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
@@ -36,7 +36,8 @@ function showToast(message, type = 'info') {
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
-// 一键劫持全局原生的 alert()
+
+// 🚀 架构师魔法：一键劫持全局原生的 alert()，让所有旧代码自动享用新 UI！
 window.alert = (msg) => showToast(msg, 'error');
 
 // ==============================
@@ -101,7 +102,7 @@ const board = document.getElementById('canvas-board');
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }; 
 let isPanning = false, startPanX = 0, startPanY = 0, ticking = false; 
 let draggingCardInfo = null, highestZIndex = 10; 
-let scrollTimeout; // 新增：用于滚轮的防抖计时器
+let scrollTimeout; 
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
@@ -127,7 +128,7 @@ window.addEventListener('mousemove', (e) => {
 viewport.addEventListener('mousedown', (e) => { 
     if (e.target === viewport || e.target === board) { 
         isPanning = true; 
-        board.classList.add('is-moving'); // 🌟 踩下油门：拖动画布时开启全局 GPU 加速
+        board.classList.add('is-moving'); 
         startPanX = e.clientX - transform.x; 
         startPanY = e.clientY - transform.y; 
     } 
@@ -135,21 +136,24 @@ viewport.addEventListener('mousedown', (e) => {
 
 window.addEventListener('mouseup', () => { 
     isPanning = false; 
-    board.classList.remove('is-moving'); // 🌟 松开油门：停止拖动瞬间切回 CPU 极致清晰渲染
+    board.classList.remove('is-moving'); 
     
     if (draggingCardInfo) { 
-        draggingCardInfo.el.style.willChange = 'auto'; // 关闭单卡加速
+        draggingCardInfo.el.style.willChange = 'auto'; 
         saveTaskDB(draggingCardInfo.task); 
         draggingCardInfo = null; 
     } 
 });
 
 viewport.addEventListener('wheel', (e) => {
+    // 🌟 终极修复：如果鼠标放在 textarea 或是文本框区域，允许正常上下滚动，拦截画布缩放！
+    if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
+
     e.preventDefault(); if (ticking) return; 
     
-    board.classList.add('is-moving'); // 🌟 滚轮缩放时开启全局加速
+    board.classList.add('is-moving'); 
     clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); // 停滚150毫秒后恢复清晰
+    scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); 
     
     const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
     const mouseX = e.clientX - viewport.getBoundingClientRect().left, mouseY = e.clientY - viewport.getBoundingClientRect().top;
@@ -171,7 +175,7 @@ function bindCardDrag(cardEl, task) {
     if(header) {
         header.onmousedown = (e) => {
             highestZIndex++; cardEl.style.zIndex = highestZIndex;
-            cardEl.style.willChange = 'transform'; // 🌟 拖拽单张卡片时，只给这张卡片单独开启 GPU 加速
+            cardEl.style.willChange = 'transform'; 
             
             draggingCardInfo = { 
                 el: cardEl, 
@@ -261,10 +265,14 @@ async function exportWorkspace() {
         for (let t of tasks) {
             let clone = { ...t };
             if (clone.type === 'local_image' && clone.src) clone.src = await blobToBase64(clone.src);
-            if (clone.type === 'tool_image_gen' && clone.state) {
+            
+            // 兼容各类生图/裁切组件的存储
+            if (clone.state) {
                 if(clone.state.images) clone.state.images = await Promise.all(clone.state.images.map(b => blobToBase64(b)));
                 if(clone.state.resultBlob) clone.state.resultBlob = await blobToBase64(clone.state.resultBlob);
+                if(clone.state.sourceBlob) clone.state.sourceBlob = await blobToBase64(clone.state.sourceBlob);
             }
+            
             if (clone.rawImages) {
                 if (clone.rawImages.firstFrame) clone.rawImages.firstFrame = await blobToBase64(clone.rawImages.firstFrame);
                 if (clone.rawImages.lastFrame) clone.rawImages.lastFrame = await blobToBase64(clone.rawImages.lastFrame);
@@ -286,9 +294,10 @@ async function importWorkspace(input) {
             if (confirm(`📦 解析成功！包含 ${data.length} 个节点。\n这会与您当前的画布合并，是否继续？`)) {
                 for (let t of data) {
                     if (t.type === 'local_image' && typeof t.src === 'string') t.src = await fetch(t.src).then(r => r.blob());
-                    if (t.type === 'tool_image_gen' && t.state) {
+                    if (t.state) {
                         if(t.state.images) t.state.images = await Promise.all(t.state.images.map(async b => typeof b === 'string' ? await fetch(b).then(r => r.blob()) : b));
                         if(t.state.resultBlob && typeof t.state.resultBlob === 'string') t.state.resultBlob = await fetch(t.state.resultBlob).then(r => r.blob());
+                        if(t.state.sourceBlob && typeof t.state.sourceBlob === 'string') t.state.sourceBlob = await fetch(t.state.sourceBlob).then(r => r.blob());
                     }
                     if (t.rawImages) {
                         if (typeof t.rawImages.firstFrame === 'string') t.rawImages.firstFrame = await fetch(t.rawImages.firstFrame).then(r => r.blob());
@@ -317,10 +326,15 @@ viewport.addEventListener('drop', async (e) => {
     if (pluginType) {
         const spawnX = (e.clientX - transform.x) / transform.scale, spawnY = (e.clientY - transform.y) / transform.scale;
         let newTool = null;
-        if (pluginType === 'generator') newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
-        else if (pluginType === 'image_gen') {
+        if (pluginType === 'generator') {
+            newTool = { id: 'tool_' + Date.now(), type: 'tool_generator', x: spawnX, y: spawnY, timestamp: Date.now(), state: { format: '', opening: '', attribute: '', general: '' } };
+        } else if (pluginType === 'image_gen') {
             newTool = { id: 'tool_img_' + Date.now(), type: 'tool_image_gen', x: spawnX, y: spawnY, timestamp: Date.now(), status: 'idle', state: { size: '1024x1024', prompt: '', images: [], resultUrl: null, resultBlob: null, channel: 'channel_1', autoRetry: false }, retryCount: 0 };
+        } else if (pluginType === 'cropper') {
+            // 🌟 注入图片裁切器的基础数据模型
+            newTool = { id: 'tool_crop_' + Date.now(), type: 'tool_cropper', x: spawnX, y: spawnY, timestamp: Date.now(), state: { sourceBlob: null, resultBlob: null, cropParams: { left: 10, top: 10, width: 80, height: 80 } } };
         }
+
         if (newTool) { await saveTaskDB(newTool); renderBoard(); document.getElementById('tool-drawer').classList.remove('open'); return; }
     }
 
@@ -348,6 +362,8 @@ async function parseDroppedImage(e) {
                 if (meta.type === 'local') srcToUse = t.src;
                 else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]);
                 else if (meta.type === 'gen_result') srcToUse = t.state.resultBlob; 
+                // 🌟 支持从裁切组件提取结果
+                else if (meta.type === 'crop_result') srcToUse = t.state.resultBlob;
             }
         }
     } catch(err) {}
@@ -597,7 +613,9 @@ async function applyGeneratorToPrompt(id, btnElement) {
 function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
 
 
+// ==============================
 // 🌟 AI 生图工具底层增强
+// ==============================
 async function handleGenImageDrop(e, id) {
     e.preventDefault(); e.stopPropagation();
     const dropZone = document.getElementById(`img-gen-zone-${id}`); if(dropZone) dropZone.classList.remove('drag-over');
@@ -625,7 +643,6 @@ async function handleGenImageUpload(input, id) {
 async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
 async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 
-// 🌟 全新强化版生图调度中心
 async function submitImgGen(id) {
     const task = await getTaskDB(id);
     if(!task) return;
@@ -667,8 +684,7 @@ async function submitImgGen(id) {
                 success = true;
 
                 if (typeof blobUrlCache !== 'undefined' && blobUrlCache.has(task.id + '_res')) {
-                    const cacheObj = blobUrlCache.get(task.id + '_res');
-                    URL.revokeObjectURL(cacheObj.url || cacheObj);
+                    URL.revokeObjectURL(blobUrlCache.get(task.id + '_res'));
                     blobUrlCache.delete(task.id + '_res');
                 }
 
@@ -692,7 +708,170 @@ async function submitImgGen(id) {
 }
 
 // ==============================
-// 🚀 智能 DOM 对比引擎
+// ✂️ 全新核心插件：局部图片裁切器
+// ==============================
+async function handleCropperUpload(input, id) {
+    if (!input.files[0]) return;
+    const task = await getTaskDB(id);
+    task.state.sourceBlob = await compressImageToBlob(input.files[0], 2048); // 保留高分辨率供裁切
+    task.state.resultBlob = null;
+    await saveTaskDB(task); renderBoard();
+}
+
+async function handleCropperDrop(e, id) {
+    e.preventDefault(); e.stopPropagation();
+    const srcToUse = await parseDroppedImage(e);
+    if (srcToUse) {
+        const task = await getTaskDB(id);
+        task.state.sourceBlob = srcToUse;
+        task.state.resultBlob = null;
+        await saveTaskDB(task); renderBoard();
+    }
+}
+
+async function resetCropper(id) {
+    const task = await getTaskDB(id);
+    task.state.sourceBlob = null; task.state.resultBlob = null;
+    await saveTaskDB(task); renderBoard();
+}
+
+async function reEditCropper(id) {
+    const task = await getTaskDB(id);
+    task.state.resultBlob = null;
+    await saveTaskDB(task); renderBoard();
+}
+
+async function generateCrop(id) {
+    const task = await getTaskDB(id);
+    const imgEl = document.getElementById(`crop-img-${id}`);
+    if (!imgEl || !task) return;
+
+    const p = task.state.cropParams; // 存储的是基于图片的百分比
+    const img = new Image();
+    img.src = imgEl.src;
+    img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 将百分比还原为自然像素值
+        const sx = (p.left / 100) * img.naturalWidth;
+        const sy = (p.top / 100) * img.naturalHeight;
+        const sWidth = (p.width / 100) * img.naturalWidth;
+        const sHeight = (p.height / 100) * img.naturalHeight;
+
+        canvas.width = sWidth;
+        canvas.height = sHeight;
+        ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+        canvas.toBlob(async (blob) => {
+            task.state.resultBlob = blob;
+            await saveTaskDB(task); renderBoard();
+        }, 'image/png'); // 使用 png 保证复用的极致画质
+    };
+}
+
+// 🌟 全局事件委托：完美兼容无限缩放画布的“百分比”裁切引擎
+let activeCrop = null;
+
+window.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.crop-handle');
+    const box = e.target.closest('.crop-box');
+
+    if (handle || box) {
+        e.stopPropagation(); // 阻止向下传递给卡片拖拽
+        isPanning = false;   // 强行阻止画布拖拽
+        board.classList.remove('is-moving');
+
+        const targetBox = box || handle.closest('.crop-box');
+        const taskId = targetBox.dataset.taskId;
+        const workspace = document.getElementById(`crop-workspace-${taskId}`);
+        const rect = workspace.getBoundingClientRect(); // 获取元素在当前屏幕上的真实渲染尺寸（含缩放）
+
+        activeCrop = {
+            taskId,
+            type: handle ? 'resize' : 'move',
+            dir: handle ? handle.dataset.dir : null,
+            startX: e.clientX,
+            startY: e.clientY,
+            // 核心魔法：记录当前屏幕上的物理宽度和高度，完全无需再除以 scale！
+            rectW: rect.width,  
+            rectH: rect.height, 
+            startLeft: parseFloat(targetBox.style.left),
+            startTop: parseFloat(targetBox.style.top),
+            startWidth: parseFloat(targetBox.style.width),
+            startHeight: parseFloat(targetBox.style.height),
+            boxEl: targetBox
+        };
+    }
+});
+
+window.addEventListener('pointermove', (e) => {
+    if (activeCrop) {
+        e.stopPropagation();
+        
+        // 计算鼠标在屏幕上移动的绝对像素差
+        const dx = e.clientX - activeCrop.startX;
+        const dy = e.clientY - activeCrop.startY;
+
+        // 直接算出移动的百分比：屏幕像素差 ÷ 元素屏幕总尺寸
+        const dpX = (dx / activeCrop.rectW) * 100;
+        const dpY = (dy / activeCrop.rectH) * 100;
+
+        let { startLeft, startTop, startWidth, startHeight, type, dir } = activeCrop;
+        let newLeft = startLeft, newTop = startTop, newWidth = startWidth, newHeight = startHeight;
+
+        if (type === 'move') {
+            newLeft = Math.max(0, Math.min(startLeft + dpX, 100 - startWidth));
+            newTop = Math.max(0, Math.min(startTop + dpY, 100 - startHeight));
+        } else if (type === 'resize') {
+            if (dir.includes('e')) newWidth = Math.max(5, Math.min(startWidth + dpX, 100 - startLeft));
+            if (dir.includes('s')) newHeight = Math.max(5, Math.min(startHeight + dpY, 100 - startTop));
+            if (dir.includes('w')) {
+                const maxW = startLeft + startWidth;
+                newLeft = Math.max(0, Math.min(startLeft + dpX, maxW - 5));
+                newWidth = maxW - newLeft;
+            }
+            if (dir.includes('n')) {
+                const maxH = startTop + startHeight;
+                newTop = Math.max(0, Math.min(startTop + dpY, maxH - 5));
+                newHeight = maxH - newTop;
+            }
+        }
+
+        activeCrop.boxEl.style.left = newLeft + '%';
+        activeCrop.boxEl.style.top = newTop + '%';
+        activeCrop.boxEl.style.width = newWidth + '%';
+        activeCrop.boxEl.style.height = newHeight + '%';
+        
+        // 暂存至对象中，松开时保存
+        activeCrop.currentLeft = newLeft;
+        activeCrop.currentTop = newTop;
+        activeCrop.currentWidth = newWidth;
+        activeCrop.currentHeight = newHeight;
+    }
+});
+
+window.addEventListener('pointerup', async () => {
+    if (activeCrop) {
+        if (activeCrop.currentLeft !== undefined) {
+            const task = await getTaskDB(activeCrop.taskId);
+            if (task) {
+                task.state.cropParams = {
+                    left: activeCrop.currentLeft,
+                    top: activeCrop.currentTop,
+                    width: activeCrop.currentWidth,
+                    height: activeCrop.currentHeight
+                };
+                await saveTaskDB(task);
+            }
+        }
+        activeCrop = null;
+    }
+});
+
+
+// ==============================
+// 🚀 智能 DOM 对比引擎 
 // ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
@@ -739,6 +918,49 @@ function generateCardHTML(task) {
         <textarea class="img-gen-prompt" onchange="updateImgGenState('${task.id}', 'prompt', this.value)" placeholder="输入画面提示词，可垫入 1-5 张图配合描述...">${task.state.prompt||''}</textarea>
         <button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''} style="${isFailed ? 'background: var(--danger);' : ''}">${btnContent}</button>
         ${resultHtml}
+        `;
+    }
+
+    // 🌟 图片裁切器视图构建
+    if (task.type === 'tool_cropper') {
+        const hasSource = !!task.state.sourceBlob;
+        const hasResult = !!task.state.resultBlob;
+
+        let contentHtml = '';
+        if (!hasSource) {
+            contentHtml = `<div class="img-slot" id="crop-zone-${task.id}" style="width:100%; height:200px; border-radius:8px;" data-tip="点击上传或从画布拖入素材图片" onclick="document.getElementById('crop-file-${task.id}').click()"><span class="material-symbols-outlined" style="font-size:32px; color:var(--text-sub);">add_photo_alternate</span><span style="margin-top:8px;">导入素材图片</span><input type="file" id="crop-file-${task.id}" style="display:none;" accept="image/*" onchange="handleCropperUpload(this, '${task.id}')"></div>`;
+        } else if (!hasResult) {
+            const p = task.state.cropParams;
+            contentHtml = `
+            <div class="cropper-workspace" id="crop-workspace-${task.id}">
+                <img id="crop-img-${task.id}" src="${getBlobUrl(task.id+'_src', task.state.sourceBlob)}">
+                <div class="crop-box" id="crop-box-${task.id}" data-task-id="${task.id}" style="left:${p.left}%; top:${p.top}%; width:${p.width}%; height:${p.height}%;">
+                    <div class="crop-grid"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+                    <div class="crop-handle ch-nw" data-dir="nw"></div>
+                    <div class="crop-handle ch-ne" data-dir="ne"></div>
+                    <div class="crop-handle ch-sw" data-dir="sw"></div>
+                    <div class="crop-handle ch-se" data-dir="se"></div>
+                </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="img-gen-btn" style="flex:1; background:var(--surface-hover); color:var(--text-main); margin:0;" onclick="resetCropper('${task.id}')">重置图片</button>
+                <button class="img-gen-btn" style="flex:2; background:var(--success); margin:0;" onclick="generateCrop('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">crop</span> 确认裁切提取</button>
+            </div>
+            `;
+        } else {
+            contentHtml = `
+            <div class="img-gen-result" style="border:none; border-radius:8px; background:transparent; min-height: unset;">
+                <img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'crop_result'}))" data-tip="按住拖拽，送至其他卡片组件复用" style="border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);">
+            </div>
+            <button class="img-gen-btn" style="width:100%; margin: 0; background:var(--surface-hover); color:var(--text-main);" onclick="reEditCropper('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">history</span> 返回重新调整框选区</button>
+            `;
+        }
+
+        return `
+        <div class="card-header"><span style="color:var(--success); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">crop</span> 局部裁切器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div>
+        <div style="padding: 0 12px 12px 12px; display:flex; flex-direction:column; gap:12px;" ondragover="event.preventDefault();" ondrop="handleCropperDrop(event, '${task.id}')">
+            ${contentHtml}
+        </div>
         `;
     }
 
@@ -790,12 +1012,17 @@ async function renderBoard() {
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
         const currentProgress = task.progress || '';
 
+        // 🌟 为了区分 UI 刷新，加入裁切器的图片状态
+        const cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc';
+        const cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes';
+
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
             if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
             else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
             else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
             else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; 
+            else if (task.type === 'tool_cropper') cardEl.className = 'video-card tool-cropper'; 
             else cardEl.className = 'video-card';
             
             cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`;
@@ -813,8 +1040,10 @@ async function renderBoard() {
             const oldRetry = cardEl.getAttribute('data-sync-retry');
             const oldImgLen = cardEl.getAttribute('data-sync-img-len');
             const oldProgress = cardEl.getAttribute('data-sync-progress');
+            const oldCropSrc = cardEl.getAttribute('data-sync-crop-src');
+            const oldCropRes = cardEl.getAttribute('data-sync-crop-res');
 
-            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress) { 
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes) { 
                 cardEl.innerHTML = generateCardHTML(task); 
                 bindCardDrag(cardEl, task); 
             }
@@ -824,6 +1053,8 @@ async function renderBoard() {
         cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
         cardEl.setAttribute('data-sync-img-len', currentImgLen); 
         cardEl.setAttribute('data-sync-progress', currentProgress); 
+        cardEl.setAttribute('data-sync-crop-src', cropSrc);
+        cardEl.setAttribute('data-sync-crop-res', cropRes);
     });
 }
 

@@ -5,7 +5,6 @@ const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit';
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
 
-let payloadState = { model: 'veo_3_1_fast', aspectRatio: '9:16', enhancePrompt: true, enableUpsample: false, autoRetry: false, firstFrame: null, lastFrame: null, references: [], currentMode: 'ref' };
 let activeTasks = [];
 let activeRetries = new Set(); 
 

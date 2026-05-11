@@ -28,21 +28,12 @@ body {
 .canvas-viewport:active { cursor: grabbing; }
 .canvas-board { position: absolute; top: 0; left: 0; width: 1px; height: 1px; transform-origin: 0 0; }
 
-/* 🚀 彻底修复浏览器初次加载隐身 Bug：移除了 content-visibility 属性 */
 .video-card { 
     position: absolute; left: 0; top: 0; 
-    width: 340px; 
-    background: #1c1c1e; 
-    border: 1px solid var(--border); 
-    border-radius: var(--radius-md); 
-    padding: 12px; display: flex; flex-direction: column; gap: 12px; 
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-    cursor: default; 
-    
-    /* 🌟 核心优化：智能剔除屏幕外的节点，并预留尺寸防 Bug */
-    content-visibility: auto;
-    contain-intrinsic-size: 340px 400px;
+    width: 340px; background: #1c1c1e; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: default; 
+    content-visibility: auto; contain-intrinsic-size: 340px 400px;
 }
+.canvas-board.is-moving .video-card { will-change: transform; }
 
 .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-sub); cursor: grab; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .card-header:active { cursor: grabbing; }
@@ -139,6 +130,7 @@ body {
 .spinner circle { stroke: currentColor; stroke-width: 3; stroke-dasharray: 1, 200; stroke-dashoffset: 0; animation: dash 1.5s ease-in-out infinite; stroke-linecap: round; fill: none; }
 @keyframes rotate { 100% { transform: rotate(360deg); } }
 @keyframes dash { 0% { stroke-dasharray: 1, 200; stroke-dashoffset: 0; } 50% { stroke-dasharray: 90, 200; stroke-dashoffset: -35px; } 100% { stroke-dasharray: 90, 200; stroke-dashoffset: -124px; } }
+
 /* 🎨 AI 生图工具专属样式 */
 .tool-image-gen { width: 340px; background: rgba(20, 20, 22, 0.95); border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 12px; }
 .img-gen-slots { display: flex; gap: 6px; padding: 0 12px; flex-wrap: wrap; }
@@ -153,31 +145,33 @@ body {
 
 /* 🌟 增强版提示词框：支持垂直拖拽缩放、设定了极限高度、顺手加了聚焦高亮 */
 .img-gen-prompt { 
-    margin: 0 12px; 
-    background: rgba(0,0,0,0.3); 
-    border: 1px solid rgba(255,255,255,0.1); 
-    border-radius: 8px; 
-    padding: 8px; 
-    min-height: 60px; /* 默认最小高度 */
-    max-height: 400px; /* 防止用户拉得无限长顶破天际 */
-    color: var(--text-main); 
-    font-size: 13px; 
-    resize: vertical; /* 核心：开启底部拖拽条，且只允许上下拉伸，保护卡片宽度 */
-    outline: none; 
-    transition: border-color 0.2s ease;
+    margin: 0 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); 
+    border-radius: 8px; padding: 8px; min-height: 60px; max-height: 400px; color: var(--text-main); 
+    font-size: 13px; resize: vertical; outline: none; transition: border-color 0.2s ease;
 }
-
-/* 顺手优化的交互细节：输入时边框高亮，更专注 */
-.img-gen-prompt:focus {
-    border-color: var(--accent);
-    background: rgba(0,0,0,0.5);
-}
+.img-gen-prompt:focus { border-color: var(--accent); background: rgba(0,0,0,0.5); }
 .img-gen-btn { margin: 0 12px 12px 12px; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px; }
 .img-gen-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .img-gen-btn:disabled { background: var(--border); color: var(--text-sub); cursor: not-allowed; }
 
 .img-gen-result { width: 100%; min-height: 120px; background: #0b0b0c; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border-radius: 0 0 var(--radius-md) var(--radius-md); }
-.img-gen-result img { width: 100%; height: auto; display: block; object-fit: contain; max-height: 400px; }
+.img-gen-result img { width: 100%; height: auto; display: block; object-fit: contain; max-height: 400px; cursor: grab; }
+
+/* ✂️ 图片裁切器专属样式 */
+.tool-cropper { width: 340px; background: rgba(20, 20, 22, 0.95); border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 12px; }
+.cropper-workspace { position: relative; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); user-select: none; touch-action: none; background: #0b0b0c; display: flex; align-items: center; justify-content: center; }
+.cropper-workspace img { width: 100%; height: auto; display: block; pointer-events: none; }
+.crop-box { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); cursor: move; z-index: 10; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.crop-grid { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; pointer-events: none; }
+.crop-grid div { border-right: 1px solid rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.3); }
+.crop-grid div:nth-child(3n) { border-right: none; }
+.crop-grid div:nth-child(n+7) { border-bottom: none; }
+.crop-handle { position: absolute; background: #fff; border: 1px solid #333; border-radius: 50%; width: 12px; height: 12px; z-index: 11; touch-action: none; }
+.ch-nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.ch-ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.ch-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.ch-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
 /* ============================== */
 /* 🔍 全局图片放大查看器 (Lightbox) */
 /* ============================== */
@@ -194,6 +188,34 @@ body {
     transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .image-lightbox.show img { transform: scale(1); }
+
+/* ============================== */
+/* 🍞 全局 Toast 消息提示系统 */
+/* ============================== */
+#toast-container {
+    position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 10px; z-index: 10000;
+    pointer-events: none;
+}
+.veo-toast {
+    background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(16px);
+    border: 1px solid var(--border); border-radius: 100px;
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    color: var(--text-main); display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: toastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    pointer-events: auto;
+}
+.veo-toast.toast-error { border-color: rgba(255, 69, 58, 0.3); }
+.veo-toast.toast-error span.icon { color: var(--danger); }
+.veo-toast.toast-success { border-color: rgba(50, 215, 75, 0.3); }
+.veo-toast.toast-success span.icon { color: var(--success); }
+.veo-toast.toast-info span.icon { color: var(--accent); }
+.veo-toast.fade-out { animation: toastFadeOut 0.3s ease forwards; }
+
+@keyframes toastSlideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes toastFadeOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-10px); opacity: 0; } }
+
 /* ============================== */
 /* 💡 全局智能悬浮提示引擎 (Smart Tooltip) */
 /* ============================== */
@@ -203,25 +225,12 @@ body {
     box-shadow: 0 10px 25px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.1);
     opacity: 0; transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
     white-space: nowrap; backdrop-filter: blur(10px);
-    /* 默认在上方弹出 */
     transform: translate(-50%, calc(-100% - 10px)); 
 }
 .global-tooltip.show { opacity: 1; }
-
-/* 默认下方的小尖角 */
-.global-tooltip::after {
-    content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-    border-width: 6px; border-style: solid; border-color: rgba(255,255,255,0.1) transparent transparent transparent;
-}
-
-/* 🌟 向下翻转的形态 (用于顶部按钮防溢出) */
-.global-tooltip.tooltip-bottom {
-    transform: translate(-50%, 10px); 
-}
-.global-tooltip.tooltip-bottom::after {
-    top: -12px; 
-    border-color: transparent transparent rgba(255,255,255,0.1) transparent;
-}
+.global-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: rgba(255,255,255,0.1) transparent transparent transparent; }
+.global-tooltip.tooltip-bottom { transform: translate(-50%, 10px);  }
+.global-tooltip.tooltip-bottom::after { top: -12px; border-color: transparent transparent rgba(255,255,255,0.1) transparent; }
 
 /* ============================== */
 /* 📖 使用教程沉浸弹窗 (Help Modal) */
@@ -247,39 +256,3 @@ body {
 .help-section ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .help-section li { font-size: 13px; color: #d1d1d6; line-height: 1.6; position: relative; padding-left: 16px; }
 .help-section li::before { content: '✦'; position: absolute; left: 0; top: -1px; color: rgba(255,255,255,0.3); font-size: 14px;}
-/* ============================== */
-/* 🍞 全局 Toast 消息提示系统 */
-/* ============================== */
-#toast-container {
-    position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; gap: 10px; z-index: 10000;
-    pointer-events: none;
-}
-.veo-toast {
-    background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(16px);
-    border: 1px solid var(--border); border-radius: 100px;
-    padding: 10px 20px; font-size: 13px; font-weight: 500;
-    color: var(--text-main); display: flex; align-items: center; gap: 8px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    animation: toastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    pointer-events: auto;
-}
-.veo-toast.toast-error { border-color: rgba(255, 69, 58, 0.3); }
-.veo-toast.toast-error span.icon { color: var(--danger); }
-.veo-toast.toast-success { border-color: rgba(50, 215, 75, 0.3); }
-.veo-toast.toast-success span.icon { color: var(--success); }
-.veo-toast.toast-info span.icon { color: var(--accent); }
-.veo-toast.fade-out { animation: toastFadeOut 0.3s ease forwards; }
-
-@keyframes toastSlideDown {
-    from { transform: translateY(-20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-}
-@keyframes toastFadeOut {
-    from { transform: translateY(0); opacity: 1; }
-    to { transform: translateY(-10px); opacity: 0; }
-}
-/* 🌟 动态硬件加速离合器 */
-.canvas-board.is-moving .video-card {
-    will-change: transform;
-}

@@ -1,6 +1,74 @@
 // ==========================================
 // 🟢 核心应用逻辑
 // ==========================================
+// ==========================================
+// 🎬 登录舱与系统初始化逻辑 (Login Gate)
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const gate = document.getElementById('login-gate');
+    const savedPwd = sessionStorage.getItem('veo_admin_pwd');
+    
+    // 如果已经有缓存的密码，直接隐藏大门，无缝进入工作台
+    if (savedPwd) {
+        gate.style.display = 'none';
+        return;
+    }
+    
+    // 如果没有，等待用户交互
+    // 注意：此时底层的 initDB 和 renderBoard 已经在暗中加载了，这就实现了“秒进”体验！
+});
+
+// 运镜 1：从初始按钮推进到密码面板
+function startLoginTransition() {
+    document.getElementById('gate-step-1').classList.remove('step-active');
+    document.getElementById('gate-step-1').classList.add('step-passed'); // 旧元素飞出屏幕
+    
+    setTimeout(() => {
+        document.getElementById('gate-step-2').classList.add('step-active'); // 新面板推入焦距
+        document.getElementById('studio-pwd-input').focus();
+    }, 200); // 稍微延迟，制造交错的电影感
+}
+
+// 运镜 2：验证成功，解锁进入工作台
+function handleLoginSubmit(e) {
+    e.preventDefault(); // 阻止表单默认刷新页面行为
+    
+    const pwdInput = document.getElementById('studio-pwd-input').value.trim();
+    const btn = document.getElementById('login-submit-btn');
+    
+    if (!pwdInput) return showToast("请输入密钥", "error");
+
+    // 按钮变为加载状态
+    btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;
+    btn.style.pointerEvents = 'none';
+
+    // 模拟一下网络验证的延迟感（让动画表现更从容）
+    setTimeout(() => {
+        // 保存密码到 Session (用于后续的所有 API 请求)
+        sessionStorage.setItem('veo_admin_pwd', pwdInput);
+        
+        // 播放解锁运镜动画！
+        btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> 验证通过`;
+        btn.style.background = 'var(--success)';
+        
+        setTimeout(() => {
+            // 面板飞出屏幕
+            document.getElementById('gate-step-2').classList.remove('step-active');
+            document.getElementById('gate-step-2').classList.add('step-passed');
+            
+            // 整个遮罩层淡出，暴露出底下已经准备就绪的 Infinity Flow 画布
+            const gate = document.getElementById('login-gate');
+            gate.classList.add('unlocked');
+            
+            // 动画播放完毕后彻底移除 DOM 节点，释放性能
+            setTimeout(() => {
+                gate.remove();
+                showToast("欢迎回来，指挥官。", "success");
+            }, 800);
+        }, 400);
+
+    }, 600);
+}
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 

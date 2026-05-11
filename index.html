@@ -74,6 +74,10 @@
             <button class="top-btn" onclick="createStickyNote()" data-tip="在画布中心新建一个可缩放的文本便签">
                 <span class="material-symbols-outlined" style="font-size: 16px;">sticky_note_2</span> 新建便签
             </button>
+            
+            <button class="top-btn" onclick="logout()" data-tip="退出登录并清除浏览器密钥缓存">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--danger);">logout</span> 退出
+            </button>
         </div>
     </div>
 
@@ -81,35 +85,17 @@
         <div class="drawer-title">
             <span class="material-symbols-outlined" style="font-size:18px;">apps</span> 拖拽组件至画布
         </div>
-        
         <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'generator')">
-            <div style="background: rgba(79, 70, 229, 0.2); color: #818cf8; padding: 6px; border-radius: 6px; display: flex;">
-                <span class="material-symbols-outlined">auto_awesome</span>
-            </div>
-            <div>
-                <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">社媒灵感生成器 测试中</div>
-                <div style="font-size: 11px; color: var(--text-sub);">一键生成爆款剧本四要素</div>
-            </div>
+            <div style="background: rgba(79, 70, 229, 0.2); color: #818cf8; padding: 6px; border-radius: 6px; display: flex;"><span class="material-symbols-outlined">auto_awesome</span></div>
+            <div><div style="font-size: 13px; font-weight: 500; color: var(--text-main);">社媒灵感生成器</div><div style="font-size: 11px; color: var(--text-sub);">一键生成爆款剧本四要素</div></div>
         </div>
-
         <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'image_gen')">
-            <div style="background: rgba(10, 132, 255, 0.2); color: var(--accent); padding: 6px; border-radius: 6px; display: flex;">
-                <span class="material-symbols-outlined">brush</span>
-            </div>
-            <div>
-                <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">Neo gpt-image-2生图</div>
-                <div style="font-size: 11px; color: var(--text-sub);">支持 1-5 张垫图合并创作</div>
-            </div>
+            <div style="background: rgba(10, 132, 255, 0.2); color: var(--accent); padding: 6px; border-radius: 6px; display: flex;"><span class="material-symbols-outlined">brush</span></div>
+            <div><div style="font-size: 13px; font-weight: 500; color: var(--text-main);">Neo gpt-image-2生图</div><div style="font-size: 11px; color: var(--text-sub);">支持 1-5 张垫图合并创作</div></div>
         </div>
-
         <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'cropper')">
-            <div style="background: rgba(50, 215, 75, 0.2); color: var(--success); padding: 6px; border-radius: 6px; display: flex;">
-                <span class="material-symbols-outlined">crop</span>
-            </div>
-            <div>
-                <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">图片裁切器</div>
-                <div style="font-size: 11px; color: var(--text-sub);">提取局部画面直接复用</div>
-            </div>
+            <div style="background: rgba(50, 215, 75, 0.2); color: var(--success); padding: 6px; border-radius: 6px; display: flex;"><span class="material-symbols-outlined">crop</span></div>
+            <div><div style="font-size: 13px; font-weight: 500; color: var(--text-main);">图片裁切器</div><div style="font-size: 11px; color: var(--text-sub);">提取局部画面直接复用</div></div>
         </div>
     </div>
 
@@ -200,13 +186,11 @@
             <button class="help-close" onclick="closeBillingModal()">&times;</button>
             <h2 style="justify-content: center; margin-bottom: 8px;"><span class="material-symbols-outlined" style="color:var(--success); font-size: 28px;">account_balance_wallet</span> 数据中心</h2>
             <p style="color: var(--text-sub); font-size: 12px; margin-bottom: 28px;">账单记录永久绑定浏览器，删除画布卡片不影响统计</p>
-            
             <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; margin-bottom: 20px; position: relative; overflow: hidden;">
                 <div style="position:absolute; top:-20px; right:-20px; width:100px; height:100px; background:var(--success); filter:blur(60px); opacity:0.2;"></div>
                 <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">累计生成消耗总额</div>
                 <div id="bill-total" style="font-size: 42px; font-family: monospace; font-weight: bold; color: var(--success); text-shadow: 0 0 20px rgba(50,215,75,0.4);">￥0.000</div>
             </div>
-
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 20px;">
                     <span class="material-symbols-outlined" style="color:var(--accent); font-size: 28px; margin-bottom: 8px;">movie</span>

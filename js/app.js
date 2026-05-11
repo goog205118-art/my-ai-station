@@ -348,24 +348,29 @@ function bindMainConsoleDrop(slotId, stateKey) {
 function toggleRefPopover(e) { e.stopPropagation(); if (payloadState.references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 function switchMode(mode) { payloadState.currentMode = mode; document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); document.getElementById(`tab-${mode}`).classList.add('active'); document.getElementById(`slots-${mode}`).classList.add('active'); }
 
-// 🌟 核心更新：切换 4K 模型时动态禁用首尾帧
+// 🌟 核心更新：切换 4K 模型时动态禁用首尾帧与优雅提示
 function updateModel(select) { 
     payloadState.model = select.value; 
     document.getElementById('model-text').innerText = select.options[select.selectedIndex].text; 
     
-    // 🌟 针对 4K 模型的特殊限制：动态禁用首尾帧
+    // 针对 4K 模型的特殊限制：动态禁用首尾帧
     const frameTab = document.getElementById('tab-frame');
     if (select.value.toLowerCase().includes('4k')) {
+        
+        // 优化：只要切到 4K，就必然弹出蓝色温馨提示
+        showToast("Veo 3.1 4K 模型不支持首尾帧，请使用参考图模式。", "info");
+        
+        // 如果当前正好在首尾帧模式，强制切回参考图
         if (payloadState.currentMode === 'frame') {
-            switchMode('ref'); // 强制切回参考图模式
-            // 🌟 换成专属的 Info 级别提示
-            setTimeout(() => showToast("Veo 3.1 4K 模型不支持首尾帧，已为您切换至参考图模式。", "info"), 50);
+            switchMode('ref'); 
         }
-        }
+        
+        // 将首尾帧按钮置灰并禁用点击
         frameTab.style.opacity = '0.3';
         frameTab.style.pointerEvents = 'none';
         frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)');
     } else {
+        // 切回普通模型，恢复首尾帧按钮
         frameTab.style.opacity = '1';
         frameTab.style.pointerEvents = 'auto';
         frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');

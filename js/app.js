@@ -358,8 +358,6 @@ function updateModel(select) {
     if (select.value.toLowerCase().includes('4k')) {
         if (payloadState.currentMode === 'frame') {
             switchMode('ref'); // 强制切回参考图模式
-            if (payloadState.currentMode === 'frame') {
-            switchMode('ref'); // 强制切回参考图模式
             // 🌟 换成专属的 Info 级别提示
             setTimeout(() => showToast("Veo 3.1 4K 模型不支持首尾帧，已为您切换至参考图模式。", "info"), 50);
         }

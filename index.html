@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Veo Studio - Infinity Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css">
-    
     <script>
         let adminPwd = sessionStorage.getItem('veo_admin_pwd');
         if (!adminPwd) {
@@ -26,11 +26,14 @@
             <span class="material-symbols-outlined">account_tree</span> Veo Studio <span style="font-size:12px; color:var(--text-sub); font-weight:normal;">/ Infinity Flow</span>
         </div>
         <div class="top-actions">
-            <button class="top-btn" onclick="openHelpModal()" data-tip="查看 Infinity Flow 使用指南与快捷键">
-                <span class="material-symbols-outlined" style="font-size: 16px;">help</span> 使用教程
+            <button class="top-btn" id="billing-top-btn" onclick="openBillingModal()" data-tip="查看 API 消耗与全服账单流水">
+                <span class="material-symbols-outlined" style="font-size: 16px; color:var(--success);">account_balance_wallet</span> <span id="top-bill-text">￥0.000</span>
             </button>
             <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 8px;"></div>
 
+            <button class="top-btn" onclick="openHelpModal()" data-tip="查看 Infinity Flow 使用指南与快捷键">
+                <span class="material-symbols-outlined" style="font-size: 16px;">help</span> 使用教程
+            </button>
             <button class="top-btn" id="export-btn" onclick="exportWorkspace()" data-tip="将当前画布所有素材与记录打包为 .veo 文件">
                 <span class="material-symbols-outlined" style="font-size: 16px;">download</span> 导出工程
             </button>
@@ -167,38 +170,43 @@
 
     <div id="global-tooltip" class="global-tooltip"></div>
 
+    <div id="billing-modal" class="help-modal" onclick="closeBillingModal()">
+        <div class="help-content" style="max-width: 440px; text-align: center; padding: 40px;" onclick="event.stopPropagation()">
+            <button class="help-close" onclick="closeBillingModal()">&times;</button>
+            <h2 style="justify-content: center; margin-bottom: 8px;"><span class="material-symbols-outlined" style="color:var(--success); font-size: 28px;">account_balance_wallet</span> 数据中心</h2>
+            <p style="color: var(--text-sub); font-size: 12px; margin-bottom: 28px;">账单记录永久绑定浏览器，删除画布卡片不影响统计</p>
+            
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; margin-bottom: 20px; position: relative; overflow: hidden;">
+                <div style="position:absolute; top:-20px; right:-20px; width:100px; height:100px; background:var(--success); filter:blur(60px); opacity:0.2;"></div>
+                <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">累计生成消耗总额</div>
+                <div id="bill-total" style="font-size: 42px; font-family: monospace; font-weight: bold; color: var(--success); text-shadow: 0 0 20px rgba(50,215,75,0.4);">￥0.000</div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 20px;">
+                    <span class="material-symbols-outlined" style="color:var(--accent); font-size: 28px; margin-bottom: 8px;">movie</span>
+                    <div style="font-size: 24px; font-weight: bold; color: #fff; font-family: monospace;" id="bill-video-count">0</div>
+                    <div style="font-size: 12px; color: var(--text-sub); margin-top: 4px;">成功出片</div>
+                </div>
+                <div style="flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 20px;">
+                    <span class="material-symbols-outlined" style="color:#818cf8; font-size: 28px; margin-bottom: 8px;">brush</span>
+                    <div style="font-size: 24px; font-weight: bold; color: #fff; font-family: monospace;" id="bill-image-count">0</div>
+                    <div style="font-size: 12px; color: var(--text-sub); margin-top: 4px;">成功生图</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="help-modal" class="help-modal" onclick="closeHelpModal()">
         <div class="help-content" onclick="event.stopPropagation()">
             <button class="help-close" onclick="closeHelpModal()">&times;</button>
             <h2><span class="material-symbols-outlined" style="color:var(--accent);">explore</span> Infinity Flow 创作者指南</h2>
-            
             <div class="help-section">
                 <h3>🎨 画布基础操作</h3>
                 <ul>
                     <li><strong>平移与缩放</strong>：按住左键拖动空白处平移；滚轮上下滚动无级缩放。</li>
-                    <li><strong>极速落图 (Ctrl+V)</strong>：在任意处截图或复制后，直接在画布按 <code>Ctrl+V</code> 粘贴，瞬间落图。</li>
-                    <li><strong>沉浸式放大</strong>：双击任意图片（本地/生成结果/缩略图），即可全屏高清模糊预览。</li>
-                    <li><strong>快捷便签</strong>：双击画布空白处，即可新建文本排版便签。</li>
-                    <li><strong>关于删除</strong>：Shift+鼠标左键可进行点按或拉框批量选择节点 点按Delete进行删除 Ctrl+A可全选</li>
-                    <li><strong>其他功能</strong>：你可在电脑任意地方拖拽图片入画布，反之亦然</li>
-                </ul>
-            </div>
-
-            <div class="help-section">
-                <h3>🎬 视频与生图流转</h3>
-                <ul>
-                    <li><strong>素材直连拖拽</strong>：按住画布上的图片，可直接拖入底部控制台或生图组件中。</li>
-                    <li><strong>双通道生图</strong>：生图组件内置主备双通道 API，拥堵时下拉一键热切换。</li>
-                    <li><strong>夜间全自动挂机</strong>：生图与视频均支持【失败自动重试】，配合【并行生成】无脑产出。</li>
-                    <li><strong>一键提取参数</strong>：点击历史生成卡片的 📝 图标，参数与垫图反填至控制台。</li>
-                </ul>
-            </div>
-
-            <div class="help-section">
-                <h3>💡 灵感提取插件</h3>
-                <ul>
-                    <li><strong>摇骰子玩法</strong>：从左侧工具箱拖出【社媒灵感生成器】，点击随机抽取爆款属性。</li>
-                    <li><strong>极速反填</strong>：点击【应用至控制台】，结构化剧本自动填入底部 Prompt 输入框。</li>
+                    <li><strong>极速落图 (Ctrl+V)</strong>：在任意处截图后，直接在画布按 <code>Ctrl+V</code> 粘贴，瞬间落图。</li>
+                    <li><strong>多选与清理</strong>：按住 <code>Shift</code> 拖拽可框选卡片，按 <code>Delete</code> 一键删除。</li>
                 </ul>
             </div>
         </div>

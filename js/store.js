@@ -43,7 +43,6 @@ class VeoStore {
         switch (action) {
             case 'SET_MODEL':
                 this.state.model = payload.value;
-                // 数据改完后，广播两条消息：一条给UI换文字，一条给系统判断逻辑
                 sysBus.emit('UI:UPDATE_MODEL_TEXT', payload.text);
                 sysBus.emit('SYSTEM:MODEL_CHANGED', payload.value);
                 break;

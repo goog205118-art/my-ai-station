@@ -1,9 +1,10 @@
 // ==========================================
 // 🟢 核心应用逻辑
 // ==========================================
-// ==========================================
+
+// ==============================
 // 🎬 登录舱与系统初始化逻辑 (Login Gate)
-// ==========================================
+// ==============================
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
     const savedPwd = sessionStorage.getItem('veo_admin_pwd');
@@ -13,54 +14,42 @@ document.addEventListener('DOMContentLoaded', () => {
         gate.style.display = 'none';
         return;
     }
-    
-    // 如果没有，等待用户交互
-    // 注意：此时底层的 initDB 和 renderBoard 已经在暗中加载了，这就实现了“秒进”体验！
 });
 
-// 运镜 1：从初始按钮推进到密码面板
 function startLoginTransition() {
     document.getElementById('gate-step-1').classList.remove('step-active');
-    document.getElementById('gate-step-1').classList.add('step-passed'); // 旧元素飞出屏幕
+    document.getElementById('gate-step-1').classList.add('step-passed'); 
     
     setTimeout(() => {
-        document.getElementById('gate-step-2').classList.add('step-active'); // 新面板推入焦距
+        document.getElementById('gate-step-2').classList.add('step-active'); 
         document.getElementById('studio-pwd-input').focus();
-    }, 200); // 稍微延迟，制造交错的电影感
+    }, 200); 
 }
 
-// 运镜 2：验证成功，解锁进入工作台
 function handleLoginSubmit(e) {
-    e.preventDefault(); // 阻止表单默认刷新页面行为
+    e.preventDefault(); 
     
     const pwdInput = document.getElementById('studio-pwd-input').value.trim();
     const btn = document.getElementById('login-submit-btn');
     
     if (!pwdInput) return showToast("请输入密钥", "error");
 
-    // 按钮变为加载状态
     btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;
     btn.style.pointerEvents = 'none';
 
-    // 模拟一下网络验证的延迟感（让动画表现更从容）
     setTimeout(() => {
-        // 保存密码到 Session (用于后续的所有 API 请求)
         sessionStorage.setItem('veo_admin_pwd', pwdInput);
         
-        // 播放解锁运镜动画！
         btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> 验证通过`;
         btn.style.background = 'var(--success)';
         
         setTimeout(() => {
-            // 面板飞出屏幕
             document.getElementById('gate-step-2').classList.remove('step-active');
             document.getElementById('gate-step-2').classList.add('step-passed');
             
-            // 整个遮罩层淡出，暴露出底下已经准备就绪的 Infinity Flow 画布
             const gate = document.getElementById('login-gate');
             gate.classList.add('unlocked');
             
-            // 动画播放完毕后彻底移除 DOM 节点，释放性能
             setTimeout(() => {
                 gate.remove();
                 showToast("欢迎回来，指挥官。", "success");
@@ -69,6 +58,7 @@ function handleLoginSubmit(e) {
 
     }, 600);
 }
+
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
@@ -78,6 +68,15 @@ let activeRetries = new Set();
 
 function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index > -1) activeTasks.splice(index, 1); }
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
+
+// ==============================
+// 🔐 核心新增：自动踢回登录舱的安全自愈引擎
+// ==============================
+function handleAuthError() {
+    sessionStorage.removeItem('veo_admin_pwd'); // 销毁错误的假钥匙
+    showToast("密钥验证失败或已过期，即将退回登录舱", "error");
+    setTimeout(() => location.reload(), 1500); // 强制刷新重载 3D 大门
+}
 
 // ==============================
 // 💰 全局账单与费用统计 UI 控制
@@ -480,7 +479,6 @@ async function importWorkspace(input) {
                     await saveTaskDB(t);
                 }
                 renderBoard();
-                // 导入可能包含历史账单的卡片，刷新一次UI
                 await updateBillingUI();
             }
         } catch(err) { alert('❌ 文件解析失败，请确保导入的是有效的 .veo 格式文件'); }
@@ -661,7 +659,10 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
         const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
-        if (response.status === 401 || response.status === 403) throw new Error("密码错误");
+        
+        // 🌟 拦截密码错误并启动自愈程序
+        if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+        
         const data = await response.json();
 
         if (data.taskId) {
@@ -674,7 +675,7 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
                 id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, 
                 rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', 
                 status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY,
-                isBilled: false // 🌟 初始化计费锁
+                isBilled: false 
             };
             await saveTaskDB(newTask); await renderBoard(); 
         }
@@ -689,7 +690,10 @@ async function retryTask(taskId, btnElement) {
     try {
         const apiPayload = { model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false, firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame), references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
-        if (response.status === 401 || response.status === 403) throw new Error("密码错误");
+        
+        // 🌟 拦截密码错误并启动自愈程序
+        if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+        
         const data = await response.json();
 
         if (data.taskId) { 
@@ -697,7 +701,7 @@ async function retryTask(taskId, btnElement) {
             task.id = data.taskId; task.status = 'processing'; task.progress = null; 
             task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); 
             task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); 
-            task.isBilled = false; // 🌟 重新发起任务时解锁计费
+            task.isBilled = false; 
             await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); 
         } else throw new Error("无返回 ID");
     } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
@@ -712,16 +716,17 @@ function startTaskPolling(taskId) {
             if (!task) { removeActiveTask(taskId); return; }
 
             const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-studio-pwd': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
-            if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); return; }
+            
+            // 🌟 拦截密码错误并启动自愈程序
+            if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); handleAuthError(); return; }
             
             const data = await response.json();
 
             if (data.status === 'success' && data.videoUrl) { 
                 removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
                 
-                // 🌟 计费探针：视频通道扣费
                 if (!task.isBilled) {
-                    let cost = 0.13; // 默认 veo 3.1 垫图
+                    let cost = 0.13; 
                     let detailDesc = "Veo 3.1 Fast (参考图)";
                     if (task.modelVal.toLowerCase().includes('4k')) {
                         cost = 0.43;
@@ -826,7 +831,7 @@ async function submitImgGen(id) {
 
     task.status = 'processing';
     task.retryCount = 0; 
-    task.isBilled = false; // 🌟 重新发起生成时重置计费锁
+    task.isBilled = false; 
     await saveTaskDB(task); renderBoard();
 
     const apiPayload = {
@@ -849,8 +854,8 @@ async function submitImgGen(id) {
                 body: JSON.stringify(apiPayload) 
             });
 
-            if (response.status === 401 || response.status === 403) throw new Error("控制台安全密码错误");
-            if (!response.ok) throw new Error("生图接口报错: " + response.status);
+            // 🌟 拦截密码错误并启动自愈程序
+            if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
             
             const data = await response.json();
 
@@ -860,12 +865,10 @@ async function submitImgGen(id) {
                 task.status = 'success';
                 success = true;
 
-                // 🌟 计费探针：生图通道扣费
                 if (!task.isBilled) {
                     const isChannel2 = task.state.channel === 'channel_2';
                     const cost = isChannel2 ? 0.060 : 0.084;
                     const cName = isChannel2 ? '备用节点' : '主节点';
-                    // 用当前时间戳防止重复记账
                     await addBillingRecord({ id: 'bill_img_' + task.id + '_' + Date.now(), taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${cName})` });
                     task.isBilled = true;
                     updateBillingUI();

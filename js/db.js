@@ -3,15 +3,20 @@
 // ==========================================
 const DB_NAME = 'VeoInfinityDB';
 let db;
-const blobUrlCache = new Map(); // 🌟 URL 缓存锁：现在存储 { url, blob } 实现精准对比
+const blobUrlCache = new Map(); 
 
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 2); 
+        const request = indexedDB.open(DB_NAME, 3); // 🌟 无损升级至版本 3
         request.onupgradeneeded = (e) => {
             let database = e.target.result;
+            // 保留原有的任务表
             if (!database.objectStoreNames.contains('tasks')) {
                 database.createObjectStore('tasks', { keyPath: 'id' });
+            }
+            // 🌟 核心新增：不可篡改的账单流水表
+            if (!database.objectStoreNames.contains('billing')) {
+                database.createObjectStore('billing', { keyPath: 'id' });
             }
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -19,19 +24,39 @@ function initDB() {
     });
 }
 
+// 🌟 新增：记账中心 API
+async function addBillingRecord(record) {
+    return new Promise((resolve) => {
+        const tx = db.transaction('billing', 'readwrite');
+        tx.objectStore('billing').put({ ...record, timestamp: Date.now() });
+        tx.oncomplete = () => resolve();
+    });
+}
+
+async function getBillingStats() {
+    return new Promise((resolve) => {
+        const tx = db.transaction('billing', 'readonly');
+        const request = tx.objectStore('billing').getAll();
+        request.onsuccess = () => {
+            const records = request.result || [];
+            let totalCost = 0, imageCount = 0, videoCount = 0;
+            records.forEach(r => {
+                totalCost += (r.cost || 0);
+                if (r.type === 'image') imageCount++;
+                if (r.type === 'video') videoCount++;
+            });
+            resolve({ totalCost: totalCost.toFixed(3), imageCount, videoCount, records });
+        };
+    });
+}
+
+// === 以下为原有逻辑，保持不变 ===
 function getBlobUrl(id, blobData) {
     if (!blobData) return '';
     if (typeof blobData === 'string') return blobData; 
-    
-    if (blobUrlCache.has(id)) {
-        const cached = blobUrlCache.get(id);
-        // 🌟 终极修复：严格比对内存对象。如果位置相同但图片换了，直接销毁旧缓存！
-        if (cached.blob === blobData) return cached.url; 
-        URL.revokeObjectURL(cached.url);
-    }
-    
+    if (blobUrlCache.has(id)) return blobUrlCache.get(id);
     const url = URL.createObjectURL(blobData);
-    blobUrlCache.set(id, { url: url, blob: blobData });
+    blobUrlCache.set(id, url);
     return url;
 }
 
@@ -94,10 +119,9 @@ async function deleteTaskDB(id) {
         const tx = db.transaction('tasks', 'readwrite');
         tx.objectStore('tasks').delete(id);
         tx.oncomplete = () => {
-            // 🌟 连根拔起：适配最新的 cacheObj 数据结构
-            for (let [key, cacheObj] of blobUrlCache.entries()) {
+            for (let [key, url] of blobUrlCache.entries()) {
                 if (key.toString().startsWith(id)) {
-                    URL.revokeObjectURL(cacheObj.url || cacheObj); 
+                    URL.revokeObjectURL(url);
                     blobUrlCache.delete(key);
                 }
             }

@@ -73,6 +73,16 @@
                 <div style="font-size: 11px; color: var(--text-sub);">支持 1-5 张垫图合并创作</div>
             </div>
         </div>
+
+        <div class="draggable-tool" draggable="true" ondragstart="event.dataTransfer.setData('plugin', 'cropper')">
+            <div style="background: rgba(50, 215, 75, 0.2); color: var(--success); padding: 6px; border-radius: 6px; display: flex;">
+                <span class="material-symbols-outlined">crop</span>
+            </div>
+            <div>
+                <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">图片裁切器</div>
+                <div style="font-size: 11px; color: var(--text-sub);">提取局部画面直接复用</div>
+            </div>
+        </div>
     </div>
 
     <div class="canvas-viewport" id="canvas-viewport" data-tip="双击空白处：快速新建文本便签">
@@ -133,11 +143,11 @@
                     <span class="material-symbols-outlined" id="ratio-icon">crop_portrait</span><span id="ratio-text">竖屏 9:16</span>
                     <select id="ratio-select" onchange="updateRatio(this)"><option value="9:16">竖屏 9:16</option><option value="16:9">横屏 16:9</option></select>
                 </div>
-                <div class="action-pill" id="pill-enhance" data-tip="开启后，支持将中文提示词转化为英文理解">
+                <div class="action-pill" id="pill-enhance" data-tip="开启后，系统会自动为您扩写丰富提示词细节">
                     <span class="material-symbols-outlined">auto_fix_high</span><span id="enhance-text">AI 扩写提示词</span>
                     <select id="enhance-select" onchange="updateEnhance(this)"><option value="true">AI 扩写提示词</option><option value="false">原词生成</option></select>
                 </div>
-                <div class="action-pill" id="pill-upsample" data-tip="开启超分辨率提升画质（生成时间会变长，有涂抹感）">
+                <div class="action-pill" id="pill-upsample" data-tip="开启超分辨率提升画质（生成时间会变长）">
                     <span class="material-symbols-outlined">high_quality</span><span id="upsample-text">标准画质</span>
                     <select id="upsample-select" onchange="updateUpsample(this)"><option value="false">标准画质</option><option value="true">开启超分 (更慢)</option></select>
                 </div>
@@ -145,7 +155,7 @@
                     <span class="material-symbols-outlined" style="color:var(--accent)">layers</span><span id="batch-text" style="color:var(--accent)">单次 (x1)</span>
                     <select id="batch-select" onchange="document.getElementById('batch-text').innerText = this.options[this.selectedIndex].text;"><option value="1">单次 (x1)</option><option value="2">并行 (x2)</option></select>
                 </div>
-                <div class="action-pill" style="border-color: rgba(50, 215, 75, 0.4);" data-tip="遇网络波动失败时，系统将自动重新发起生成">
+                <div class="action-pill" style="border-color: rgba(50, 215, 75, 0.4);" data-tip="挂机神器：遇网络波动失败时，系统将自动重新发起生成">
                     <span class="material-symbols-outlined" style="color:var(--success)">autorenew</span><span id="retry-text" style="color:var(--success)">不自动重试</span>
                     <select id="retry-select" onchange="updateAutoRetry(this)"><option value="false">不自动重试</option><option value="true">失败自动重试</option></select>
                 </div>
@@ -168,7 +178,6 @@
                     <li><strong>极速落图 (Ctrl+V)</strong>：在任意处截图后，直接在画布按 <code>Ctrl+V</code> 粘贴，瞬间落图。</li>
                     <li><strong>沉浸式放大</strong>：双击任意图片（本地/生成结果/缩略图），即可全屏高清模糊预览。</li>
                     <li><strong>快捷便签</strong>：双击画布空白处，即可新建文本排版便签。</li>
-                    <li><strong>其他功能</strong>：支持电脑任意图片拖拽/粘贴入画布。</li>
                 </ul>
             </div>
 
@@ -177,9 +186,8 @@
                 <ul>
                     <li><strong>素材直连拖拽</strong>：按住画布上的图片，可直接拖入底部控制台或生图组件中。</li>
                     <li><strong>双通道生图</strong>：生图组件内置主备双通道 API，拥堵时下拉一键热切换。</li>
-                    <li><strong>全自动挂机</strong>：生图与视频均支持【失败自动重试】，配合【并行生成】无脑产出。</li>
-                    <li><strong>一键提取参数</strong>：点击历史生成卡片的 📝 图标，参数与垫图反填至控制台。</li>
-                    <li><strong>注意事项</strong>：veo系列模型英语提示词理解最佳，尽量使用英语输入。</li>
+                    <li><strong>夜间全自动挂机</strong>：生图与视频均支持【失败自动重试】，配合【并行生成】无脑产出。</li>
+                    <li><strong>一键提取参数</strong>：点击历史生成卡片的 📝 图标，参数与垫图瞬间反填至控制台。</li>
                 </ul>
             </div>
 
@@ -187,14 +195,14 @@
                 <h3>💡 灵感提取插件</h3>
                 <ul>
                     <li><strong>摇骰子玩法</strong>：从左侧工具箱拖出【社媒灵感生成器】，点击随机抽取爆款属性。</li>
-                    <li><strong>极速反填</strong>：点击【应用至控制台】，结构化剧本自动填入底部 Prompt 输入框。</li>
+                    <li><strong>极速反填</strong>：点击【应用至控制台】，结构化剧本瞬间自动填入底部 Prompt 输入框。</li>
                 </ul>
             </div>
         </div>
     </div>
 
     <script src="js/db.js"></script>
-    <script src="js/store.js"></script>
+    <script src="js/store.js"></script> 
     <script src="js/app.js"></script>
 </body>
 </html>

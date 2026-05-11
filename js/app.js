@@ -137,7 +137,7 @@ function handleLoginSubmit(e) {
                 // 🌟 核心卸载：关闭粒子引擎，彻底释放 GPU 给系统工作台！
                 if (loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
-                showToast("欢迎回来，指挥官。", "success");
+                showToast("欢迎回来", "success");
             }, 800);
         }, 400);
 

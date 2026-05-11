@@ -117,7 +117,7 @@ window.addEventListener('mousemove', (e) => {
                 draggingCardInfo.task.x = draggingCardInfo.initialX + dx;
                 draggingCardInfo.task.y = draggingCardInfo.initialY + dy;
                 
-                draggingCardInfo.el.style.transform = `translate3d(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px, 0)`;
+                draggingCardInfo.el.style.transform = `translate(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px)`;
             }
             ticking = false;
         });
@@ -775,7 +775,7 @@ async function renderBoard() {
             else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; 
             else cardEl.className = 'video-card';
             
-            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
+            cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`;
             cardEl.innerHTML = generateCardHTML(task); 
             board.appendChild(cardEl); 
             bindCardDrag(cardEl, task);
@@ -783,7 +783,7 @@ async function renderBoard() {
             if (task.type === 'note') cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
             if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); }
         } else {
-            cardEl.style.transform = `translate3d(${task.x}px, ${task.y}px, 0)`;
+            cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`;
             if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
             
             const oldStatus = cardEl.getAttribute('data-sync-status');

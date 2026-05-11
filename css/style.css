@@ -283,8 +283,8 @@ body {
 
 .login-gate {
     position: fixed; inset: 0; z-index: 99999;
-    /* 🌟 替换为你的 2K 光影神图 */
-    background: url('../变清晰_突出光影感_2K_202605120056.jpg') no-repeat center center;
+    /* 🌟 核心修复：将后缀名改为了 .webp，与你仓库里的文件完全一致 */
+    background: url('../变清晰_突出光影感_2K_202605120056.webp') no-repeat center center;
     background-size: cover;
     display: flex; justify-content: center; align-items: center;
     perspective: 1000px; 

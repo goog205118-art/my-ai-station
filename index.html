@@ -291,6 +291,40 @@
         <canvas id="minimap-canvas"></canvas>
         <div class="minimap-viewport-box" id="minimap-viewport-box"></div>
     </div>
+
+    </div> 
+
+    <div id="announcement-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 420px; border: 1px solid var(--accent);">
+            <div class="modal-header">
+                <span class="material-symbols-outlined" style="color: var(--accent);">campaign</span>
+                <span style="font-weight: 600; letter-spacing: 1px;">系统升级公告</span>
+            </div>
+            <div class="modal-body" style="padding: 20px; font-size: 13px; line-height: 1.8; color: var(--text-main);">
+                <p style="margin-bottom: 15px; color: var(--accent); font-weight: 600;">⚠️ 模型下架与更替通知：</p>
+                <p>由于官方接口调整，原 <span style="text-decoration: line-through; opacity: 0.6;">Fast 系列模型</span> 已正式下架。现已全面替换为<span style="color: var(--success);">高质量标准模型</span>，生成质量大幅提升，价格同步调整如下：</p>
+                
+                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; margin: 15px 0; border-left: 3px solid var(--accent);">
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        <li>🎞️ 视频标准模型：<span style="color: var(--accent);">￥0.35</span> /条</li>
+                        <li>🎞️ 视频 4K 模型：<span style="color: var(--accent);">￥0.50</span> /条</li>
+                        <li>🎨 生图通道 1 (主)：<span style="color: var(--accent);">￥0.084</span> /张</li>
+                        <li>🎨 生图通道 2 (备)：<span style="color: var(--accent);">￥0.06</span> /张</li>
+                    </ul>
+                </div>
+                
+                <p style="font-size: 11px; color: var(--text-sub);">请各位指挥官知悉，感谢您的持续支持。</p>
+            </div>
+            <button class="top-btn" onclick="closeAnnouncement()" style="width: 100%; justify-content: center; background: var(--accent); color: white; border: none; padding: 12px; font-weight: 600;">
+                进入工作台
+            </button>
+        </div>
+    </div>
+
+    <script src="js/db.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/app.js"></script>
+</body>
     
     <script src="js/db.js"></script>
     <script src="js/store.js"></script> 

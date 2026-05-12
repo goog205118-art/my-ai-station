@@ -14,6 +14,10 @@ styleInj.innerHTML = `
     .minimap-container.is-minimized .minimap-toggle { display: none; }
     .minimap-icon { display: none; font-size: 24px; color: var(--accent); }
     .minimap-container.is-minimized .minimap-icon { display: block; }
+    /* 🌟 追加赛博扫描线样式 */
+    .cyber-scanner-box { width: 80%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 16px; overflow: hidden; position: relative; }
+    .cyber-scanner-line { height: 100%; width: 30%; background: var(--accent); box-shadow: 0 0 10px var(--accent); border-radius: 2px; animation: scanAnim 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate; }
+    @keyframes scanAnim { 0% { transform: translateX(0); } 100% { transform: translateX(233%); } }
     
     .frame-resize-handle {
         position: absolute; bottom: 0; right: 0; width: 28px; height: 28px;
@@ -267,12 +271,25 @@ async function checkGroupDrop(draggedInfo) {
     const cardCenter = { x: task.x + (task.width || 340)/2, y: task.y + (task.height || 400)/2 };
     
     const frames = Array.from(document.querySelectorAll('.frame-box')).map(el => el.__veoTask).filter(t => t && t.type === 'frame' && !t.isCollapsed);
-    let droppedIntoFrame = null;
+    let validFrames = [];
     
     for (let f of frames) {
         if (cardCenter.x > f.x && cardCenter.x < f.x + f.width && cardCenter.y > f.y && cardCenter.y < f.y + f.height) {
-            droppedIntoFrame = f.id; break;
+            validFrames.push(f);
         }
+    }
+
+    let droppedIntoFrame = null;
+    if (validFrames.length > 0) {
+        // 🌟 核心修复：多框架重叠时，按 CSS Z-Index 层级排序，确保进到最上层的框架里！
+        validFrames.sort((a, b) => {
+            const elA = document.getElementById('card-' + a.id);
+            const elB = document.getElementById('card-' + b.id);
+            const zA = parseInt(elA ? elA.style.zIndex || 0 : 0);
+            const zB = parseInt(elB ? elB.style.zIndex || 0 : 0);
+            return zB - zA;
+        });
+        droppedIntoFrame = validFrames[0].id;
     }
 
     if (droppedIntoFrame) {
@@ -434,7 +451,8 @@ function bindCardDrag(cardEl, task) {
             }
             draggingCardInfo = { el: cardEl, task: cardEl.__veoTask, startMouseX: e.clientX, startMouseY: e.clientY, initialX: cardEl.__veoTask.x || 0, initialY: cardEl.__veoTask.y || 0 }; 
             
-            if (task.type === 'frame' && !task.isCollapsed) {
+            // 🌟 修复：无论组是否被折叠收起，移动时子节点必须跟随！
+            if (task.type === 'frame') {
                 draggingCardInfo.children = [];
                 document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
                     if (childEl.__veoTask && childEl.__veoTask.parentId === task.id) {
@@ -857,8 +875,13 @@ function generateCardHTML(task) {
     let statusBadge = '', mediaHtml = ''; const thumbImg = task.rawImages && (task.rawImages.firstFrame || (task.rawImages.references && task.rawImages.references[0])); const thumbUrl = getBlobUrl(task.id + '_thumb', thumbImg);
     if (task.status === 'processing') { 
         const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : ''; statusBadge = `<span class="status-badge processing">生成中...${retryTxt}</span>`; 
-        let progressHtml = task.progress ? `<div style="width: 80%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 16px; overflow: hidden; position: relative;"><div style="height: 100%; background: var(--accent); width: ${task.progress}; transition: width 0.5s ease-out; box-shadow: 0 0 10px var(--accent);"></div></div><div style="font-size: 11px; color: var(--accent); margin-top: 8px; font-weight: 600; font-family: monospace;">${task.progress}</div>` : '';
-        mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')}; padding: 20px;"><div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text" style="margin-top: ${task.progress ? '12px' : '16px'};">视频生成中...</div>${progressHtml}</div></div>`; 
+        
+        // 🌟 新增：赛博扫描线动画，替代原来的进度条和百分比
+        let progressHtml = `
+            <div class="cyber-scanner-box"><div class="cyber-scanner-line"></div></div>
+            <div style="font-size: 11px; color: var(--accent); margin-top: 8px; font-weight: 600; font-family: monospace; letter-spacing: 1px;">MODELS ENGAGED...</div>
+        `;
+        mediaHtml = `<div class="card-media" style="aspect-ratio: ${task.ratio.replace(':','/')}; padding: 20px;"><div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; color: var(--accent);"><svg class="spinner" viewBox="0 0 50 50" style="width:36px;height:36px;"><circle cx="25" cy="25" r="20"></circle></svg><div class="generating-text" style="margin-top: 12px;">视频生成中...</div>${progressHtml}</div></div>`; 
     } else if (task.status === 'failed') { statusBadge = `<span class="status-badge failed">失败</span>`; mediaHtml = `<div class="card-media" style="background:#2c2c2e; color:var(--danger); aspect-ratio: ${task.ratio.replace(':','/')}; font-size:12px;">生成超时或失败</div>`; 
     } else { statusBadge = `<span class="status-badge success">已完成</span>`; mediaHtml = `<div class="card-media" data-tip="双击全屏播放视频"><video src="${task.videoUrl}" preload="none" poster="${thumbUrl || ''}" controls playsinline ondblclick="this.requestFullscreen()"></video></div>`; }
     
@@ -904,14 +927,22 @@ async function renderBoard() {
             else if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
             
             const oldStatus = cardEl.getAttribute('data-sync-status'), oldRetry = cardEl.getAttribute('data-sync-retry'), oldImgLen = cardEl.getAttribute('data-sync-img-len'), oldProgress = cardEl.getAttribute('data-sync-progress'), oldCropSrc = cardEl.getAttribute('data-sync-crop-src'), oldCropRes = cardEl.getAttribute('data-sync-crop-res'), oldChannel = cardEl.getAttribute('data-sync-channel'); 
-            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel || task.type === 'frame') { cardEl.innerHTML = generateCardHTML(task); }
+            // 🌟 1. 获取新加入的追踪属性
+            const oldFrameTitle = cardEl.getAttribute('data-sync-title'), oldFrameCollapsed = cardEl.getAttribute('data-sync-collapsed');
+
+            // 🌟 2. 核心修复：去掉了会导致全盘暴力刷新的 `|| task.type === 'frame'`，改用精确对比
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel || oldFrameTitle !== task.title || oldFrameCollapsed !== String(task.isCollapsed)) { 
+                cardEl.innerHTML = generateCardHTML(task); 
+            }
         }
 
         if (isHiddenInFrame) cardEl.classList.add('hidden-in-frame'); else cardEl.classList.remove('hidden-in-frame');
 
         bindCardDrag(cardEl, task);
+        
+        // 🌟 3. 注册写入所有的追踪属性（包含新加的 title 和 collapsed）
         cardEl.setAttribute('data-sync-status', task.status || 'static'); cardEl.setAttribute('data-sync-retry', task.retryCount || 0); cardEl.setAttribute('data-sync-img-len', currentImgLen); cardEl.setAttribute('data-sync-progress', currentProgress); cardEl.setAttribute('data-sync-crop-src', cropSrc); cardEl.setAttribute('data-sync-crop-res', cropRes); cardEl.setAttribute('data-sync-channel', currentChannel); 
-    });
+        cardEl.setAttribute('data-sync-title', task.title || ''); cardEl.setAttribute('data-sync-collapsed', String(task.isCollapsed));
     renderMinimap();
 }
 

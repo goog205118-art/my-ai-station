@@ -99,6 +99,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// 呼出错误警告弹窗
+function showErrorModal() {
+    const modal = document.getElementById('error-modal');
+    modal.style.display = 'flex';
+    modal.offsetHeight; // 强制浏览器重绘
+    modal.classList.add('show');
+    
+    // 给内容框加上震动动画
+    const content = document.getElementById('error-modal-content');
+    content.classList.remove('error-shake');
+    void content.offsetWidth; // 触发重绘
+    content.classList.add('error-shake');
+}
+
+// 关闭警告弹窗
+function closeErrorModal() {
+    const modal = document.getElementById('error-modal');
+    modal.classList.remove('show');
+    setTimeout(() => modal.style.display = 'none', 300);
+    // 关闭后自动把焦点还给密码输入框
+    const input = document.getElementById('studio-pwd-input');
+    if (input) input.focus();
+}
+
 function startLoginTransition() {
     document.getElementById('gate-step-1').classList.remove('step-active');
     document.getElementById('gate-step-1').classList.add('step-passed'); 
@@ -128,7 +152,16 @@ async function handleLoginSubmit(e) {
     const pwdInput = document.getElementById('studio-pwd-input').value.trim();
     const btn = document.getElementById('login-submit-btn');
     
-    if (!pwdInput) return showToast("请输入密钥", "error");
+    // 🌟 3. 哈希门卫拦截逻辑
+        if (inputHash !== TARGET_HASH) {
+            showErrorModal(); // 💥 核心修改：呼出巨大的红色震动弹窗！
+            
+            // 验证失败，恢复按钮状态，清空输入框
+            btn.innerHTML = `验证身份 / LOGIN`;
+            btn.style.pointerEvents = 'auto';
+            document.getElementById('studio-pwd-input').value = '';
+            return; // 强制阻断，绝对不放行
+        }
 
     // 按钮变为加载状态
     btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;

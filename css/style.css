@@ -316,9 +316,13 @@ body {
     position: absolute; z-index: 10; 
     display: flex; justify-content: center; align-items: center;
     opacity: 0; pointer-events: none;
-    /* 🌟 修复3：弃用 Z 轴，改为 Y 轴 + 缩放，既保留了运镜感，又不会弄坏玻璃渲染 */
     transform: translateY(40px) scale(0.85); 
-    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    /* 🌟 补丁 1：千万不能用 transition: all，必须精确指定，防止浏览器盲目计算所有属性 */
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    /* 🌟 补丁 2：强行开启 GPU 预渲染与背面隐藏，解决初帧掉帧闪烁 */
+    will-change: opacity, transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
 .gate-step.step-active {
@@ -342,14 +346,16 @@ body {
 /* --- 移植自你模板的 Glassmorphism 表单 --- */
 .form-box {
     position: relative; width: 400px; height: 450px;
-    /* 🌟 修复4：不要用纯 transparent，给 2% 的白底，这样玻璃质感更稳定 */
-    background: rgba(255, 255, 255, 0.02);
+    /* 🌟 补丁 3：把底色白漆稍微加厚一点点（从 0.02 提升至 0.06），保证质感不透明 */
+    background: rgba(255, 255, 255, 0.06);
     border: 2px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px); /* 增加苹果浏览器兼容性 */
+    -webkit-backdrop-filter: blur(15px); 
     display: flex; justify-content: center; align-items: center;
     box-shadow: 0 30px 80px rgba(0,0,0,0.8);
+    /* 🌟 补丁 4：创建一个独立的 3D 渲染复合层，死死锁住毛玻璃状态 */
+    transform: translateZ(0); 
 }
 .form-box h2 { font-size: 32px; color: #fff; text-align: center; margin-bottom: 20px; font-family: monospace; letter-spacing: 2px; }
 

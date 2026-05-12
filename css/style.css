@@ -433,8 +433,9 @@ body {
 /* 🗺️ 全局鹰眼小地图 (Minimap) */
 /* ============================== */
 .minimap-container {
-    position: fixed; bottom: 24px; right: 24px;
+    position: fixed; bottom: 160px; right: 24px; /* 🌟 修复：上移避开底部控制台 */
     width: 200px; height: 140px;
+    /* ... 后面保持不变 */
     background: rgba(20, 20, 22, 0.7); backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -483,3 +484,17 @@ body {
 .frame-btn:hover { opacity: 1; transform: scale(1.1); }
 /* 核心：被折叠时的隐藏动画 */
 .hidden-in-frame { opacity: 0 !important; pointer-events: none !important; transform: scale(0.9) !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important; z-index: -1 !important; }
+/* 🌟 新增：框架右下角自由拉伸把手 */
+.frame-resize-handle {
+    position: absolute; bottom: 0; right: 0;
+    width: 28px; height: 28px;
+    cursor: nwse-resize;
+    z-index: 20;
+    background: linear-gradient(135deg, transparent 50%, rgba(167, 139, 250, 0.4) 50%);
+    border-bottom-right-radius: 14px;
+    pointer-events: auto;
+    transition: 0.2s;
+}
+.frame-resize-handle:hover {
+    background: linear-gradient(135deg, transparent 50%, rgba(167, 139, 250, 0.8) 50%);
+}

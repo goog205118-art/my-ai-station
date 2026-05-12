@@ -30,9 +30,6 @@ function closeErrorModal() {
     if (input) input.focus();
 }
 
-// ==============================
-// 🔐 SHA-256 军工级哈希加密算法
-// ==============================
 async function hashPassword(password) {
     const msgBuffer = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -41,7 +38,7 @@ async function hashPassword(password) {
 }
 
 // ==============================
-// 🎬 登录舱与系统初始化逻辑 (Login Gate)
+// 🎬 登录舱与系统初始化逻辑
 // ==============================
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
@@ -186,9 +183,6 @@ async function handleLoginSubmit(e) {
     }, 600);
 }
 
-// ==========================================
-// 工作台 API 与核心常量
-// ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
@@ -199,10 +193,45 @@ let activeRetries = new Set();
 function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index > -1) activeTasks.splice(index, 1); }
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 
+// 🌟 新增：切换右侧素材库
+function toggleMaterialDrawer() { document.getElementById('material-drawer').classList.toggle('open'); }
+
 function handleAuthError() {
     sessionStorage.removeItem('veo_admin_pwd'); 
     showToast("密钥验证失败或已过期，即将退回登录舱", "error");
     setTimeout(() => location.reload(), 1500); 
+}
+
+// ==============================
+// 🗂️ 全局素材库渲染引擎
+// ==============================
+async function renderMaterialLibrary() {
+    const tasks = await getAllTasksDB();
+    // 过滤出所有的本地图片
+    const materials = tasks.filter(t => t.type === 'local_image');
+    const grid = document.getElementById('material-grid');
+    if (!grid) return;
+    
+    if (materials.length === 0) {
+        grid.innerHTML = `<div style="grid-column: span 2; text-align: center; padding: 40px 0; color: var(--text-sub); font-size: 12px;">仓库空空如也</div>`;
+        return;
+    }
+
+    grid.innerHTML = materials.map(m => `
+        <div class="material-item" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${m.id}', type: 'local'}))" ondblclick="openLightbox(this.querySelector('img').src)" data-tip="按住拖拽至组件内复用，或双击全屏预览">
+            <img src="${getBlobUrl(m.id, m.src)}">
+            <button class="delete-btn material-symbols-outlined" onclick="deleteMaterial(event, '${m.id}')" data-tip="彻底删除素材">close</button>
+        </div>
+    `).join('');
+}
+
+async function deleteMaterial(e, id) {
+    e.stopPropagation();
+    if(confirm('🗑️ 确定要从素材库彻底销毁这张图片吗？')) {
+        await deleteTaskDB(id);
+        renderMaterialLibrary();
+        showToast("已销毁素材", "success");
+    }
 }
 
 // ==============================
@@ -232,9 +261,6 @@ function closeBillingModal() {
     setTimeout(() => modal.style.display = 'none', 300);
 }
 
-// ==============================
-// 🌟 动态预估开销金额感知引擎 (Tooltip版)
-// ==============================
 function updateEstimatedCost() {
     const state = globalStore.getState();
     let cost = 0.13; 
@@ -247,51 +273,41 @@ function updateEstimatedCost() {
     const batch = batchSelect ? parseInt(batchSelect.value) : 1;
     const total = (cost * batch).toFixed(2);
     
-    // 🌟 修复：将价格塞进悬浮提示框 (Tooltip) 里，而不是破坏按钮结构
     const btn = document.getElementById('generate-btn');
-    if (btn) {
-        btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
-    }
+    if (btn) btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
 }
 
-// ==============================
-// 🌟 新增：全局智能网格排版系统 (强迫症福音)
-// ==============================
+function updateBatchCount(select) {
+    document.getElementById('batch-text').innerText = select.options[select.selectedIndex].text;
+    updateEstimatedCost();
+}
+
 async function alignSelectedCards() {
     const tasks = await getAllTasksDB();
     if (tasks.length === 0) return showToast("画布上目前没有任何卡片", "info");
     
-    // 如果没有框选，就默认排列所有卡片
     let targetIds = selectedTasks.size > 0 ? Array.from(selectedTasks) : tasks.map(t => t.id);
-    let cardsToAlign = tasks.filter(t => targetIds.includes(t.id));
+    // 🌟 排版引擎排除掉被扔进仓库的本地图片
+    let cardsToAlign = tasks.filter(t => targetIds.includes(t.id) && t.type !== 'local_image');
     
-    // 根据当前视觉坐标大致排序，防止错乱
     cardsToAlign.sort((a, b) => (Math.abs(a.y) + Math.abs(a.x)) - (Math.abs(b.y) + Math.abs(b.x)));
 
-    // 找到对齐起点的基准坐标 (左上角)
     let minX = Math.min(...cardsToAlign.map(c => c.x));
     let minY = Math.min(...cardsToAlign.map(c => c.y));
     
     let currentX = minX;
     let currentY = minY;
     
-    // 设定的网格间距 (安全距离)
     const xGap = 340; 
     const yGap = 420; 
     let col = 0;
-    
-    // 自动计算屏幕宽度最多能塞下几列
     const maxCols = Math.max(3, Math.floor((window.innerWidth / transform.scale) / xGap));
 
     const promises = cardsToAlign.map(async (task) => {
         task.x = minX + (col * xGap);
         task.y = currentY;
         col++;
-        // 换行逻辑
-        if (col >= maxCols) {
-            col = 0;
-            currentY += yGap;
-        }
+        if (col >= maxCols) { col = 0; currentY += yGap; }
         await saveTaskDB(task);
     });
 
@@ -300,9 +316,6 @@ async function alignSelectedCards() {
     showToast(`🪄 空间清理完成：已自动对齐 ${cardsToAlign.length} 个节点`, "success");
 }
 
-// ==============================
-// 🍞 全局 Toast 消息系统
-// ==============================
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -312,14 +325,9 @@ function showToast(message, type = 'info') {
     }
     const toast = document.createElement('div');
     toast.className = `veo-toast toast-${type}`;
-    
-    let icon = 'info';
-    if (type === 'error') icon = 'error';
-    if (type === 'success') icon = 'check_circle';
-
+    let icon = type === 'error' ? 'error' : (type === 'success' ? 'check_circle' : 'info');
     toast.innerHTML = `<span class="material-symbols-outlined icon" style="font-size: 16px;">${icon}</span> ${message}`;
     container.appendChild(toast);
-
     setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
@@ -327,38 +335,24 @@ function showToast(message, type = 'info') {
 }
 window.alert = (msg) => showToast(msg, 'error');
 
-// ==============================
-// 💡 全局智能悬浮提示引擎 (Smart Tooltip)
-// ==============================
 let tooltipTimer = null;
 document.addEventListener('mouseover', (e) => {
     const target = e.target.closest('[data-tip]');
     if (!target) return;
-    
     tooltipTimer = setTimeout(() => {
         const tipText = target.getAttribute('data-tip');
         if (!tipText) return;
-        
         const globalTooltip = document.getElementById('global-tooltip');
         globalTooltip.innerText = tipText;
         const rect = target.getBoundingClientRect();
-        
         let x = rect.left + rect.width / 2;
         let y = rect.top;
-        
-        if (y < 60) {
-            y = rect.bottom; 
-            globalTooltip.classList.add('tooltip-bottom');
-        } else {
-            globalTooltip.classList.remove('tooltip-bottom');
-        }
-        
+        if (y < 60) { y = rect.bottom; globalTooltip.classList.add('tooltip-bottom'); } else { globalTooltip.classList.remove('tooltip-bottom'); }
         globalTooltip.style.left = `${x}px`;
         globalTooltip.style.top = `${y}px`;
         globalTooltip.classList.add('show');
     }, 500); 
 });
-
 document.addEventListener('mouseout', (e) => {
     const target = e.target.closest('[data-tip]');
     if (!target) return;
@@ -368,9 +362,7 @@ document.addEventListener('mouseout', (e) => {
 
 function openHelpModal() {
     const modal = document.getElementById('help-modal');
-    modal.style.display = 'flex';
-    modal.offsetHeight; 
-    modal.classList.add('show');
+    modal.style.display = 'flex'; modal.offsetHeight; modal.classList.add('show');
 }
 function closeHelpModal() {
     const modal = document.getElementById('help-modal');
@@ -378,9 +370,6 @@ function closeHelpModal() {
     setTimeout(() => modal.style.display = 'none', 300);
 }
 
-// ==============================
-// 🚀 核心优化：多选引擎 + 动态离合拖拽
-// ==============================
 const viewport = document.getElementById('canvas-viewport');
 const board = document.getElementById('canvas-board');
 const marquee = document.getElementById('selection-marquee'); 
@@ -576,31 +565,36 @@ function openLightbox(src) {
     lightboxEl.classList.add('show');
 }
 
+// ==============================
+// 📋 剪贴板全局粘贴引擎 (引流入库)
+// ==============================
 window.addEventListener('paste', async (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     const items = e.clipboardData?.items;
     if (!items) return;
-    let offset = 0;
+    let added = false;
     for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
             const file = items[i].getAsFile();
             if(!file) continue;
             const blob = await compressImageToBlob(file, 1024);
-            const spawnX = (-transform.x + window.innerWidth/2) / transform.scale + offset;
-            const spawnY = (-transform.y + window.innerHeight/2) / transform.scale + offset;
-            const newLocalNode = { id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, x: spawnX, y: spawnY, timestamp: Date.now() };
-            await saveTaskDB(newLocalNode);
-            offset += 40; 
+            // 🌟 抛弃坐标，直接扔进仓库
+            await saveTaskDB({ id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, timestamp: Date.now() });
+            added = true;
         }
     }
-    if (offset > 0) renderBoard();
+    if (added) {
+        await renderMaterialLibrary();
+        showToast(`✅ 已将剪贴板图片收入全局素材库`, 'success');
+        document.getElementById('material-drawer').classList.add('open');
+    }
 });
 
 const consoleEl = document.getElementById('floating-console');
 document.addEventListener('click', (e) => {
     const popover = document.getElementById('ref-popover'), slotBox = document.getElementById('slot-ref-box');
     if (popover && popover.style.display === 'flex' && !popover.contains(e.target) && !slotBox.contains(e.target)) popover.style.display = 'none';
-    if (e.target === viewport || e.target === board) { consoleEl.classList.add('minimized'); document.getElementById('tool-drawer').classList.remove('open'); } else if (consoleEl.contains(e.target)) consoleEl.classList.remove('minimized');
+    if (e.target === viewport || e.target === board) { consoleEl.classList.add('minimized'); document.getElementById('tool-drawer').classList.remove('open'); document.getElementById('material-drawer').classList.remove('open'); } else if (consoleEl.contains(e.target)) consoleEl.classList.remove('minimized');
 });
 
 async function createStickyNote(spawnX, spawnY) {
@@ -660,6 +654,7 @@ async function importWorkspace(input) {
                     await saveTaskDB(t);
                 }
                 renderBoard();
+                await renderMaterialLibrary();
                 await updateBillingUI();
             }
         } catch(err) { alert('❌ 文件解析失败，请确保导入的是有效的 .veo 格式文件'); }
@@ -671,6 +666,9 @@ async function importWorkspace(input) {
 window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
 window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
 
+// ==============================
+// 🖼️ 拖放传输引擎 (引流入库)
+// ==============================
 viewport.addEventListener('drop', async (e) => {
     e.preventDefault();
     const pluginType = e.dataTransfer.getData('plugin');
@@ -690,15 +688,20 @@ viewport.addEventListener('drop', async (e) => {
 
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-        let offset = 0;
+        let added = false;
         for (let file of files) {
             if (file.type.startsWith('image/')) {
                 const blob = await compressImageToBlob(file, 1024);
-                await saveTaskDB({ id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, x: (e.clientX - transform.x) / transform.scale + offset, y: (e.clientY - transform.y) / transform.scale + offset, timestamp: Date.now() });
-                offset += 40; 
+                // 🌟 抛弃坐标，直接扔进仓库
+                await saveTaskDB({ id: 'local_img_' + Date.now() + Math.random().toString(36).substr(2, 5), type: 'local_image', src: blob, timestamp: Date.now() });
+                added = true;
             }
         }
-        renderBoard();
+        if(added) {
+            await renderMaterialLibrary();
+            showToast(`✅ 已将拖入的图片收入全局素材库`, 'success');
+            document.getElementById('material-drawer').classList.add('open');
+        }
     }
 });
 
@@ -1216,8 +1219,6 @@ window.addEventListener('pointerup', async () => {
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
     
-    if (task.type === 'local_image') return `<div class="card-header" style="cursor:grab; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">folder_open</span> 待用素材</span><button onclick="removeTask('${task.id}')" data-tip="删除此素材" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><img src="${getBlobUrl(task.id, task.src)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'local'}))" ondblclick="openLightbox(this.src)" data-tip="双击全屏高清预览，按住可拖动复用" style="width:100%; border-radius:4px; margin-top:8px; cursor:grab; border:1px solid rgba(255,255,255,0.1);">`;
-    
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" data-tip="删除该组件" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')" data-tip="摇骰子：随机抽取一套爆款剧本组合"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)" data-tip="一键将结构化剧本反填至底部 Prompt 框"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
     if (task.type === 'tool_image_gen') {
@@ -1236,7 +1237,6 @@ function generateCardHTML(task) {
         const currentCost = isChannel2 ? '0.06' : '0.08';
         const retryStatusTxt = task.retryCount > 0 ? `(第 ${task.retryCount} 次重试...)` : '绘制中...';
         
-        // 🌟 动态卡片生图费用
         let btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像 <span style="font-family:monospace; opacity:0.8; margin-left:4px;">￥${currentCost}</span>`;
         if (isProcessing) btnContent = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> ${retryStatusTxt}`;
         if (isFailed) btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试';
@@ -1345,26 +1345,26 @@ function generateCardHTML(task) {
 
 async function renderBoard() {
     const tasks = await getAllTasksDB();
-    const taskIds = new Set(tasks.map(t => 'card-' + t.id));
+    
+    // 🌟 核心拦截：彻底禁止本地图片在主画布上渲染，只允许工作卡片上板！
+    const boardTasks = tasks.filter(t => t.type !== 'local_image');
+    const boardTaskIds = new Set(boardTasks.map(t => 'card-' + t.id));
+    
     const existingCards = Array.from(board.children);
+    existingCards.forEach(card => { if (!boardTaskIds.has(card.id)) card.remove(); });
 
-    existingCards.forEach(card => { if (!taskIds.has(card.id)) card.remove(); });
-
-    tasks.forEach(task => {
+    boardTasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0; 
         const currentProgress = task.progress || '';
 
         const cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc';
         const cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes';
-        
-        // 🌟 新增：把生图工具的节点信息加入脏检查雷达
-        const currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1';
+        const currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1'; 
 
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
             if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; }
-            else if (task.type === 'local_image') cardEl.className = 'video-card local-image-card';
             else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator';
             else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; 
             else if (task.type === 'tool_cropper') cardEl.className = 'video-card tool-cropper'; 
@@ -1387,9 +1387,8 @@ async function renderBoard() {
             const oldProgress = cardEl.getAttribute('data-sync-progress');
             const oldCropSrc = cardEl.getAttribute('data-sync-crop-src');
             const oldCropRes = cardEl.getAttribute('data-sync-crop-res');
-            const oldChannel = cardEl.getAttribute('data-sync-channel'); // 🌟 读取老雷达数据
+            const oldChannel = cardEl.getAttribute('data-sync-channel'); 
 
-            // 🌟 只要节点换了，立刻强制重绘卡片 DOM
             if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel) { 
                 cardEl.innerHTML = generateCardHTML(task); 
                 bindCardDrag(cardEl, task); 
@@ -1402,7 +1401,7 @@ async function renderBoard() {
         cardEl.setAttribute('data-sync-progress', currentProgress); 
         cardEl.setAttribute('data-sync-crop-src', cropSrc);
         cardEl.setAttribute('data-sync-crop-res', cropRes);
-        cardEl.setAttribute('data-sync-channel', currentChannel); // 🌟 更新新雷达数据
+        cardEl.setAttribute('data-sync-channel', currentChannel); 
     });
 }
 
@@ -1413,12 +1412,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initDB(); 
     board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; 
     document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; 
+    
+    // 🌟 初始化双引擎
     await renderBoard(); 
+    await renderMaterialLibrary();
+    
     bindMainConsoleDrop('slot-ref-box', 'references'); 
     bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
     bindMainConsoleDrop('slot-last-box', 'lastFrame');
     await updateBillingUI(); 
-    
-    // 初始化预估金额
     updateEstimatedCost();
 });

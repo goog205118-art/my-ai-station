@@ -283,11 +283,15 @@ body {
 
 .login-gate {
     position: fixed; inset: 0; z-index: 99999;
-    /* 🌟 核心修复：将后缀名改为了 .webp，与你仓库里的文件完全一致 */
-    background: url('../变清晰_突出光影感_2K_202605120056.webp') no-repeat center center;
+    /* 🌟 修复1：增加 #0f0f11 纯黑打底色。这样即使 2K 图没加载完，也是高级的纯黑，绝不漏底！ */
+    background-color: #0f0f11;
+    background-image: url('../变清晰_突出光影感_2K_202605120056.webp');
+    background-repeat: no-repeat;
+    background-position: center center;
     background-size: cover;
+    
     display: flex; justify-content: center; align-items: center;
-    perspective: 1000px; 
+    /* 🌟 修复2：删除了 perspective: 1000px; 它是导致毛玻璃闪烁的元凶 */
     transition: opacity 0.8s cubic-bezier(0.8, 0, 0.2, 1), backdrop-filter 0.8s;
 }
 

@@ -379,3 +379,15 @@ body {
     transition: all 0.3s;
 }
 .form-box button:hover { background: var(--accent); color: #fff; box-shadow: 0 0 20px var(--accent); }
+/* ============================== */
+/* 🚫 错误弹窗震动特效 */
+/* ============================== */
+@keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+    20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+
+.error-shake {
+    animation: errorShake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}

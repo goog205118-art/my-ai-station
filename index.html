@@ -294,13 +294,13 @@
 
     </div> 
 
-    <div id="announcement-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 420px; border: 1px solid var(--accent);">
-            <div class="modal-header">
+    <div id="announcement-modal" class="sys-modal-overlay" style="display: none;">
+        <div class="sys-modal-content">
+            <div style="padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 8px;">
                 <span class="material-symbols-outlined" style="color: var(--accent);">campaign</span>
                 <span style="font-weight: 600; letter-spacing: 1px;">系统升级公告</span>
             </div>
-            <div class="modal-body" style="padding: 20px; font-size: 13px; line-height: 1.8; color: var(--text-main);">
+            <div style="padding: 20px; font-size: 13px; line-height: 1.8; color: var(--text-main);">
                 <p style="margin-bottom: 15px; color: var(--accent); font-weight: 600;">⚠️ 模型下架与更替通知：</p>
                 <p>由于官方接口调整，原 <span style="text-decoration: line-through; opacity: 0.6;">Fast 系列模型</span> 已正式下架。现已全面替换为<span style="color: var(--success);">高质量标准模型</span>，生成质量大幅提升，价格同步调整如下：</p>
                 
@@ -315,16 +315,11 @@
                 
                 <p style="font-size: 11px; color: var(--text-sub);">请各位指挥官知悉，感谢您的持续支持。</p>
             </div>
-            <button class="top-btn" onclick="closeAnnouncement()" style="width: 100%; justify-content: center; background: var(--accent); color: white; border: none; padding: 12px; font-weight: 600;">
+            <button onclick="closeAnnouncement()" style="width: 100%; justify-content: center; background: var(--accent); color: white; border: none; padding: 14px; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                 进入工作台
             </button>
         </div>
     </div>
-
-    <script src="js/db.js"></script>
-    <script src="js/store.js"></script>
-    <script src="js/app.js"></script>
-</body>
     
     <script src="js/db.js"></script>
     <script src="js/store.js"></script> 

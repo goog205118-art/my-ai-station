@@ -943,6 +943,8 @@ async function renderBoard() {
         // 🌟 3. 注册写入所有的追踪属性（包含新加的 title 和 collapsed）
         cardEl.setAttribute('data-sync-status', task.status || 'static'); cardEl.setAttribute('data-sync-retry', task.retryCount || 0); cardEl.setAttribute('data-sync-img-len', currentImgLen); cardEl.setAttribute('data-sync-progress', currentProgress); cardEl.setAttribute('data-sync-crop-src', cropSrc); cardEl.setAttribute('data-sync-crop-res', cropRes); cardEl.setAttribute('data-sync-channel', currentChannel); 
         cardEl.setAttribute('data-sync-title', task.title || ''); cardEl.setAttribute('data-sync-collapsed', String(task.isCollapsed));
+    }); // 👈 救命的闭合括号就在这里！
+
     renderMinimap();
 }
 

@@ -183,7 +183,9 @@ function closeBillingModal() { const modal = document.getElementById('billing-mo
 
 function updateEstimatedCost() {
     const state = globalStore.getState(); let cost = 0.13; 
-    if (state.model && state.model.toLowerCase().includes('4k')) cost = 0.43; else if (state.currentMode === 'frame') cost = 0.35;
+    if (state.model === 'veo3.1-components') cost = 0.35; 
+    else if (state.model === 'veo3.1-4k') cost = 0.43;
+    else if (state.model === 'veo3.1-components-4k') cost = 0.50;
     const batchSelect = document.getElementById('batch-select'), batch = batchSelect ? parseInt(batchSelect.value) : 1, total = (cost * batch).toFixed(2);
     const btn = document.getElementById('generate-btn'); if (btn) btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
 }
@@ -731,7 +733,7 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
         const data = await response.json();
         if (data && data.taskId) {
             const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
-            let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast'; if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
+            let displayModelName = params.model.replace('veo3.1', 'Veo 3.1').replace('-components', ' Cmp').replace('-4k', ' 4K').toUpperCase();
             const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY, isBilled: false };
             await saveTaskDB(newTask); await renderBoard(); 
         }
@@ -772,9 +774,12 @@ function startTaskPolling(taskId) {
             if (data && data.status === 'success' && data.videoUrl) { 
                 removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
                 if (!task.isBilled) {
-                    let cost = 0.13, detailDesc = "Veo 3.1 Fast (参考图)";
-                    if (task.modelVal.toLowerCase().includes('4k')) { cost = 0.43; detailDesc = "Veo 3.1 Fast 4K"; } else if (task.mode === 'frame') { cost = 0.35; detailDesc = "Veo 3.1 Fast (首尾帧)"; }
-                    await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'video', cost: cost, detail: detailDesc }); task.isBilled = true; updateBillingUI();
+                    let cost = 0.13, detailDesc = "Veo 3.1 (首尾帧)";
+                    if (task.modelVal === 'veo3.1-components') { cost = 0.35; detailDesc = "Veo 3.1 Cmp (参考图)"; }
+                    else if (task.modelVal === 'veo3.1-4k') { cost = 0.43; detailDesc = "Veo 3.1 4K (首帧)"; }
+                    else if (task.modelVal === 'veo3.1-components-4k') { cost = 0.50; detailDesc = "Veo 3.1 Cmp 4K"; }
+                    await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'video', cost: cost, detail: detailDesc }); 
+                    task.isBilled = true; updateBillingUI();
                 }
                 await saveTaskDB(task); renderBoard(); return; 
             }

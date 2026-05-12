@@ -40,7 +40,14 @@ function closeErrorModal() {
     modal.classList.remove('show'); setTimeout(() => modal.style.display = 'none', 300);
     const input = document.getElementById('studio-pwd-input'); if (input) input.focus();
 }
-
+function showAnnouncement() {
+    const modal = document.getElementById('announcement-modal'); if (!modal) return;
+    modal.style.display = 'flex'; modal.offsetHeight; modal.classList.add('show');
+}
+function closeAnnouncement() {
+    const modal = document.getElementById('announcement-modal'); if (!modal) return;
+    modal.classList.remove('show'); setTimeout(() => modal.style.display = 'none', 300);
+}
 async function hashPassword(password) {
     const msgBuffer = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -146,6 +153,7 @@ async function handleLoginSubmit(e) {
             setTimeout(() => {
                 if (typeof loginAnimationId !== 'undefined' && loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove(); showToast("欢迎回来", "success");
+                setTimeout(showAnnouncement, 500); 
             }, 800);
         }, 400);
     }, 600);
@@ -941,7 +949,8 @@ function generateCardHTML(task) {
         const isProcessing = task.status === 'processing', isFailed = task.status === 'failed', resultHtml = task.status === 'success' && task.state.resultBlob ? `<div class="img-gen-result"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'gen_result'}))" ondblclick="openLightbox(this.src)" data-tip="双击全屏高清预览，按住可拖动复用"></div>` : '';
         let slotsHtml = task.state.images.map((img, i) => `<div class="img-gen-slot" style="border:none;"><img src="${getBlobUrl(task.id+'_img_'+i, img)}"><div class="popover-rm-btn remove-badge" onclick="removeGenImage(event, '${task.id}', ${i})">×</div></div>`).join('');
         if (task.state.images.length < 5) slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" data-tip="点击上传或从画布拖入垫图 (最多5张)" onclick="document.getElementById('file-input-${task.id}').click()"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span><input type="file" id="file-input-${task.id}" style="display:none;" multiple accept="image/*" onchange="handleGenImageUpload(this, '${task.id}')" onclick="event.stopPropagation()"></div>`;
-        const isChannel2 = task.state.channel === 'channel_2', currentCost = isChannel2 ? '0.06' : '0.08', retryStatusTxt = task.retryCount > 0 ? `(第 ${task.retryCount} 次重试...)` : '绘制中...';
+        // 🌟 找到这一行并修改
+        const isChannel2 = task.state.channel === 'channel_2', currentCost = isChannel2 ? '0.06' : '0.084';
         let btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像 <span style="font-family:monospace; opacity:0.8; margin-left:4px;">￥${currentCost}</span>`;
         if (isProcessing) btnContent = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> ${retryStatusTxt}`;
         if (isFailed) btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试';

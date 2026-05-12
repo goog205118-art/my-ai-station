@@ -94,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
         animate();
     }
 
-    // 🌟 初始化时，给小地图注入收起展开的按钮 DOM
     const minimapEl = document.getElementById('minimap-container');
     if (minimapEl) {
         minimapEl.innerHTML += `
@@ -104,15 +103,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 小地图收起/展开功能
 window.toggleMinimap = function(e) {
     if(e) e.stopPropagation();
     const container = document.getElementById('minimap-container');
     if (container) {
         container.classList.toggle('is-minimized');
-        if (!container.classList.contains('is-minimized')) {
-            renderMinimap(); 
-        }
+        if (!container.classList.contains('is-minimized')) { renderMinimap(); }
     }
 };
 
@@ -259,19 +255,14 @@ async function removeFrame(id) {
     }
 }
 
-// 🌟 核心引擎升级：空间光线投射判定 (Drag In / Drag Out)
 async function checkGroupDrop(draggedInfo) {
     const task = draggedInfo.task;
-    if (task.type === 'frame') return; // 框架不能放进框架
-    
-    // 取卡片的几何中心点
+    if (task.type === 'frame') return; 
     const cardCenter = { x: task.x + (task.width || 340)/2, y: task.y + (task.height || 400)/2 };
     
-    const allTasks = await getAllTasksDB();
-    const frames = allTasks.filter(t => t.type === 'frame' && !t.isCollapsed);
+    const frames = Array.from(document.querySelectorAll('.frame-box')).map(el => el.__veoTask).filter(t => t && t.type === 'frame' && !t.isCollapsed);
     let droppedIntoFrame = null;
     
-    // 判定中心点是否落在某个激活的框架包围盒内
     for (let f of frames) {
         if (cardCenter.x > f.x && cardCenter.x < f.x + f.width && cardCenter.y > f.y && cardCenter.y < f.y + f.height) {
             droppedIntoFrame = f.id; break;
@@ -331,14 +322,10 @@ window.addEventListener('mousemove', (e) => {
                     });
                 }
             }
-            // 🌟 核心拦截升级：物理刚体拉伸防线 (防卡片溢出)
             else if (activeFrameResize) {
                 const dx = (e.clientX - activeFrameResize.startX) / transform.scale, dy = (e.clientY - activeFrameResize.startY) / transform.scale;
-                
-                // 运用我们提前计算好的内部子元素物理边界防线 (minW, minH)
                 const newW = Math.max(activeFrameResize.minW, activeFrameResize.startW + dx);
                 const newH = Math.max(activeFrameResize.minH, activeFrameResize.startH + dy);
-                
                 activeFrameResize.el.style.width = newW + 'px'; activeFrameResize.el.style.height = newH + 'px';
                 activeFrameResize.task.width = newW; activeFrameResize.task.height = newH; 
             }
@@ -366,7 +353,6 @@ window.addEventListener('mouseup', async () => {
         if (draggingCardInfo.children) { 
             for(let child of draggingCardInfo.children) { child.el.style.willChange = 'auto'; await saveTaskDB(child.task); }
         } else {
-            // 🌟 如果拖拽的不是组，松手时检测空间移入移出
             await checkGroupDrop(draggingCardInfo);
         }
         draggingCardInfo = null; 
@@ -398,22 +384,19 @@ viewport.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// 🌟 动态计算刚体边界的拉伸把手引擎
 function startFrameResize(e, id) {
     e.stopPropagation(); 
     isPanning = false; board.classList.remove('is-moving');
     const el = document.getElementById('card-' + id);
     const task = el.__veoTask;
     
-    let minW = 340; // 绝对极限宽度
-    let minH = 140; // 绝对极限高度
+    let minW = 340; 
+    let minH = 140; 
     
-    // 扫描雷达：找出框架内所有子元素的最外缘，设定为不可逾越的拉伸防线
     if (task) {
         document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
             if (childEl.__veoTask && childEl.__veoTask.parentId === id) {
                 const childTask = childEl.__veoTask;
-                // 子卡片右边缘相对父级的坐标 + 40px 的视觉内边距
                 const childRight = (childTask.x - task.x) + (childTask.width || 340) + 40; 
                 const childBottom = (childTask.y - task.y) + (childTask.height || 400) + 40; 
                 if (childRight > minW) minW = childRight;
@@ -425,7 +408,7 @@ function startFrameResize(e, id) {
     activeFrameResize = {
         id: id, startX: e.clientX, startY: e.clientY,
         startW: el.offsetWidth, startH: el.offsetHeight, el: el, task: task,
-        minW: minW, minH: minH  // 带着底线刚体去拉伸
+        minW: minW, minH: minH  
     };
 }
 
@@ -489,7 +472,7 @@ let mapMeta = { minX: 0, minY: 0, mapScale: 1, offsetX: 0, offsetY: 0 };
 
 async function renderMinimap() {
     const container = document.getElementById('minimap-container');
-    if (!container || container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态
+    if (!container || container.classList.contains('is-minimized')) return; 
     
     const canvas = document.getElementById('minimap-canvas'), viewBox = document.getElementById('minimap-viewport-box');
     if (!canvas || !viewBox) return;
@@ -538,7 +521,7 @@ function syncMinimapViewport() {
 
 function handleMinimapClick(e) {
     const container = document.getElementById('minimap-container'); 
-    if (container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态
+    if (container.classList.contains('is-minimized')) return; 
     
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left, clickY = e.clientY - rect.top;
@@ -658,6 +641,21 @@ function bindMainConsoleDrop(slotId, stateKey) {
 
 function toggleRefPopover(e) { e.stopPropagation(); if (globalStore.getState().references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 
+// 🌟 重新植入：AI 生成器引擎模块 (重要！)
+const genData = { formats: ["主播带货", "街头采访", "教程演示", "前后反差", "开箱测评", "对比实验", "剧情短剧", "冲突夸张", "用户证言", "评论区回复", "生活方式植入"], openings: ["产品痛点开场", "夸张吸睛开场", "结果先给开场", "问题提问开场", "场景代入开场", "测评对比开场", "评论群回复开场", "数字清单开场"], attributes: ["强化主播人设", "情绪张力更强", "提前带出福利", "加入真实经历", "种草干货收尾", "单一卖点更聚焦"], generals: ["节奏更快", "情绪更强", "更像真实博主", "更强结果感", "更弱广告感", "强化收尾下单", "更强调产品细节", "UGC感", "更像评论区安利"] };
+function getRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+async function shuffleGenerator(id) { const task = await getTaskDB(id); if(!task) return; task.state.format = getRandom(genData.formats); task.state.opening = getRandom(genData.openings); task.state.attribute = getRandom(genData.attributes); task.state.general = getRandom(genData.generals); await saveTaskDB(task); renderBoard(); }
+async function updateGeneratorState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
+async function applyGeneratorToPrompt(id, btnElement) {
+    const task = await getTaskDB(id); if(!task) return;
+    const { format, opening, attribute, general } = task.state;
+    if (!format || !opening || !attribute || !general) return alert("请先点击【随机抽取】生成完整的组合");
+    document.getElementById('prompt-input').value = `【带货形式】${format} | 【开头】${opening} | 【属性】${attribute} | 【通用】${general} \n\n围绕以上要求，帮我生成...`;
+    document.getElementById('floating-console').classList.remove('minimized');
+    const originalText = btnElement.innerHTML; btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`; btnElement.style.color = 'var(--success)'; setTimeout(() => { btnElement.innerHTML = originalText; btnElement.style.color = ''; }, 1500);
+}
+function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
+
 function switchMode(mode) { globalStore.dispatch('SET_MODE', mode); }
 function updateModel(select) { globalStore.dispatch('SET_MODEL', { value: select.value, text: select.options[select.selectedIndex].text }); }
 function updateRatio(select) { globalStore.dispatch('SET_RATIO', { value: select.value, text: select.options[select.selectedIndex].text }); }
@@ -706,19 +704,29 @@ async function submitBatchTask() {
     btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
 }
 
+// 🌟 健壮修复：防止无响应 JSON 导致引擎崩溃
 async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
         const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
+        
         if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API 返回异常: ${response.status} - ${errText}`);
+        }
+        
         const data = await response.json();
-        if (data.taskId) {
+        if (data && data.taskId) {
             const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
             let displayModelName = params.references && params.references.length > 0 ? 'Veo 3 Cmp' : 'Veo 3 Fast'; if (params.model === 'veo_3_1-fast-components-4k') displayModelName = 'Veo 3 4K';
             const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY, isBilled: false };
             await saveTaskDB(newTask); await renderBoard(); 
         }
-    } catch (error) { console.error('提交失败:', error); }
+    } catch (error) { 
+        console.error('任务提交失败:', error); 
+        showToast('视频生成提交失败，请检查网络或余额。', 'error');
+    }
 }
 
 async function retryTask(taskId, btnElement) {
@@ -729,8 +737,9 @@ async function retryTask(taskId, btnElement) {
         const apiPayload = { model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false, firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame), references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b))) };
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
         if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+        if (!response.ok) throw new Error("API 异常");
         const data = await response.json();
-        if (data.taskId) { 
+        if (data && data.taskId) { 
             await deleteTaskDB(taskId); removeActiveTask(taskId); 
             task.id = data.taskId; task.status = 'processing'; task.progress = null; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); task.isBilled = false; 
             await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); 
@@ -746,8 +755,9 @@ function startTaskPolling(taskId) {
             const task = await getTaskDB(taskId); if (!task) { removeActiveTask(taskId); return; }
             const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); handleAuthError(); return; }
+            if (!response.ok) throw new Error("API 异常");
             const data = await response.json();
-            if (data.status === 'success' && data.videoUrl) { 
+            if (data && data.status === 'success' && data.videoUrl) { 
                 removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
                 if (!task.isBilled) {
                     let cost = 0.13, detailDesc = "Veo 3.1 Fast (参考图)";
@@ -756,8 +766,8 @@ function startTaskPolling(taskId) {
                 }
                 await saveTaskDB(task); renderBoard(); return; 
             }
-            if (data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
-            if ((data.status === 'processing' || data.status === 'pending') && data.progress && task.progress !== data.progress) { task.progress = data.progress; await saveTaskDB(task); renderBoard(); }
+            if (data && data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
+            if (data && (data.status === 'processing' || data.status === 'pending') && data.progress && task.progress !== data.progress) { task.progress = data.progress; await saveTaskDB(task); renderBoard(); }
             if (attempts < 240) setTimeout(poll, 15000); else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } }
         } catch (error) { setTimeout(poll, 15000); }
     };

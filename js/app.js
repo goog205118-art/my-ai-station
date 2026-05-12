@@ -14,6 +14,11 @@ styleInj.innerHTML = `
     .minimap-container.is-minimized .minimap-toggle { display: none; }
     .minimap-icon { display: none; font-size: 24px; color: var(--accent); }
     .minimap-container.is-minimized .minimap-icon { display: block; }
+    /* 🌟 系统公告弹窗专属样式 (防干扰) */
+    .sys-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 9999; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
+    .sys-modal-overlay.show { opacity: 1; }
+    .sys-modal-content { background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; width: 420px; max-width: 90%; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 20px 40px rgba(0,0,0,0.5); overflow: hidden; }
+    .sys-modal-overlay.show .sys-modal-content { transform: scale(1); }
     /* 🌟 追加赛博扫描线样式 */
     .cyber-scanner-box { width: 80%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 16px; overflow: hidden; position: relative; }
     .cyber-scanner-line { height: 100%; width: 30%; background: var(--accent); box-shadow: 0 0 10px var(--accent); border-radius: 2px; animation: scanAnim 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate; }

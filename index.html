@@ -175,11 +175,13 @@
 
         <div class="console-actions-row">
             <div class="pill-group">
-                <div class="action-pill" data-tip="切换底层视频生成模型">
-                    <span class="material-symbols-outlined">model_training</span><span id="model-text">Veo 3.1 Fast</span>
+                <div class="action-pill" data-tip="切换底层视频生成模型 (Cmp代表多模态参考图模型)">
+                    <span class="material-symbols-outlined">model_training</span><span id="model-text">Veo 3.1</span>
                     <select id="model-select" onchange="updateModel(this)">
-                        <option value="veo_3_1_fast">Veo 3.1 Fast</option>
-                        <option value="veo_3_1-fast-components-4k">Veo 3.1 Fast 4K</option>
+                        <option value="veo3.1">Veo 3.1 (首尾帧)</option>
+                        <option value="veo3.1-4k">Veo 3.1 4K (首尾帧)</option>
+                        <option value="veo3.1-components">Veo 3.1 Cmp (参考图)</option>
+                        <option value="veo3.1-components-4k">Veo 3.1 Cmp 4K (参考图)</option>
                     </select>
                 </div>
                 <div class="action-pill" data-tip="选择视频的输出比例">

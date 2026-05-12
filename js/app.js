@@ -6,11 +6,9 @@ let loginAnimationId = null;
 // 🌟 自动注入核心缺失样式 (修复小地图遮挡与拉伸把手)
 const styleInj = document.createElement('style');
 styleInj.innerHTML = `
-    /* 🌟 核心修复：恢复 overflow: hidden，把蓝框死死关在小地图里！ */
     .minimap-container { bottom: 160px !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden !important; }
     .minimap-container.is-minimized { width: 44px !important; height: 44px !important; border-radius: 22px !important; display: flex; align-items: center; justify-content: center; cursor: pointer; border-color: rgba(255,255,255,0.2); }
     .minimap-container.is-minimized #minimap-canvas, .minimap-container.is-minimized #minimap-viewport-box { opacity: 0; pointer-events: none; }
-    /* 🌟 核心修复：把收起按钮挪到小地图内部右上角 */
     .minimap-toggle { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10; opacity: 0; transition: 0.2s; border: 1px solid rgba(255,255,255,0.1); }
     .minimap-container:hover .minimap-toggle { opacity: 1; }
     .minimap-container.is-minimized .minimap-toggle { display: none; }
@@ -106,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 新增：小地图收起/展开功能
+// 🌟 小地图收起/展开功能
 window.toggleMinimap = function(e) {
     if(e) e.stopPropagation();
     const container = document.getElementById('minimap-container');
@@ -261,14 +259,19 @@ async function removeFrame(id) {
     }
 }
 
+// 🌟 核心引擎升级：空间光线投射判定 (Drag In / Drag Out)
 async function checkGroupDrop(draggedInfo) {
     const task = draggedInfo.task;
-    if (task.type === 'frame') return; 
+    if (task.type === 'frame') return; // 框架不能放进框架
+    
+    // 取卡片的几何中心点
     const cardCenter = { x: task.x + (task.width || 340)/2, y: task.y + (task.height || 400)/2 };
     
-    const frames = Array.from(document.querySelectorAll('.frame-box')).map(el => el.__veoTask).filter(t => t && t.type === 'frame' && !t.isCollapsed);
+    const allTasks = await getAllTasksDB();
+    const frames = allTasks.filter(t => t.type === 'frame' && !t.isCollapsed);
     let droppedIntoFrame = null;
     
+    // 判定中心点是否落在某个激活的框架包围盒内
     for (let f of frames) {
         if (cardCenter.x > f.x && cardCenter.x < f.x + f.width && cardCenter.y > f.y && cardCenter.y < f.y + f.height) {
             droppedIntoFrame = f.id; break;
@@ -328,7 +331,7 @@ window.addEventListener('mousemove', (e) => {
                     });
                 }
             }
-            // 🌟 核心拦截：拉伸时不能把框缩得比内部卡片还要小！
+            // 🌟 核心拦截升级：物理刚体拉伸防线 (防卡片溢出)
             else if (activeFrameResize) {
                 const dx = (e.clientX - activeFrameResize.startX) / transform.scale, dy = (e.clientY - activeFrameResize.startY) / transform.scale;
                 
@@ -363,7 +366,7 @@ window.addEventListener('mouseup', async () => {
         if (draggingCardInfo.children) { 
             for(let child of draggingCardInfo.children) { child.el.style.willChange = 'auto'; await saveTaskDB(child.task); }
         } else {
-            // 🌟 检测是否跨组移动
+            // 🌟 如果拖拽的不是组，松手时检测空间移入移出
             await checkGroupDrop(draggingCardInfo);
         }
         draggingCardInfo = null; 
@@ -395,22 +398,22 @@ viewport.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// 🌟 新增：触发框架拉伸，并提前计算不可超越的物理底线
+// 🌟 动态计算刚体边界的拉伸把手引擎
 function startFrameResize(e, id) {
     e.stopPropagation(); 
     isPanning = false; board.classList.remove('is-moving');
     const el = document.getElementById('card-' + id);
     const task = el.__veoTask;
     
-    let minW = 340;
-    let minH = 200;
+    let minW = 340; // 绝对极限宽度
+    let minH = 140; // 绝对极限高度
     
-    // 遍历算出当前框架内所有子元素的最大触及边界
+    // 扫描雷达：找出框架内所有子元素的最外缘，设定为不可逾越的拉伸防线
     if (task) {
         document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
             if (childEl.__veoTask && childEl.__veoTask.parentId === id) {
                 const childTask = childEl.__veoTask;
-                // 子元素右下角相对父框架的坐标 + 40px的安全内边距
+                // 子卡片右边缘相对父级的坐标 + 40px 的视觉内边距
                 const childRight = (childTask.x - task.x) + (childTask.width || 340) + 40; 
                 const childBottom = (childTask.y - task.y) + (childTask.height || 400) + 40; 
                 if (childRight > minW) minW = childRight;
@@ -422,7 +425,7 @@ function startFrameResize(e, id) {
     activeFrameResize = {
         id: id, startX: e.clientX, startY: e.clientY,
         startW: el.offsetWidth, startH: el.offsetHeight, el: el, task: task,
-        minW: minW, minH: minH  // 带着底线去拉伸
+        minW: minW, minH: minH  // 带着底线刚体去拉伸
     };
 }
 
@@ -454,6 +457,14 @@ function bindCardDrag(cardEl, task) {
             e.stopPropagation(); 
         };
     }
+    
+    const resizeHandle = cardEl.querySelector('.frame-resize-handle');
+    if (resizeHandle) {
+        resizeHandle.onmousedown = (e) => {
+            e.stopPropagation(); isPanning = false; board.classList.remove('is-moving');
+            startFrameResize(e, task.id);
+        };
+    }
 }
 
 window.addEventListener('keydown', async (e) => {
@@ -478,8 +489,7 @@ let mapMeta = { minX: 0, minY: 0, mapScale: 1, offsetX: 0, offsetY: 0 };
 
 async function renderMinimap() {
     const container = document.getElementById('minimap-container');
-    // 如果小地图处于收缩状态，跳过渲染节约性能
-    if (!container || container.classList.contains('is-minimized')) return;
+    if (!container || container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态
     
     const canvas = document.getElementById('minimap-canvas'), viewBox = document.getElementById('minimap-viewport-box');
     if (!canvas || !viewBox) return;
@@ -528,7 +538,7 @@ function syncMinimapViewport() {
 
 function handleMinimapClick(e) {
     const container = document.getElementById('minimap-container'); 
-    if (container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态的点击
+    if (container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态
     
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left, clickY = e.clientY - rect.top;
@@ -874,13 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initDB(); 
     board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; 
     document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; 
-    
-    await renderBoard(); 
-    await renderMaterialLibrary();
-    
-    bindMainConsoleDrop('slot-ref-box', 'references'); 
-    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
-    bindMainConsoleDrop('slot-last-box', 'lastFrame');
-    await updateBillingUI(); 
-    updateEstimatedCost();
+    await renderBoard(); await renderMaterialLibrary();
+    bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await updateBillingUI(); updateEstimatedCost();
 });

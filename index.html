@@ -51,7 +51,12 @@
         <div class="logo">
             <span class="material-symbols-outlined">account_tree</span> Veo Studio <span style="font-size:12px; color:var(--text-sub); font-weight:normal;">/ Infinity Flow</span>
         </div>
-        <div class="top-actions">
+       <div class="top-actions">
+            <button class="top-btn" onclick="createFrame()" data-tip="按住 Shift 框选多张卡片后，点击将其打组收纳">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: #a78bfa;">view_cofy</span> 建组
+            </button>
+            <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+
             <button class="top-btn" onclick="alignSelectedCards()" data-tip="将选中的卡片(或全盘)网格化自动对齐">
                 <span class="material-symbols-outlined" style="font-size: 16px; color: #ffca28;">grid_on</span> 排版
             </button>

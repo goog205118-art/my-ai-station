@@ -1391,11 +1391,12 @@ async function renderBoard() {
 
             if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel) { 
                 cardEl.innerHTML = generateCardHTML(task); 
-                bindCardDrag(cardEl, task); 
             }
+            // 🌟 核心修复：无论卡片内部是否重绘，都强制把最新的坐标数据重新绑定给拖拽引擎！彻底消灭幽灵瞬移！
+            bindCardDrag(cardEl, task); 
         }
         
-        cardEl.setAttribute('data-sync-status', task.status || 'static'); 
+        cardEl.setAttribute('data-sync-status', task.status || 'static');
         cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
         cardEl.setAttribute('data-sync-img-len', currentImgLen); 
         cardEl.setAttribute('data-sync-progress', currentProgress); 

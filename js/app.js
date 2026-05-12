@@ -252,6 +252,10 @@ window.addEventListener('mouseup', () => {
 
 viewport.addEventListener('wheel', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
+    
+    // 🌟 核心修复 1：只要手里正捏着卡片（draggingCardInfo 有值），就绝对锁定画布缩放！防止坐标系畸变导致瞬移。
+    if (draggingCardInfo) return; 
+
     e.preventDefault(); if (ticking) return; 
     board.classList.add('is-moving'); clearTimeout(scrollTimeout); scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); 
     const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
@@ -510,13 +514,22 @@ function clearFrame(event, type) { if(event) { event.preventDefault(); event.sto
 async function submitBatchTask() {
     const prompt = document.getElementById('prompt-input').value.trim(); if (!prompt) return alert('请填写提示词');
     const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
+    
+    // 点击时变成转圈圈
     btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
+    
     let submitRef = [...globalStore.getState().references], submitFirst = globalStore.getState().firstFrame, submitLast = globalStore.getState().lastFrame;
     if (globalStore.getState().currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
     const taskParams = { model: globalStore.getState().model, aspectRatio: globalStore.getState().aspectRatio, enhancePrompt: globalStore.getState().enhancePrompt, enableUpsample: globalStore.getState().enableUpsample, autoRetry: globalStore.getState().autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
     let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
+    
     await Promise.allSettled(promises);
-    btn.disabled = false; updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
+    
+    // 🌟 核心修复 2：提交完毕后，解除禁用，并把转圈圈还原回“向上箭头”！
+    btn.disabled = false; 
+    btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
+    
+    updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
 }
 
 async function executeSubmission(params, promptText, offsetIndex = 0) {

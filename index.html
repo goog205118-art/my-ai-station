@@ -238,7 +238,16 @@
             </div>
         </div>
     </div>
-
+<div id="error-modal" class="help-modal" onclick="closeErrorModal()">
+        <div class="help-content" id="error-modal-content" style="max-width: 380px; text-align: center; padding: 40px; border-color: rgba(255, 69, 58, 0.3);" onclick="event.stopPropagation()">
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 69, 58, 0.1); border: 2px solid var(--danger); display: flex; justify-content: center; align-items: center; margin: 0 auto 20px; box-shadow: 0 0 30px rgba(255, 69, 58, 0.4);">
+                <span class="material-symbols-outlined" style="color: var(--danger); font-size: 40px;">lock_open_right</span>
+            </div>
+            <h2 style="justify-content: center; color: var(--danger); margin-bottom: 12px; font-family: monospace;">访问被拒绝</h2>
+            <p style="color: var(--text-sub); font-size: 13px; margin-bottom: 30px; line-height: 1.6;">您输入的系统密钥与哈希锁不匹配。<br>请检查输入并重试。</p>
+            <button class="img-gen-btn" style="width: 100%; margin: 0; background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1);" onclick="closeErrorModal()">重新输入</button>
+        </div>
+    </div>
     <script src="js/db.js"></script>
     <script src="js/store.js"></script> 
     <script src="js/app.js"></script>

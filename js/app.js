@@ -6,10 +6,12 @@ let loginAnimationId = null;
 // 🌟 自动注入核心缺失样式 (修复小地图遮挡与拉伸把手)
 const styleInj = document.createElement('style');
 styleInj.innerHTML = `
-    .minimap-container { bottom: 160px !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); overflow: visible !important; }
+    /* 🌟 核心修复：恢复 overflow: hidden，把蓝框死死关在小地图里！ */
+    .minimap-container { bottom: 160px !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden !important; }
     .minimap-container.is-minimized { width: 44px !important; height: 44px !important; border-radius: 22px !important; display: flex; align-items: center; justify-content: center; cursor: pointer; border-color: rgba(255,255,255,0.2); }
     .minimap-container.is-minimized #minimap-canvas, .minimap-container.is-minimized #minimap-viewport-box { opacity: 0; pointer-events: none; }
-    .minimap-toggle { position: absolute; top: -10px; right: -10px; width: 24px; height: 24px; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10; opacity: 0; transition: 0.2s; border: 1px solid rgba(255,255,255,0.1); }
+    /* 🌟 核心修复：把收起按钮挪到小地图内部右上角 */
+    .minimap-toggle { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10; opacity: 0; transition: 0.2s; border: 1px solid rgba(255,255,255,0.1); }
     .minimap-container:hover .minimap-toggle { opacity: 1; }
     .minimap-container.is-minimized .minimap-toggle { display: none; }
     .minimap-icon { display: none; font-size: 24px; color: var(--accent); }

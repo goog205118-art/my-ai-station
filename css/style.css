@@ -16,6 +16,9 @@ body {
 .top-actions { display: flex; gap: 12px; pointer-events: auto; }
 .top-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(10px); transition: all 0.2s; font-size: 13px; }
 .top-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
+/* 🌟 新增：次要操作转为极简纯图标圆形按钮 */
+.top-btn.icon-only { padding: 8px; border-radius: 50%; width: 34px; height: 34px; justify-content: center; }
+.top-btn.icon-only span { font-size: 18px; margin: 0; }
 
 .tool-drawer { position: fixed; left: -320px; top: 0; width: 300px; height: 100vh; background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); border-right: 1px solid var(--border); z-index: 900; transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1); padding: 80px 20px 20px 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
 .tool-drawer.open { left: 0; }

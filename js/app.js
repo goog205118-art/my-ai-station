@@ -10,31 +10,28 @@ function showErrorModal() {
     const modal = document.getElementById('error-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    modal.offsetHeight; // 强制浏览器重绘
+    modal.offsetHeight; 
     modal.classList.add('show');
     
-    // 给内容框加上震动动画
     const content = document.getElementById('error-modal-content');
     if (content) {
         content.classList.remove('error-shake');
-        void content.offsetWidth; // 触发重绘
+        void content.offsetWidth; 
         content.classList.add('error-shake');
     }
 }
 
-// 🚫 安全警告：关闭警告弹窗
 function closeErrorModal() {
     const modal = document.getElementById('error-modal');
     if (!modal) return;
     modal.classList.remove('show');
     setTimeout(() => modal.style.display = 'none', 300);
-    // 关闭后自动把焦点还给密码输入框
     const input = document.getElementById('studio-pwd-input');
     if (input) input.focus();
 }
 
 // ==============================
-// 🔐 核心新增：SHA-256 军工级哈希加密算法
+// 🔐 SHA-256 军工级哈希加密算法
 // ==============================
 async function hashPassword(password) {
     const msgBuffer = new TextEncoder().encode(password);
@@ -50,22 +47,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
     const savedSessionPwd = sessionStorage.getItem('veo_admin_pwd');
     
-    // 如果当前会话页已经登录，无缝进入工作台
     if (savedSessionPwd) {
         gate.style.display = 'none';
         return;
     }
 
-    // 🌟 新增：检查设备本地是否“记住过密码”
     const rememberedPwd = localStorage.getItem('veo_admin_pwd_saved');
     if (rememberedPwd) {
         const pwdInput = document.getElementById('studio-pwd-input');
         const rememberCheckbox = document.getElementById('remember-pwd');
-        if (pwdInput) pwdInput.value = rememberedPwd; // 自动将长密码填入框内
-        if (rememberCheckbox) rememberCheckbox.checked = true; // 保持勾选状态
+        if (pwdInput) pwdInput.value = rememberedPwd; 
+        if (rememberCheckbox) rememberCheckbox.checked = true; 
     }
 
-    // 启动光影尘埃粒子引擎
     const canvas = document.getElementById('login-canvas');
     if (canvas && gate.style.display !== 'none') {
         const ctx = canvas.getContext('2d');
@@ -139,7 +133,6 @@ function startLoginTransition() {
     }, 200); 
 }
 
-// 🌟 哈希验证与设备记住逻辑
 async function handleLoginSubmit(e) {
     e.preventDefault(); 
     
@@ -160,21 +153,17 @@ async function handleLoginSubmit(e) {
             btn.innerHTML = `验证身份 / LOGIN`;
             btn.style.pointerEvents = 'auto';
             document.getElementById('studio-pwd-input').value = '';
-            
-            // 🌟 新增：如果输错了密码，为了安全顺手清空本地保存的假密码
             localStorage.removeItem('veo_admin_pwd_saved');
             return; 
         }
 
-        // 🌟 验证通过：保存明文用于当前会话 n8n 验证
         sessionStorage.setItem('veo_admin_pwd', pwdInput);
         
-        // 🌟 新增：“记住设备”逻辑激活
         const rememberCheckbox = document.getElementById('remember-pwd');
         if (rememberCheckbox && rememberCheckbox.checked) {
-            localStorage.setItem('veo_admin_pwd_saved', pwdInput); // 写入永久缓存
+            localStorage.setItem('veo_admin_pwd_saved', pwdInput); 
         } else {
-            localStorage.removeItem('veo_admin_pwd_saved'); // 如果没勾选，则清除缓存
+            localStorage.removeItem('veo_admin_pwd_saved'); 
         }
         
         btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> 验证通过`;
@@ -190,7 +179,7 @@ async function handleLoginSubmit(e) {
             setTimeout(() => {
                 if (typeof loginAnimationId !== 'undefined' && loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
-                showToast("欢迎回来", "success");
+                showToast("欢迎回来，指挥官。", "success");
             }, 800);
         }, 400);
 
@@ -210,13 +199,10 @@ let activeRetries = new Set();
 function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index > -1) activeTasks.splice(index, 1); }
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 
-// ==============================
-// 🔐 核心新增：自动踢回登录舱的安全自愈引擎
-// ==============================
 function handleAuthError() {
-    sessionStorage.removeItem('veo_admin_pwd'); // 销毁错误的假钥匙
+    sessionStorage.removeItem('veo_admin_pwd'); 
     showToast("密钥验证失败或已过期，即将退回登录舱", "error");
-    setTimeout(() => location.reload(), 1500); // 强制刷新重载 3D 大门
+    setTimeout(() => location.reload(), 1500); 
 }
 
 // ==============================
@@ -244,6 +230,76 @@ function closeBillingModal() {
     const modal = document.getElementById('billing-modal');
     modal.classList.remove('show');
     setTimeout(() => modal.style.display = 'none', 300);
+}
+
+// ==============================
+// 🌟 新增：动态预估开销金额感知引擎
+// ==============================
+function updateEstimatedCost() {
+    const state = globalStore.getState();
+    let cost = 0.13; 
+    if (state.model && state.model.toLowerCase().includes('4k')) {
+        cost = 0.43;
+    } else if (state.currentMode === 'frame') {
+        cost = 0.35;
+    }
+    const batchSelect = document.getElementById('batch-select');
+    const batch = batchSelect ? parseInt(batchSelect.value) : 1;
+    const total = (cost * batch).toFixed(2);
+    
+    const badge = document.getElementById('est-cost-badge');
+    if (badge) badge.innerText = `￥${total}`;
+}
+
+function updateBatchCount(select) {
+    document.getElementById('batch-text').innerText = select.options[select.selectedIndex].text;
+    updateEstimatedCost();
+}
+
+// ==============================
+// 🌟 新增：全局智能网格排版系统 (强迫症福音)
+// ==============================
+async function alignSelectedCards() {
+    const tasks = await getAllTasksDB();
+    if (tasks.length === 0) return showToast("画布上目前没有任何卡片", "info");
+    
+    // 如果没有框选，就默认排列所有卡片
+    let targetIds = selectedTasks.size > 0 ? Array.from(selectedTasks) : tasks.map(t => t.id);
+    let cardsToAlign = tasks.filter(t => targetIds.includes(t.id));
+    
+    // 根据当前视觉坐标大致排序，防止错乱
+    cardsToAlign.sort((a, b) => (Math.abs(a.y) + Math.abs(a.x)) - (Math.abs(b.y) + Math.abs(b.x)));
+
+    // 找到对齐起点的基准坐标 (左上角)
+    let minX = Math.min(...cardsToAlign.map(c => c.x));
+    let minY = Math.min(...cardsToAlign.map(c => c.y));
+    
+    let currentX = minX;
+    let currentY = minY;
+    
+    // 设定的网格间距 (安全距离)
+    const xGap = 340; 
+    const yGap = 420; 
+    let col = 0;
+    
+    // 自动计算屏幕宽度最多能塞下几列
+    const maxCols = Math.max(3, Math.floor((window.innerWidth / transform.scale) / xGap));
+
+    const promises = cardsToAlign.map(async (task) => {
+        task.x = minX + (col * xGap);
+        task.y = currentY;
+        col++;
+        // 换行逻辑
+        if (col >= maxCols) {
+            col = 0;
+            currentY += yGap;
+        }
+        await saveTaskDB(task);
+    });
+
+    await Promise.all(promises);
+    renderBoard();
+    showToast(`🪄 空间清理完成：已自动对齐 ${cardsToAlign.length} 个节点`, "success");
 }
 
 // ==============================
@@ -312,9 +368,6 @@ document.addEventListener('mouseout', (e) => {
     document.getElementById('global-tooltip').classList.remove('show');
 });
 
-// ==============================
-// 📖 使用教程弹窗控制
-// ==============================
 function openHelpModal() {
     const modal = document.getElementById('help-modal');
     modal.style.display = 'flex';
@@ -478,9 +531,6 @@ function bindCardDrag(cardEl, task) {
     }
 }
 
-// ==============================
-// ⌨️ 全局键盘监听 (一键删除 / Ctrl+A 全选)
-// ==============================
 window.addEventListener('keydown', async (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
@@ -510,9 +560,6 @@ window.addEventListener('keydown', async (e) => {
     }
 });
 
-// ==============================
-// 🔍 全局图片放大查看器 (Lightbox)
-// ==============================
 let lightboxEl = null;
 function openLightbox(src) {
     if (!lightboxEl) {
@@ -531,9 +578,6 @@ function openLightbox(src) {
     lightboxEl.classList.add('show');
 }
 
-// ==============================
-// 📋 剪贴板全局粘贴引擎 (Ctrl+V)
-// ==============================
 window.addEventListener('paste', async (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     const items = e.clipboardData?.items;
@@ -554,9 +598,6 @@ window.addEventListener('paste', async (e) => {
     if (offset > 0) renderBoard();
 });
 
-// ==============================
-// 📝 便签与防误触
-// ==============================
 const consoleEl = document.getElementById('floating-console');
 document.addEventListener('click', (e) => {
     const popover = document.getElementById('ref-popover'), slotBox = document.getElementById('slot-ref-box');
@@ -575,9 +616,6 @@ let noteTimeout;
 async function updateNoteText(id, text) { clearTimeout(noteTimeout); noteTimeout = setTimeout(async () => { const note = await getTaskDB(id); if (note) { note.text = text; await saveTaskDB(note); } }, 500); }
 function saveNoteSize(id, w, h) { setTimeout(async () => { const note = await getTaskDB(id); if (note && (note.width !== w || note.height !== h)) { note.width = w; note.height = h; await saveTaskDB(note); } }, 100); }
 
-// ==============================
-// 📦 工程导入与导出
-// ==============================
 async function exportWorkspace() {
     const btn = document.getElementById('export-btn'); const originalHTML = btn.innerHTML; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:16px;height:16px;stroke:currentColor;margin-right:6px;"><circle cx="25" cy="25" r="20"></circle></svg> 打包中...`;
     try {
@@ -632,9 +670,6 @@ async function importWorkspace(input) {
     reader.readAsText(input.files[0]);
 }
 
-// ==============================
-// 🖼️ 拖放传输引擎 (统一入口)
-// ==============================
 window.addEventListener("dragover", function(e){ e.preventDefault(); }, false);
 window.addEventListener("drop", function(e){ e.preventDefault(); }, false);
 
@@ -711,9 +746,6 @@ function bindMainConsoleDrop(slotId, stateKey) {
 
 function toggleRefPopover(e) { e.stopPropagation(); if (globalStore.getState().references.length === 0) document.getElementById('ref-file').click(); else { const p = document.getElementById('ref-popover'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; } }
 
-// ==============================
-// 🎮 视图层 (View)：通过 EventBus 派发状态，不写硬逻辑
-// ==============================
 function switchMode(mode) { globalStore.dispatch('SET_MODE', mode); }
 function updateModel(select) { globalStore.dispatch('SET_MODEL', { value: select.value, text: select.options[select.selectedIndex].text }); }
 function updateRatio(select) { globalStore.dispatch('SET_RATIO', { value: select.value, text: select.options[select.selectedIndex].text }); }
@@ -721,14 +753,12 @@ function updateEnhance(select) { globalStore.dispatch('SET_ENHANCE', { value: se
 function updateUpsample(select) { globalStore.getState().enableUpsample = select.value === 'true'; document.getElementById('upsample-text').innerText = select.options[select.selectedIndex].text; }
 function updateAutoRetry(select) { globalStore.getState().autoRetry = select.value === 'true'; document.getElementById('retry-text').innerText = select.options[select.selectedIndex].text; }
 
-// ==============================
-// 🎧 订阅层 (Subscribers)：听到广播后自动更新 UI
-// ==============================
 sysBus.on('UI:SWITCH_MODE', (mode) => {
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active')); 
     document.querySelectorAll('.slot-group').forEach(s => s.classList.remove('active')); 
     document.getElementById(`tab-${mode}`).classList.add('active'); 
     document.getElementById(`slots-${mode}`).classList.add('active');
+    updateEstimatedCost();
 });
 sysBus.on('UI:UPDATE_MODEL_TEXT', (text) => document.getElementById('model-text').innerText = text);
 sysBus.on('UI:UPDATE_RATIO', (data) => {
@@ -745,8 +775,8 @@ sysBus.on('SYSTEM:MODEL_CHANGED', (modelValue) => {
     } else {
         frameTab.style.opacity = '1'; frameTab.style.pointerEvents = 'auto'; frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面');
     }
+    updateEstimatedCost();
 });
-
 
 async function handleMultiRefs(input) {
     if (!input.files || input.files.length === 0) return;
@@ -780,9 +810,6 @@ function clearFrame(event, type) {
     document.getElementById(`slot-${t}-box`).classList.remove('has-img'); document.getElementById(`${t}-img`).src = '';
 }
 
-// ==============================
-// 🚀 视频生成 - 批处理与提交调度
-// ==============================
 async function submitBatchTask() {
     const prompt = document.getElementById('prompt-input').value.trim();
     if (!prompt) return alert('请填写提示词');
@@ -797,16 +824,16 @@ async function submitBatchTask() {
     let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
     
     await Promise.allSettled(promises);
-    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; document.getElementById('prompt-input').value = ''; 
+    btn.disabled = false;
+    updateEstimatedCost(); 
+    document.getElementById('prompt-input').value = ''; 
 }
 
 async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
         const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
-        // 🌟 核心更新：使用 wally123 作为 Header
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
         
-        // 🌟 拦截密码错误并启动自愈程序
         if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
         
         const data = await response.json();
@@ -835,10 +862,8 @@ async function retryTask(taskId, btnElement) {
 
     try {
         const apiPayload = { model: task.modelVal, prompt: task.prompt, aspectRatio: task.ratio, enhancePrompt: true, enableUpsample: false, firstFrame: await blobToBase64(task.rawImages.firstFrame), lastFrame: await blobToBase64(task.rawImages.lastFrame), references: await Promise.all((task.rawImages.references || []).map(b => blobToBase64(b))) };
-        // 🌟 核心更新：使用 wally123 作为 Header
         const response = await fetch(API_SUBMIT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(apiPayload) });
         
-        // 🌟 拦截密码错误并启动自愈程序
         if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
         
         const data = await response.json();
@@ -862,10 +887,8 @@ function startTaskPolling(taskId) {
             const task = await getTaskDB(taskId);
             if (!task) { removeActiveTask(taskId); return; }
 
-            // 🌟 核心更新：使用 wally123 作为 Header
             const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
             
-            // 🌟 拦截密码错误并启动自愈程序
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); handleAuthError(); return; }
             
             const data = await response.json();
@@ -925,9 +948,6 @@ async function reuseTask(taskId) {
     document.getElementById('floating-console').classList.remove('minimized'); document.getElementById('prompt-input').focus();
 }
 
-// ==============================
-// 🟢 插件系统引擎
-// ==============================
 const genData = { formats: ["主播带货", "街头采访", "教程演示", "前后反差", "开箱测评", "对比实验", "剧情短剧", "冲突夸张", "用户证言", "评论区回复", "生活方式植入"], openings: ["产品痛点开场", "夸张吸睛开场", "结果先给开场", "问题提问开场", "场景代入开场", "测评对比开场", "评论群回复开场", "数字清单开场"], attributes: ["强化主播人设", "情绪张力更强", "提前带出福利", "加入真实经历", "种草干货收尾", "单一卖点更聚焦"], generals: ["节奏更快", "情绪更强", "更像真实博主", "更强结果感", "更弱广告感", "强化收尾下单", "更强调产品细节", "UGC感", "更像评论区安利"] };
 function getRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 async function shuffleGenerator(id) { const task = await getTaskDB(id); if(!task) return; task.state.format = getRandom(genData.formats); task.state.opening = getRandom(genData.openings); task.state.attribute = getRandom(genData.attributes); task.state.general = getRandom(genData.generals); await saveTaskDB(task); renderBoard(); }
@@ -942,9 +962,6 @@ async function applyGeneratorToPrompt(id, btnElement) {
 }
 function buildGeneratorOptions(arr, selected) { let html = `<option value="" disabled ${!selected ? 'selected' : ''}>请选择...</option>`; arr.forEach(item => { html += `<option value="${item}" ${selected === item ? 'selected' : ''}>${item}</option>`; }); return html; }
 
-// ==============================
-// 🌟 AI 生图工具底层增强
-// ==============================
 async function handleGenImageDrop(e, id) {
     e.preventDefault(); e.stopPropagation();
     const dropZone = document.getElementById(`img-gen-zone-${id}`); if(dropZone) dropZone.classList.remove('drag-over');
@@ -996,7 +1013,6 @@ async function submitImgGen(id) {
     while (attempts < maxAttempts && !success) {
         attempts++;
         try {
-            // 🌟 核心更新：使用 wally123 作为 Header
             const response = await fetch(API_IMAGE_GEN, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, 
@@ -1047,9 +1063,6 @@ async function submitImgGen(id) {
     await saveTaskDB(task); renderBoard();
 }
 
-// ==============================
-// ✂️ 全新核心插件：局部图片裁切器
-// ==============================
 async function handleCropperUpload(input, id) {
     if (!input.files[0]) return;
     const task = await getTaskDB(id);
@@ -1202,10 +1215,6 @@ window.addEventListener('pointerup', async () => {
     }
 });
 
-
-// ==============================
-// 🚀 智能 DOM 对比引擎 
-// ==============================
 function generateCardHTML(task) {
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
     
@@ -1225,8 +1234,12 @@ function generateCardHTML(task) {
             slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" data-tip="点击上传或从画布拖入垫图 (最多5张)" onclick="document.getElementById('file-input-${task.id}').click()"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span><input type="file" id="file-input-${task.id}" style="display:none;" multiple accept="image/*" onchange="handleGenImageUpload(this, '${task.id}')" onclick="event.stopPropagation()"></div>`;
         }
 
+        const isChannel2 = task.state.channel === 'channel_2';
+        const currentCost = isChannel2 ? '0.06' : '0.08';
         const retryStatusTxt = task.retryCount > 0 ? `(第 ${task.retryCount} 次重试...)` : '绘制中...';
-        let btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像';
+        
+        // 🌟 动态卡片生图费用
+        let btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像 <span style="font-family:monospace; opacity:0.8; margin-left:4px;">￥${currentCost}</span>`;
         if (isProcessing) btnContent = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> ${retryStatusTxt}`;
         if (isFailed) btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试';
 
@@ -1401,4 +1414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
     bindMainConsoleDrop('slot-last-box', 'lastFrame');
     await updateBillingUI(); 
+    
+    // 初始化预估金额
+    updateEstimatedCost();
 });

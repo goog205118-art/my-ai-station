@@ -273,7 +273,17 @@
             <button class="help-close" onclick="toggleMaterialDrawer()" style="position:static; width:24px; height:24px; margin:0;">&times;</button>
         </div>
         <p style="font-size: 11px; color: var(--text-sub); margin-bottom: 12px; line-height: 1.4;">外部拖入与 Ctrl+V 粘贴的图片会在这里统一管理，保持画布清爽。</p>
-        <div class="material-grid" id="material-grid">
+        
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button class="top-btn" style="flex: 1; justify-content: center; background: rgba(10, 132, 255, 0.1); border-color: rgba(10, 132, 255, 0.3); color: var(--accent);" onclick="deduplicateMaterials(event)">
+                <span class="material-symbols-outlined" style="font-size: 16px;">filter_auto</span> 一键去重
+            </button>
+            <button class="top-btn" style="flex: 1; justify-content: center; background: rgba(255, 69, 58, 0.1); border-color: rgba(255, 69, 58, 0.3); color: var(--danger);" onclick="clearAllMaterials()">
+                <span class="material-symbols-outlined" style="font-size: 16px;">delete_sweep</span> 彻底清空
+            </button>
+        </div>
+
+        <div class="material-grid" id="material-grid"></div>
             </div>
     </div>
 

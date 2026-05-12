@@ -233,7 +233,7 @@ function closeBillingModal() {
 }
 
 // ==============================
-// 🌟 新增：动态预估开销金额感知引擎
+// 🌟 动态预估开销金额感知引擎 (Tooltip版)
 // ==============================
 function updateEstimatedCost() {
     const state = globalStore.getState();
@@ -247,13 +247,11 @@ function updateEstimatedCost() {
     const batch = batchSelect ? parseInt(batchSelect.value) : 1;
     const total = (cost * batch).toFixed(2);
     
-    const badge = document.getElementById('est-cost-badge');
-    if (badge) badge.innerText = `￥${total}`;
-}
-
-function updateBatchCount(select) {
-    document.getElementById('batch-text').innerText = select.options[select.selectedIndex].text;
-    updateEstimatedCost();
+    // 🌟 修复：将价格塞进悬浮提示框 (Tooltip) 里，而不是破坏按钮结构
+    const btn = document.getElementById('generate-btn');
+    if (btn) {
+        btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
+    }
 }
 
 // ==============================
@@ -1359,6 +1357,9 @@ async function renderBoard() {
 
         const cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc';
         const cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes';
+        
+        // 🌟 新增：把生图工具的节点信息加入脏检查雷达
+        const currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1';
 
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
@@ -1386,8 +1387,10 @@ async function renderBoard() {
             const oldProgress = cardEl.getAttribute('data-sync-progress');
             const oldCropSrc = cardEl.getAttribute('data-sync-crop-src');
             const oldCropRes = cardEl.getAttribute('data-sync-crop-res');
+            const oldChannel = cardEl.getAttribute('data-sync-channel'); // 🌟 读取老雷达数据
 
-            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes) { 
+            // 🌟 只要节点换了，立刻强制重绘卡片 DOM
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel) { 
                 cardEl.innerHTML = generateCardHTML(task); 
                 bindCardDrag(cardEl, task); 
             }
@@ -1399,6 +1402,7 @@ async function renderBoard() {
         cardEl.setAttribute('data-sync-progress', currentProgress); 
         cardEl.setAttribute('data-sync-crop-src', cropSrc);
         cardEl.setAttribute('data-sync-crop-res', cropRes);
+        cardEl.setAttribute('data-sync-channel', currentChannel); // 🌟 更新新雷达数据
     });
 }
 

@@ -48,14 +48,24 @@ async function hashPassword(password) {
 // ==============================
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
-    const savedPwd = sessionStorage.getItem('veo_admin_pwd');
+    const savedSessionPwd = sessionStorage.getItem('veo_admin_pwd');
     
-    if (savedPwd) {
+    // 如果当前会话页已经登录，无缝进入工作台
+    if (savedSessionPwd) {
         gate.style.display = 'none';
         return;
     }
 
-    // 🌟 启动光影尘埃粒子引擎
+    // 🌟 新增：检查设备本地是否“记住过密码”
+    const rememberedPwd = localStorage.getItem('veo_admin_pwd_saved');
+    if (rememberedPwd) {
+        const pwdInput = document.getElementById('studio-pwd-input');
+        const rememberCheckbox = document.getElementById('remember-pwd');
+        if (pwdInput) pwdInput.value = rememberedPwd; // 自动将长密码填入框内
+        if (rememberCheckbox) rememberCheckbox.checked = true; // 保持勾选状态
+    }
+
+    // 启动光影尘埃粒子引擎
     const canvas = document.getElementById('login-canvas');
     if (canvas && gate.style.display !== 'none') {
         const ctx = canvas.getContext('2d');
@@ -129,7 +139,7 @@ function startLoginTransition() {
     }, 200); 
 }
 
-// 🌟 必须是 async 异步函数才能使用 await
+// 🌟 哈希验证与设备记住逻辑
 async function handleLoginSubmit(e) {
     e.preventDefault(); 
     
@@ -141,24 +151,31 @@ async function handleLoginSubmit(e) {
     btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;
     btn.style.pointerEvents = 'none';
 
-    // 🌟 1. 计算用户输入密码的哈希值
     const inputHash = await hashPassword(pwdInput);
-    
-    // 🌟 2. 你的专属哈希锁 (已从截图自动提取填入)
     const TARGET_HASH = "acc8ca2c94bcfaf05736fe29176ad5ec6f766a47ae3597a4186507ece27e5f0f";
 
     setTimeout(() => {
-        // 🌟 3. 哈希门卫拦截逻辑
         if (inputHash !== TARGET_HASH) {
             showErrorModal(); 
             btn.innerHTML = `验证身份 / LOGIN`;
             btn.style.pointerEvents = 'auto';
             document.getElementById('studio-pwd-input').value = '';
+            
+            // 🌟 新增：如果输错了密码，为了安全顺手清空本地保存的假密码
+            localStorage.removeItem('veo_admin_pwd_saved');
             return; 
         }
 
-        // 🌟 4. 验证通过：保存明文用于 n8n 验证，并播放解锁运镜！
+        // 🌟 验证通过：保存明文用于当前会话 n8n 验证
         sessionStorage.setItem('veo_admin_pwd', pwdInput);
+        
+        // 🌟 新增：“记住设备”逻辑激活
+        const rememberCheckbox = document.getElementById('remember-pwd');
+        if (rememberCheckbox && rememberCheckbox.checked) {
+            localStorage.setItem('veo_admin_pwd_saved', pwdInput); // 写入永久缓存
+        } else {
+            localStorage.removeItem('veo_admin_pwd_saved'); // 如果没勾选，则清除缓存
+        }
         
         btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> 验证通过`;
         btn.style.background = 'var(--success)';
@@ -173,13 +190,12 @@ async function handleLoginSubmit(e) {
             setTimeout(() => {
                 if (typeof loginAnimationId !== 'undefined' && loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
-                showToast("欢迎回来", "success");
+                showToast("欢迎回来，指挥官。", "success");
             }, 800);
         }, 400);
 
     }, 600);
 }
-
 
 // ==========================================
 // 工作台 API 与核心常量

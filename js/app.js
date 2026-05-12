@@ -490,6 +490,12 @@ viewport.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function bindCardDrag(cardEl, task) {
+    // 🌟 核心新增：点击卡片的任意部位（图片、输入框、空白处），瞬间将该卡片置于最顶层！
+    cardEl.onmousedown = () => {
+        highestZIndex++;
+        cardEl.style.zIndex = highestZIndex;
+    };
+
     const header = cardEl.querySelector('.card-header');
     if(header) {
         header.onmousedown = (e) => {

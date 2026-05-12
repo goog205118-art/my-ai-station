@@ -313,23 +313,23 @@ body {
 }
 
 .gate-step {
-    position: absolute; z-index: 10; /* 确保交互面板在最上层 */
+    position: absolute; z-index: 10; 
     display: flex; justify-content: center; align-items: center;
     opacity: 0; pointer-events: none;
-    transform: translateZ(-200px) scale(0.8); 
+    /* 🌟 修复3：弃用 Z 轴，改为 Y 轴 + 缩放，既保留了运镜感，又不会弄坏玻璃渲染 */
+    transform: translateY(40px) scale(0.85); 
     transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gate-step.step-active {
     opacity: 1; pointer-events: auto;
-    transform: translateZ(0) scale(1); 
+    transform: translateY(0) scale(1); 
 }
 
 .gate-step.step-passed {
     opacity: 0; pointer-events: none;
-    transform: translateZ(300px) scale(1.5); 
+    transform: translateY(-60px) scale(1.15); 
 }
-
 /* 启动按钮样式 */
 .launch-btn {
     display: flex; flex-direction: column; align-items: center;
@@ -342,10 +342,12 @@ body {
 /* --- 移植自你模板的 Glassmorphism 表单 --- */
 .form-box {
     position: relative; width: 400px; height: 450px;
-    background: transparent;
+    /* 🌟 修复4：不要用纯 transparent，给 2% 的白底，这样玻璃质感更稳定 */
+    background: rgba(255, 255, 255, 0.02);
     border: 2px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px); /* 增加苹果浏览器兼容性 */
     display: flex; justify-content: center; align-items: center;
     box-shadow: 0 30px 80px rgba(0,0,0,0.8);
 }

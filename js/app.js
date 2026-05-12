@@ -668,9 +668,21 @@ sysBus.on('UI:UPDATE_MODEL_TEXT', (text) => document.getElementById('model-text'
 sysBus.on('UI:UPDATE_RATIO', (data) => { document.getElementById('ratio-text').innerText = data.text; document.getElementById('ratio-icon').innerText = data.value === '16:9' ? 'crop_16_9' : 'crop_portrait'; });
 sysBus.on('UI:UPDATE_ENHANCE_TEXT', (text) => document.getElementById('enhance-text').innerText = text);
 sysBus.on('SYSTEM:MODEL_CHANGED', (modelValue) => {
-    const frameTab = document.getElementById('tab-frame');
-    if (modelValue.toLowerCase().includes('4k')) { showToast("Veo 3.1 4K 模型不支持首尾帧，请使用参考图模式。", "info"); if (globalStore.getState().currentMode === 'frame') switchMode('ref'); frameTab.style.opacity = '0.3'; frameTab.style.pointerEvents = 'none'; frameTab.setAttribute('data-tip', '4K 模型不支持首尾帧模式，请使用参考图 (1-3张)'); } 
-    else { frameTab.style.opacity = '1'; frameTab.style.pointerEvents = 'auto'; frameTab.setAttribute('data-tip', '输入首帧或尾帧图片，精准控制视频起始与结束画面'); }
+    const frameTab = document.getElementById('tab-frame'), refTab = document.getElementById('tab-ref');
+    
+    if (modelValue.includes('components')) {
+        // 选中 Cmp 系列：锁死参考图模式
+        if (globalStore.getState().currentMode !== 'ref') switchMode('ref');
+        frameTab.style.opacity = '0.3'; frameTab.style.pointerEvents = 'none';
+        refTab.style.opacity = '1'; refTab.style.pointerEvents = 'auto';
+        showToast("已自动切换至【参考图 Cmp】专属多模态通道", "info");
+    } else {
+        // 选中标准/4K系列：锁死首尾帧模式 (去除了 4K 不支持尾帧的误报)
+        if (globalStore.getState().currentMode !== 'frame') switchMode('frame');
+        refTab.style.opacity = '0.3'; refTab.style.pointerEvents = 'none';
+        frameTab.style.opacity = '1'; frameTab.style.pointerEvents = 'auto';
+        showToast("已自动切换至【首尾帧】视频通道", "info");
+    }
     updateEstimatedCost();
 });
 

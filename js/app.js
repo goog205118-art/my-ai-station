@@ -163,12 +163,16 @@ async function alignSelectedCards() {
     const tasks = await getAllTasksDB();
     if (tasks.length === 0) return showToast("画布上目前没有任何卡片", "info");
     let targetIds = selectedTasks.size > 0 ? Array.from(selectedTasks) : tasks.map(t => t.id);
-    let cardsToAlign = tasks.filter(t => targetIds.includes(t.id) && t.type !== 'local_image');
+    // 排版引擎排除本地图片，也排除框架(Frame)自身，防止逻辑嵌套冲突
+    let cardsToAlign = tasks.filter(t => targetIds.includes(t.id) && t.type !== 'local_image' && t.type !== 'frame' && !t.parentId);
+    
+    if(cardsToAlign.length === 0) return showToast("没有可排版的散落卡片", "info");
+    
     cardsToAlign.sort((a, b) => (Math.abs(a.y) + Math.abs(a.x)) - (Math.abs(b.y) + Math.abs(b.x)));
     let minX = Math.min(...cardsToAlign.map(c => c.x)), minY = Math.min(...cardsToAlign.map(c => c.y)), currentX = minX, currentY = minY, xGap = 340, yGap = 420, col = 0;
     const maxCols = Math.max(3, Math.floor((window.innerWidth / transform.scale) / xGap));
     const promises = cardsToAlign.map(async (task) => { task.x = minX + (col * xGap); task.y = currentY; col++; if (col >= maxCols) { col = 0; currentY += yGap; } await saveTaskDB(task); });
-    await Promise.all(promises); renderBoard(); showToast(`🪄 空间清理完成：已自动对齐 ${cardsToAlign.length} 个节点`, "success");
+    await Promise.all(promises); renderBoard(); showToast(`🪄 空间清理完成：已自动对齐散落节点`, "success");
 }
 
 function showToast(message, type = 'info') {
@@ -198,6 +202,66 @@ function openHelpModal() { const modal = document.getElementById('help-modal'); 
 function closeHelpModal() { const modal = document.getElementById('help-modal'); modal.classList.remove('show'); setTimeout(() => modal.style.display = 'none', 300); }
 
 // ==============================
+// 🌟 核心新增：项目框架 (Frame) 管理引擎
+// ==============================
+async function createFrame() {
+    if (selectedTasks.size === 0) return showToast("请先按住 Shift 框选需要打组的卡片", "error");
+    const tasks = await getAllTasksDB();
+    // 只能框选常规卡片，不能框选别的框架或已经被打组的卡片
+    const selected = tasks.filter(t => selectedTasks.has(t.id) && t.type !== 'frame' && t.type !== 'local_image' && !t.parentId);
+    if (selected.length === 0) return showToast("选中的卡片已被打组或无效", "error");
+
+    let minX = Math.min(...selected.map(t => t.x));
+    let minY = Math.min(...selected.map(t => t.y));
+    let maxX = Math.max(...selected.map(t => t.x + (t.width || 340)));
+    let maxY = Math.max(...selected.map(t => t.y + (t.height || 400)));
+
+    const frameId = 'frame_' + Date.now();
+    const padding = 60; // 框架内边距
+    const newFrame = {
+        id: frameId, type: 'frame',
+        x: minX - padding, y: minY - padding,
+        width: maxX - minX + padding * 2, height: maxY - minY + padding * 2,
+        title: '未命名项目组', isCollapsed: false, timestamp: Date.now()
+    };
+
+    await saveTaskDB(newFrame);
+    // 为所有被选中的卡片打上父级标签
+    for (let t of selected) { t.parentId = frameId; await saveTaskDB(t); }
+
+    clearSelection();
+    await renderBoard();
+    showToast(`✅ 已将 ${selected.length} 个卡片收纳为项目组`, "success");
+}
+
+async function updateTaskField(id, key, val) {
+    const task = await getTaskDB(id);
+    if (task) { task[key] = val; await saveTaskDB(task); }
+}
+
+async function toggleFrameCollapse(id) {
+    const frame = await getTaskDB(id);
+    if (frame) {
+        frame.isCollapsed = !frame.isCollapsed;
+        await saveTaskDB(frame);
+        await renderBoard();
+    }
+}
+
+async function removeFrame(id) {
+    if(confirm('📦 确定要解散这个项目组吗？\n(内部卡片将安全保留在画布上)')) {
+        await deleteTaskDB(id);
+        const tasks = await getAllTasksDB();
+        for (let t of tasks) {
+            if (t.parentId === id) { delete t.parentId; await saveTaskDB(t); }
+        }
+        await renderBoard();
+        showToast("项目组已解散", "success");
+    }
+}
+
+
+// ==============================
 // 🌌 核心画布物理交互引擎
 // ==============================
 const viewport = document.getElementById('canvas-viewport'), board = document.getElementById('canvas-board'), marquee = document.getElementById('selection-marquee'); 
@@ -205,7 +269,7 @@ let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }, isPanning = fals
 let draggingCardInfo = null, highestZIndex = 10, scrollTimeout; 
 let selectedTasks = new Set(), isSelecting = false, startSelX = 0, startSelY = 0;
 
-function clearSelection() { selectedTasks.clear(); document.querySelectorAll('.video-card.selected').forEach(c => c.classList.remove('selected')); }
+function clearSelection() { selectedTasks.clear(); document.querySelectorAll('.video-card.selected').forEach(c => c.classList.remove('selected')); document.querySelectorAll('.frame-box.selected').forEach(c => c.classList.remove('selected'));}
 
 window.addEventListener('mousemove', (e) => {
     if (!ticking) {
@@ -220,8 +284,12 @@ window.addEventListener('mousemove', (e) => {
                 const currentX = e.clientX, currentY = e.clientY, left = Math.min(startSelX, currentX), top = Math.min(startSelY, currentY), width = Math.abs(currentX - startSelX), height = Math.abs(currentY - startSelY);
                 if(marquee) { marquee.style.left = left + 'px'; marquee.style.top = top + 'px'; marquee.style.width = width + 'px'; marquee.style.height = height + 'px'; }
                 const selRect = { left, top, right: left + width, bottom: top + height };
-                document.querySelectorAll('.video-card').forEach(card => {
+                // 框选支持视频卡片和框架本身
+                document.querySelectorAll('.video-card, .frame-box').forEach(card => {
                     const rect = card.getBoundingClientRect();
+                    // 如果卡片在被折叠的框架里，不允许被框选
+                    if(card.classList.contains('hidden-in-frame')) return;
+
                     if (rect.left < selRect.right && rect.right > selRect.left && rect.top < selRect.bottom && rect.bottom > selRect.top) { card.classList.add('selected'); selectedTasks.add(card.id.replace('card-', '')); } 
                     else { card.classList.remove('selected'); selectedTasks.delete(card.id.replace('card-', '')); }
                 });
@@ -230,6 +298,14 @@ window.addEventListener('mousemove', (e) => {
                 const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale, dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
                 draggingCardInfo.task.x = draggingCardInfo.initialX + dx; draggingCardInfo.task.y = draggingCardInfo.initialY + dy;
                 draggingCardInfo.el.style.transform = `translate(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px)`;
+
+                // 🌟 如果拖拽的是 Frame，带着它的所有孩子们一起飞！
+                if (draggingCardInfo.children) {
+                    draggingCardInfo.children.forEach(child => {
+                        child.task.x = child.initialX + dx; child.task.y = child.initialY + dy;
+                        child.el.style.transform = `translate(${child.task.x}px, ${child.task.y}px)`;
+                    });
+                }
             }
             ticking = false;
         });
@@ -247,15 +323,17 @@ viewport.addEventListener('mousedown', (e) => {
 window.addEventListener('mouseup', () => { 
     isPanning = false; board.classList.remove('is-moving'); 
     if (isSelecting) { isSelecting = false; if(marquee) marquee.style.display = 'none'; }
-    if (draggingCardInfo) { draggingCardInfo.el.style.willChange = 'auto'; saveTaskDB(draggingCardInfo.task); draggingCardInfo = null; renderMinimap(); } 
+    if (draggingCardInfo) { 
+        draggingCardInfo.el.style.willChange = 'auto'; saveTaskDB(draggingCardInfo.task); 
+        // 🌟 放下 Frame 后，把孩子们的新坐标也保存进数据库
+        if (draggingCardInfo.children) { draggingCardInfo.children.forEach(child => { child.el.style.willChange = 'auto'; saveTaskDB(child.task); }); }
+        draggingCardInfo = null; renderMinimap(); 
+    } 
 });
 
 viewport.addEventListener('wheel', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
-    
-    // 🌟 核心修复 1：只要手里正捏着卡片（draggingCardInfo 有值），就绝对锁定画布缩放！防止坐标系畸变导致瞬移。
     if (draggingCardInfo) return; 
-
     e.preventDefault(); if (ticking) return; 
     board.classList.add('is-moving'); clearTimeout(scrollTimeout); scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); 
     const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
@@ -273,18 +351,35 @@ viewport.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function bindCardDrag(cardEl, task) {
-    // 🌟 卡片全区域置顶
-    cardEl.onmousedown = () => { highestZIndex++; cardEl.style.zIndex = highestZIndex; };
-    const header = cardEl.querySelector('.card-header');
+    // 置顶逻辑防干扰
+    cardEl.onmousedown = (e) => { if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { highestZIndex++; cardEl.style.zIndex = highestZIndex; } };
+    
+    // 兼容普通卡片头部和 Frame 表头
+    const header = cardEl.querySelector('.card-header') || cardEl.querySelector('.frame-header');
     if(header) {
-        header.onmousedown = (e) => {
+        header.onmousedown = async (e) => {
+            // 防误触：点击输入框或按钮时不触发拖拽
+            if(e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+            
             highestZIndex++; cardEl.style.zIndex = highestZIndex; cardEl.style.willChange = 'transform'; 
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 if (selectedTasks.has(task.id)) { selectedTasks.delete(task.id); cardEl.classList.remove('selected'); } else { selectedTasks.add(task.id); cardEl.classList.add('selected'); }
             } else {
                 if (!selectedTasks.has(task.id)) { clearSelection(); selectedTasks.add(task.id); cardEl.classList.add('selected'); }
             }
-            draggingCardInfo = { el: cardEl, task: task, startMouseX: e.clientX, startMouseY: e.clientY, initialX: task.x || 0, initialY: task.y || 0 }; e.stopPropagation(); 
+            draggingCardInfo = { el: cardEl, task: task, startMouseX: e.clientX, startMouseY: e.clientY, initialX: task.x || 0, initialY: task.y || 0 }; 
+            
+            // 🌟 核心：如果拎起的是一个 Frame，顺便把它肚子里没被折叠的孩子全部拎起来准备联动
+            if (task.type === 'frame' && !task.isCollapsed) {
+                const allTasks = await getAllTasksDB();
+                const children = allTasks.filter(t => t.parentId === task.id);
+                draggingCardInfo.children = children.map(c => {
+                    const childEl = document.getElementById('card-' + c.id);
+                    if (childEl) { childEl.style.willChange = 'transform'; return { el: childEl, task: c, initialX: c.x || 0, initialY: c.y || 0 }; }
+                    return null;
+                }).filter(Boolean);
+            }
+            e.stopPropagation(); 
         };
     }
 }
@@ -292,13 +387,18 @@ function bindCardDrag(cardEl, task) {
 window.addEventListener('keydown', async (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault(); document.querySelectorAll('.video-card').forEach(card => { selectedTasks.add(card.id.replace('card-', '')); card.classList.add('selected'); }); showToast(`已全选 ${selectedTasks.size} 个节点`, "info");
+        e.preventDefault(); document.querySelectorAll('.video-card, .frame-box').forEach(card => { if(card.classList.contains('hidden-in-frame')) return; selectedTasks.add(card.id.replace('card-', '')); card.classList.add('selected'); }); showToast(`已全选可视节点`, "info");
     }
     if (e.key === 'Backspace' || e.key === 'Delete') {
         if (selectedTasks.size > 0) {
-            if (confirm(`🗑️ 确定要彻底删除选中的 ${selectedTasks.size} 个组件吗？`)) {
-                const deletePromises = Array.from(selectedTasks).map(async (id) => { await deleteTaskDB(id); const card = document.getElementById('card-' + id); if (card) card.remove(); });
-                await Promise.all(deletePromises); showToast(`批量清理完成`, "success"); selectedTasks.clear(); renderMinimap();
+            if (confirm(`🗑️ 确定要彻底删除选中的 ${selectedTasks.size} 个对象吗？(若包含项目组，内部卡片也会连锅端！)`)) {
+                const deletePromises = Array.from(selectedTasks).map(async (id) => { 
+                    await deleteTaskDB(id); const card = document.getElementById('card-' + id); if (card) card.remove(); 
+                    // 如果删的是 Frame，连锅端孩子们
+                    const allTasks = await getAllTasksDB();
+                    for(let t of allTasks) { if(t.parentId === id) { await deleteTaskDB(t.id); const childEl = document.getElementById('card-' + t.id); if(childEl) childEl.remove(); } }
+                });
+                await Promise.all(deletePromises); showToast(`清理完成`, "success"); selectedTasks.clear(); renderMinimap();
             }
         }
     }
@@ -318,6 +418,8 @@ async function renderMinimap() {
     const tasks = await getAllTasksDB(); const boardTasks = tasks.filter(t => t.type !== 'local_image');
     if (boardTasks.length === 0) { ctx.clearRect(0, 0, cw, ch); viewBox.style.display = 'none'; return; }
 
+    const frameMap = {}; boardTasks.filter(t => t.type === 'frame').forEach(f => frameMap[f.id] = f);
+
     let minX = Math.min(...boardTasks.map(t => t.x)), maxX = Math.max(...boardTasks.map(t => t.x + (t.width || 340))); 
     let minY = Math.min(...boardTasks.map(t => t.y)), maxY = Math.max(...boardTasks.map(t => t.y + (t.height || 400))); 
 
@@ -334,9 +436,14 @@ async function renderMinimap() {
 
     ctx.clearRect(0, 0, cw, ch);
     boardTasks.forEach(t => {
+        // 🌟 如果卡片在折叠的 Frame 里，小地图也不渲染它
+        if (t.parentId && frameMap[t.parentId] && frameMap[t.parentId].isCollapsed) return;
+
         const px = offsetX + (t.x - minX) * mapScale, py = offsetY + (t.y - minY) * mapScale, pw = (t.width || 340) * mapScale, ph = (t.height || 400) * mapScale;
         ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(px, py, pw, Math.max(ph, 5), 3); else ctx.rect(px, py, pw, Math.max(ph, 5));
-        if (t.type === 'note') ctx.fillStyle = 'rgba(255, 202, 40, 0.8)'; else if (t.type === 'tool_generator') ctx.fillStyle = 'rgba(129, 140, 248, 0.8)'; else if (t.type === 'tool_image_gen') ctx.fillStyle = 'rgba(10, 132, 255, 0.8)'; else if (t.type === 'tool_cropper') ctx.fillStyle = 'rgba(50, 215, 75, 0.8)'; else ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        
+        if (t.type === 'frame') ctx.fillStyle = 'rgba(167, 139, 250, 0.15)'; 
+        else if (t.type === 'note') ctx.fillStyle = 'rgba(255, 202, 40, 0.8)'; else if (t.type === 'tool_generator') ctx.fillStyle = 'rgba(129, 140, 248, 0.8)'; else if (t.type === 'tool_image_gen') ctx.fillStyle = 'rgba(10, 132, 255, 0.8)'; else if (t.type === 'tool_cropper') ctx.fillStyle = 'rgba(50, 215, 75, 0.8)'; else ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.fill();
     });
     syncMinimapViewport();
@@ -514,22 +621,13 @@ function clearFrame(event, type) { if(event) { event.preventDefault(); event.sto
 async function submitBatchTask() {
     const prompt = document.getElementById('prompt-input').value.trim(); if (!prompt) return alert('请填写提示词');
     const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
-    
-    // 点击时变成转圈圈
     btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
-    
     let submitRef = [...globalStore.getState().references], submitFirst = globalStore.getState().firstFrame, submitLast = globalStore.getState().lastFrame;
     if (globalStore.getState().currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
     const taskParams = { model: globalStore.getState().model, aspectRatio: globalStore.getState().aspectRatio, enhancePrompt: globalStore.getState().enhancePrompt, enableUpsample: globalStore.getState().enableUpsample, autoRetry: globalStore.getState().autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
     let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
-    
     await Promise.allSettled(promises);
-    
-    // 🌟 核心修复 2：提交完毕后，解除禁用，并把转圈圈还原回“向上箭头”！
-    btn.disabled = false; 
-    btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`;
-    
-    updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
+    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
 }
 
 async function executeSubmission(params, promptText, offsetIndex = 0) {
@@ -695,6 +793,20 @@ window.addEventListener('pointerup', async () => { if (activeCrop) { if (activeC
 // 🖌️ UI 卡片模板与渲染中枢
 // ==============================
 function generateCardHTML(task) {
+    // 🌟 特殊渲染：如果是 Frame，绘制它科幻的紫色头部
+    if (task.type === 'frame') {
+        return `
+        <div class="frame-header" onmousedown="event.stopPropagation()">
+            <span class="material-symbols-outlined" style="font-size:18px;">view_cofy</span>
+            <input type="text" class="frame-title-input" value="${task.title || ''}" placeholder="未命名项目组" onchange="updateTaskField('${task.id}', 'title', this.value)">
+            <div style="display:flex; gap: 4px; margin-left: auto;">
+                <button class="frame-btn" onclick="toggleFrameCollapse('${task.id}')" data-tip="折叠/展开此项目收纳"><span class="material-symbols-outlined" style="font-size:22px;">${task.isCollapsed ? 'expand_more' : 'expand_less'}</span></button>
+                <button class="frame-btn" onclick="removeFrame('${task.id}')" data-tip="解散该项目组"><span class="material-symbols-outlined" style="font-size:18px;">close</span></button>
+            </div>
+        </div>
+        `;
+    }
+
     if (task.type === 'note') return `<div class="card-header"><span style="color:#ffca28; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">sticky_note_2</span> 即时便签</span><button onclick="removeTask('${task.id}')" data-tip="删除此便签" style="background:transparent; border:none; color:#ffca28; cursor:pointer; opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><textarea oninput="updateNoteText('${task.id}', this.value)" placeholder="在此输入灵感、提示词或分组备注...">${task.text || ''}</textarea>`;
     if (task.type === 'tool_generator') return `<div class="card-header"><span style="color:#818cf8; display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span> 社媒灵感生成器</span><button onclick="removeTask('${task.id}')" data-tip="删除该组件" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="gen-grid"><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">video_camera_front</span> 带货形式</label><select onchange="updateGeneratorState('${task.id}', 'format', this.value)">${buildGeneratorOptions(genData.formats, task.state.format)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">play_circle</span> 开头节奏</label><select onchange="updateGeneratorState('${task.id}', 'opening', this.value)">${buildGeneratorOptions(genData.openings, task.state.opening)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">sell</span> 内容属性</label><select onchange="updateGeneratorState('${task.id}', 'attribute', this.value)">${buildGeneratorOptions(genData.attributes, task.state.attribute)}</select></div><div class="gen-item"><label><span class="material-symbols-outlined" style="font-size:12px;">magic_button</span> 通用调性</label><select onchange="updateGeneratorState('${task.id}', 'general', this.value)">${buildGeneratorOptions(genData.generals, task.state.general)}</select></div></div><div class="gen-actions"><button class="gen-btn shuffle" onclick="shuffleGenerator('${task.id}')" data-tip="摇骰子：随机抽取一套爆款剧本组合"><span class="material-symbols-outlined" style="font-size:16px;">shuffle</span> 随机抽取</button><button class="gen-btn copy" onclick="applyGeneratorToPrompt('${task.id}', this)" data-tip="一键将结构化剧本反填至底部 Prompt 框"><span class="material-symbols-outlined" style="font-size:16px;">move_down</span> 应用至控制台</button></div>`;
 
@@ -734,47 +846,64 @@ function generateCardHTML(task) {
 async function renderBoard() {
     const tasks = await getAllTasksDB(); const boardTasks = tasks.filter(t => t.type !== 'local_image'), boardTaskIds = new Set(boardTasks.map(t => 'card-' + t.id));
     const existingCards = Array.from(board.children); existingCards.forEach(card => { if (!boardTaskIds.has(card.id)) card.remove(); });
+    
+    // 创建框架字典，用于判断卡片是否应该被隐藏
+    const frameMap = {}; boardTasks.filter(t => t.type === 'frame').forEach(f => frameMap[f.id] = f);
+
     boardTasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0, currentProgress = task.progress || '', cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc', cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes', currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1'; 
+        
+        // 🌟 判定：这卡片是不是被关在某个已折叠的框架里？
+        let isHiddenInFrame = false;
+        if (task.parentId && frameMap[task.parentId] && frameMap[task.parentId].isCollapsed) isHiddenInFrame = true;
+
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
-            if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; } else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator'; else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; else if (task.type === 'tool_cropper') cardEl.className = 'video-card tool-cropper'; else cardEl.className = 'video-card';
+            
+            // 为 Frame 赋予特殊外观和尺寸
+            if (task.type === 'frame') {
+                cardEl.className = 'frame-box';
+                cardEl.style.width = `${task.width}px`;
+                cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`;
+                if (task.isCollapsed) cardEl.style.border = 'none';
+            }
+            else if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; } else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator'; else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; else if (task.type === 'tool_cropper') cardEl.className = 'video-card tool-cropper'; else cardEl.className = 'video-card';
+            
             cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`; cardEl.innerHTML = generateCardHTML(task); board.appendChild(cardEl); 
             if (task.type === 'note') cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
             if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); }
         } else {
             cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`;
-            if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
+            
+            if (task.type === 'frame') {
+                cardEl.style.width = `${task.width}px`;
+                cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`;
+                cardEl.style.border = task.isCollapsed ? 'none' : '';
+            }
+            else if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
+            
             const oldStatus = cardEl.getAttribute('data-sync-status'), oldRetry = cardEl.getAttribute('data-sync-retry'), oldImgLen = cardEl.getAttribute('data-sync-img-len'), oldProgress = cardEl.getAttribute('data-sync-progress'), oldCropSrc = cardEl.getAttribute('data-sync-crop-src'), oldCropRes = cardEl.getAttribute('data-sync-crop-res'), oldChannel = cardEl.getAttribute('data-sync-channel'); 
-            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel) { cardEl.innerHTML = generateCardHTML(task); }
+            if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel || task.type === 'frame') { cardEl.innerHTML = generateCardHTML(task); }
         }
-        // 🌟 修复：保证任何状态下，最新坐标都传递给拖拽引擎！
+
+        // 🌟 隐藏引擎：如果该隐身，直接贴上隐身衣
+        if (isHiddenInFrame) cardEl.classList.add('hidden-in-frame'); else cardEl.classList.remove('hidden-in-frame');
+
         bindCardDrag(cardEl, task);
         cardEl.setAttribute('data-sync-status', task.status || 'static'); cardEl.setAttribute('data-sync-retry', task.retryCount || 0); cardEl.setAttribute('data-sync-img-len', currentImgLen); cardEl.setAttribute('data-sync-progress', currentProgress); cardEl.setAttribute('data-sync-crop-src', cropSrc); cardEl.setAttribute('data-sync-crop-res', cropRes); cardEl.setAttribute('data-sync-channel', currentChannel); 
     });
-    // 🌟 画布渲染完毕，同步小地图
     renderMinimap();
 }
 
 async function removeTask(id) { if(confirm('确定删除这张卡片吗？')) { await deleteTaskDB(id); const card = document.getElementById('card-' + id); if (card) card.remove(); renderMinimap(); } }
 function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
 
-// ==============================
-// 🚀 系统启动初始化入口
-// ==============================
 document.addEventListener('DOMContentLoaded', async () => {
     await initDB(); 
     board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; 
     document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; 
-    
-    await renderBoard(); 
-    await renderMaterialLibrary();
-    
-    bindMainConsoleDrop('slot-ref-box', 'references'); 
-    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
-    bindMainConsoleDrop('slot-last-box', 'lastFrame');
-    
-    await updateBillingUI(); 
-    updateEstimatedCost();
+    await renderBoard(); await renderMaterialLibrary();
+    bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await updateBillingUI(); updateEstimatedCost();
 });

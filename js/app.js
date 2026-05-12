@@ -109,7 +109,20 @@ function startLoginTransition() {
     }, 200); 
 }
 
-function handleLoginSubmit(e) {
+// ==============================
+// 🔐 核心新增：SHA-256 军工级哈希加密算法
+// ==============================
+async function hashPassword(password) {
+    const msgBuffer = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==============================
+// 🎬 运镜 2：哈希验证与解锁
+// ==============================
+async function handleLoginSubmit(e) {
     e.preventDefault(); 
     
     const pwdInput = document.getElementById('studio-pwd-input').value.trim();
@@ -117,10 +130,31 @@ function handleLoginSubmit(e) {
     
     if (!pwdInput) return showToast("请输入密钥", "error");
 
+    // 按钮变为加载状态
     btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;
     btn.style.pointerEvents = 'none';
 
+    // 🌟 1. 计算用户输入密码的哈希值
+    const inputHash = await hashPassword(pwdInput);
+    
+    // 🌟 2. 你的专属哈希锁（将你在第一步获取的长字符串粘贴到这里的双引号内！）
+    const TARGET_HASH = "acc8ca2c94bcfaf05736fe29176ad5ec6f766a47ae3597a4186507ece27e5f0f";
+
+    // 模拟一下网络验证的延迟感
     setTimeout(() => {
+        
+        // 🌟 3. 哈希门卫拦截逻辑
+        if (inputHash !== TARGET_HASH) {
+            showToast("系统密钥错误，拒绝访问", "error");
+            // 验证失败，恢复按钮状态，清空输入框
+            btn.innerHTML = `验证身份 / LOGIN`;
+            btn.style.pointerEvents = 'auto';
+            document.getElementById('studio-pwd-input').value = '';
+            document.getElementById('studio-pwd-input').focus();
+            return; // 强制阻断，绝对不放行
+        }
+
+        // 🌟 4. 验证通过：保存明文用于 n8n 验证，并播放解锁运镜！
         sessionStorage.setItem('veo_admin_pwd', pwdInput);
         
         btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> 验证通过`;
@@ -134,8 +168,7 @@ function handleLoginSubmit(e) {
             gate.classList.add('unlocked');
             
             setTimeout(() => {
-                // 🌟 核心卸载：关闭粒子引擎，彻底释放 GPU 给系统工作台！
-                if (loginAnimationId) cancelAnimationFrame(loginAnimationId);
+                if (typeof loginAnimationId !== 'undefined' && loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
                 showToast("欢迎回来", "success");
             }, 800);

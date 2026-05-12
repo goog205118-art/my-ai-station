@@ -190,7 +190,7 @@ async function handleLoginSubmit(e) {
             setTimeout(() => {
                 if (typeof loginAnimationId !== 'undefined' && loginAnimationId) cancelAnimationFrame(loginAnimationId);
                 gate.remove();
-                showToast("欢迎回来，指挥官。", "success");
+                showToast("欢迎回来", "success");
             }, 800);
         }, 400);
 

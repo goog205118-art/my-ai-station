@@ -6,7 +6,15 @@ let loginAnimationId = null;
 // 🌟 自动注入核心缺失样式 (修复小地图遮挡与拉伸把手)
 const styleInj = document.createElement('style');
 styleInj.innerHTML = `
-    .minimap-container { bottom: 160px !important; }
+    .minimap-container { bottom: 160px !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); overflow: visible !important; }
+    .minimap-container.is-minimized { width: 44px !important; height: 44px !important; border-radius: 22px !important; display: flex; align-items: center; justify-content: center; cursor: pointer; border-color: rgba(255,255,255,0.2); }
+    .minimap-container.is-minimized #minimap-canvas, .minimap-container.is-minimized #minimap-viewport-box { opacity: 0; pointer-events: none; }
+    .minimap-toggle { position: absolute; top: -10px; right: -10px; width: 24px; height: 24px; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 10; opacity: 0; transition: 0.2s; border: 1px solid rgba(255,255,255,0.1); }
+    .minimap-container:hover .minimap-toggle { opacity: 1; }
+    .minimap-container.is-minimized .minimap-toggle { display: none; }
+    .minimap-icon { display: none; font-size: 24px; color: var(--accent); }
+    .minimap-container.is-minimized .minimap-icon { display: block; }
+    
     .frame-resize-handle {
         position: absolute; bottom: 0; right: 0; width: 28px; height: 28px;
         cursor: nwse-resize; z-index: 20; pointer-events: auto;
@@ -39,7 +47,7 @@ async function hashPassword(password) {
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
     const savedSessionPwd = sessionStorage.getItem('veo_admin_pwd');
-    if (savedSessionPwd) { gate.style.display = 'none'; return; }
+    if (savedSessionPwd) { gate.style.display = 'none'; }
 
     const rememberedPwd = localStorage.getItem('veo_admin_pwd_saved');
     if (rememberedPwd) {
@@ -48,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const canvas = document.getElementById('login-canvas');
-    if (canvas && gate.style.display !== 'none') {
+    if (canvas && gate && gate.style.display !== 'none') {
         const ctx = canvas.getContext('2d');
         let width, height, particles = [], mouse = { x: null, y: null };
         function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
@@ -85,7 +93,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         animate();
     }
+
+    // 🌟 初始化时，给小地图注入收起展开的按钮 DOM
+    const minimapEl = document.getElementById('minimap-container');
+    if (minimapEl) {
+        minimapEl.innerHTML += `
+            <div class="minimap-toggle" onclick="toggleMinimap(event)" data-tip="收起小地图"><span class="material-symbols-outlined" style="font-size:14px;">close</span></div>
+            <span class="material-symbols-outlined minimap-icon" onclick="toggleMinimap(event)" data-tip="展开小地图">map</span>
+        `;
+    }
 });
+
+// 🌟 新增：小地图收起/展开功能
+window.toggleMinimap = function(e) {
+    if(e) e.stopPropagation();
+    const container = document.getElementById('minimap-container');
+    if (container) {
+        container.classList.toggle('is-minimized');
+        if (!container.classList.contains('is-minimized')) {
+            renderMinimap(); 
+        }
+    }
+};
 
 function startLoginTransition() {
     document.getElementById('gate-step-1').classList.remove('step-active'); document.getElementById('gate-step-1').classList.add('step-passed'); 
@@ -230,13 +259,11 @@ async function removeFrame(id) {
     }
 }
 
-// 🌟 新增：卡片移入移出框架自动判定引擎
 async function checkGroupDrop(draggedInfo) {
     const task = draggedInfo.task;
-    if (task.type === 'frame') return; // 框架不能放进框架
+    if (task.type === 'frame') return; 
     const cardCenter = { x: task.x + (task.width || 340)/2, y: task.y + (task.height || 400)/2 };
     
-    // 找出所有激活的框架
     const frames = Array.from(document.querySelectorAll('.frame-box')).map(el => el.__veoTask).filter(t => t && t.type === 'frame' && !t.isCollapsed);
     let droppedIntoFrame = null;
     
@@ -254,7 +281,7 @@ async function checkGroupDrop(draggedInfo) {
     } else {
         if (task.parentId) {
             task.parentId = null; await saveTaskDB(task);
-            showToast("📤 卡片已移出项目组", "info");
+            showToast("📤 卡片已自由脱离项目组", "info");
         }
     }
 }
@@ -299,11 +326,16 @@ window.addEventListener('mousemove', (e) => {
                     });
                 }
             }
+            // 🌟 核心拦截：拉伸时不能把框缩得比内部卡片还要小！
             else if (activeFrameResize) {
                 const dx = (e.clientX - activeFrameResize.startX) / transform.scale, dy = (e.clientY - activeFrameResize.startY) / transform.scale;
-                const newW = Math.max(340, activeFrameResize.startW + dx), newH = Math.max(200, activeFrameResize.startH + dy);
+                
+                // 运用我们提前计算好的内部子元素物理边界防线 (minW, minH)
+                const newW = Math.max(activeFrameResize.minW, activeFrameResize.startW + dx);
+                const newH = Math.max(activeFrameResize.minH, activeFrameResize.startH + dy);
+                
                 activeFrameResize.el.style.width = newW + 'px'; activeFrameResize.el.style.height = newH + 'px';
-                activeFrameResize.task.width = newW; activeFrameResize.task.height = newH; // 🌟 同步更新内存
+                activeFrameResize.task.width = newW; activeFrameResize.task.height = newH; 
             }
             ticking = false;
         });
@@ -329,14 +361,14 @@ window.addEventListener('mouseup', async () => {
         if (draggingCardInfo.children) { 
             for(let child of draggingCardInfo.children) { child.el.style.willChange = 'auto'; await saveTaskDB(child.task); }
         } else {
-            // 🌟 如果拖拽的不是框架（是单张卡片），松手时检测是否跨组移动
+            // 🌟 检测是否跨组移动
             await checkGroupDrop(draggingCardInfo);
         }
         draggingCardInfo = null; 
         renderMinimap(); 
     } 
     if (activeFrameResize) {
-        await saveTaskDB(activeFrameResize.task); // 🌟 持久化框架新尺寸
+        await saveTaskDB(activeFrameResize.task); 
         activeFrameResize = null;
         renderMinimap();
     }
@@ -344,7 +376,7 @@ window.addEventListener('mouseup', async () => {
 
 viewport.addEventListener('wheel', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
-    if (draggingCardInfo) return; // 🌟 防缩放瞬移拦截
+    if (draggingCardInfo) return; 
     e.preventDefault(); if (ticking) return; 
     board.classList.add('is-moving'); clearTimeout(scrollTimeout); scrollTimeout = setTimeout(() => board.classList.remove('is-moving'), 150); 
     const delta = e.deltaY * 0.001; let newScale = Math.min(Math.max(0.2, transform.scale - delta), 3); 
@@ -361,8 +393,39 @@ viewport.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
+// 🌟 新增：触发框架拉伸，并提前计算不可超越的物理底线
+function startFrameResize(e, id) {
+    e.stopPropagation(); 
+    isPanning = false; board.classList.remove('is-moving');
+    const el = document.getElementById('card-' + id);
+    const task = el.__veoTask;
+    
+    let minW = 340;
+    let minH = 200;
+    
+    // 遍历算出当前框架内所有子元素的最大触及边界
+    if (task) {
+        document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
+            if (childEl.__veoTask && childEl.__veoTask.parentId === id) {
+                const childTask = childEl.__veoTask;
+                // 子元素右下角相对父框架的坐标 + 40px的安全内边距
+                const childRight = (childTask.x - task.x) + (childTask.width || 340) + 40; 
+                const childBottom = (childTask.y - task.y) + (childTask.height || 400) + 40; 
+                if (childRight > minW) minW = childRight;
+                if (childBottom > minH) minH = childBottom;
+            }
+        });
+    }
+
+    activeFrameResize = {
+        id: id, startX: e.clientX, startY: e.clientY,
+        startW: el.offsetWidth, startH: el.offsetHeight, el: el, task: task,
+        minW: minW, minH: minH  // 带着底线去拉伸
+    };
+}
+
 function bindCardDrag(cardEl, task) {
-    cardEl.__veoTask = task; // 🌟 核心绑定：将内存对象直接挂载到 DOM 上，彻底阻断闭包过期
+    cardEl.__veoTask = task; 
     cardEl.onmousedown = (e) => { if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.classList.contains('frame-resize-handle')) { highestZIndex++; cardEl.style.zIndex = highestZIndex; } };
     
     const header = cardEl.querySelector('.card-header') || cardEl.querySelector('.frame-header');
@@ -375,11 +438,9 @@ function bindCardDrag(cardEl, task) {
             } else {
                 if (!selectedTasks.has(task.id)) { clearSelection(); selectedTasks.add(task.id); cardEl.classList.add('selected'); }
             }
-            // 🌟 使用挂载的最新对象
             draggingCardInfo = { el: cardEl, task: cardEl.__veoTask, startMouseX: e.clientX, startMouseY: e.clientY, initialX: cardEl.__veoTask.x || 0, initialY: cardEl.__veoTask.y || 0 }; 
             
             if (task.type === 'frame' && !task.isCollapsed) {
-                // 🌟 从 DOM 树直接提取子节点，0 延迟，0 错位
                 draggingCardInfo.children = [];
                 document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
                     if (childEl.__veoTask && childEl.__veoTask.parentId === task.id) {
@@ -389,15 +450,6 @@ function bindCardDrag(cardEl, task) {
                 });
             }
             e.stopPropagation(); 
-        };
-    }
-    
-    // 🌟 挂载专属拉伸监听器，防冲突
-    const resizeHandle = cardEl.querySelector('.frame-resize-handle');
-    if (resizeHandle) {
-        resizeHandle.onmousedown = (e) => {
-            e.stopPropagation(); isPanning = false; board.classList.remove('is-moving');
-            activeFrameResize = { id: task.id, startX: e.clientX, startY: e.clientY, startW: cardEl.__veoTask.width || 340, startH: cardEl.__veoTask.height || 200, el: cardEl, task: cardEl.__veoTask };
         };
     }
 }
@@ -423,8 +475,12 @@ window.addEventListener('keydown', async (e) => {
 let mapMeta = { minX: 0, minY: 0, mapScale: 1, offsetX: 0, offsetY: 0 };
 
 async function renderMinimap() {
-    const container = document.getElementById('minimap-container'), canvas = document.getElementById('minimap-canvas'), viewBox = document.getElementById('minimap-viewport-box');
-    if (!container || !canvas || !viewBox) return;
+    const container = document.getElementById('minimap-container');
+    // 如果小地图处于收缩状态，跳过渲染节约性能
+    if (!container || container.classList.contains('is-minimized')) return;
+    
+    const canvas = document.getElementById('minimap-canvas'), viewBox = document.getElementById('minimap-viewport-box');
+    if (!canvas || !viewBox) return;
     const ctx = canvas.getContext('2d'), cw = container.clientWidth, ch = container.clientHeight;
     canvas.width = cw; canvas.height = ch;
 
@@ -469,7 +525,10 @@ function syncMinimapViewport() {
 }
 
 function handleMinimapClick(e) {
-    const container = document.getElementById('minimap-container'); const rect = container.getBoundingClientRect();
+    const container = document.getElementById('minimap-container'); 
+    if (container.classList.contains('is-minimized')) return; // 🌟 拦截缩小状态的点击
+    
+    const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left, clickY = e.clientY - rect.top;
     const targetWorldX = (clickX - mapMeta.offsetX) / mapMeta.mapScale + mapMeta.minX, targetWorldY = (clickY - mapMeta.offsetY) / mapMeta.mapScale + mapMeta.minY;
     transform.x = -targetWorldX * transform.scale + window.innerWidth / 2; transform.y = -targetWorldY * transform.scale + window.innerHeight / 2;
@@ -760,39 +819,66 @@ function generateCardHTML(task) {
 async function renderBoard() {
     const tasks = await getAllTasksDB(); const boardTasks = tasks.filter(t => t.type !== 'local_image'), boardTaskIds = new Set(boardTasks.map(t => 'card-' + t.id));
     const existingCards = Array.from(board.children); existingCards.forEach(card => { if (!boardTaskIds.has(card.id)) card.remove(); });
+    
     const frameMap = {}; boardTasks.filter(t => t.type === 'frame').forEach(f => frameMap[f.id] = f);
 
     boardTasks.forEach(task => {
         let cardEl = document.getElementById('card-' + task.id);
         const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0, currentProgress = task.progress || '', cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc', cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes', currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1'; 
-        let isHiddenInFrame = false; if (task.parentId && frameMap[task.parentId] && frameMap[task.parentId].isCollapsed) isHiddenInFrame = true;
+        
+        let isHiddenInFrame = false;
+        if (task.parentId && frameMap[task.parentId] && frameMap[task.parentId].isCollapsed) isHiddenInFrame = true;
 
         if (!cardEl) {
             cardEl = document.createElement('div'); cardEl.id = 'card-' + task.id;
-            if (task.type === 'frame') { cardEl.className = 'frame-box'; cardEl.style.width = `${task.width}px`; cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`; if (task.isCollapsed) cardEl.style.border = 'none'; }
+            
+            if (task.type === 'frame') {
+                cardEl.className = 'frame-box';
+                cardEl.style.width = `${task.width}px`;
+                cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`;
+                if (task.isCollapsed) cardEl.style.border = 'none';
+            }
             else if (task.type === 'note') { cardEl.className = 'video-card sticky-note'; cardEl.style.width = `${task.width || 260}px`; cardEl.style.height = `${task.height || 180}px`; } else if (task.type === 'tool_generator') cardEl.className = 'video-card tool-generator'; else if (task.type === 'tool_image_gen') cardEl.className = 'video-card tool-image-gen'; else if (task.type === 'tool_cropper') cardEl.className = 'video-card tool-cropper'; else cardEl.className = 'video-card';
+            
             cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`; cardEl.innerHTML = generateCardHTML(task); board.appendChild(cardEl); 
             if (task.type === 'note') cardEl.addEventListener('mouseup', () => saveNoteSize(task.id, cardEl.offsetWidth, cardEl.offsetHeight));
             if (task.status === 'processing' && !activeTasks.includes(task.id)) { activeTasks.push(task.id); startTaskPolling(task.id); }
         } else {
             cardEl.style.transform = `translate(${task.x}px, ${task.y}px)`;
-            if (task.type === 'frame') { cardEl.style.width = `${task.width}px`; cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`; cardEl.style.border = task.isCollapsed ? 'none' : ''; }
+            
+            if (task.type === 'frame') {
+                cardEl.style.width = `${task.width}px`;
+                cardEl.style.height = task.isCollapsed ? '0px' : `${task.height}px`;
+                cardEl.style.border = task.isCollapsed ? 'none' : '';
+            }
             else if (task.type === 'note' && task.width && task.height) { cardEl.style.width = `${task.width}px`; cardEl.style.height = `${task.height}px`; }
+            
             const oldStatus = cardEl.getAttribute('data-sync-status'), oldRetry = cardEl.getAttribute('data-sync-retry'), oldImgLen = cardEl.getAttribute('data-sync-img-len'), oldProgress = cardEl.getAttribute('data-sync-progress'), oldCropSrc = cardEl.getAttribute('data-sync-crop-src'), oldCropRes = cardEl.getAttribute('data-sync-crop-res'), oldChannel = cardEl.getAttribute('data-sync-channel'); 
             if (oldStatus !== task.status || oldRetry != task.retryCount || oldImgLen != currentImgLen || oldProgress !== currentProgress || oldCropSrc !== cropSrc || oldCropRes !== cropRes || oldChannel !== currentChannel || task.type === 'frame') { cardEl.innerHTML = generateCardHTML(task); }
         }
+
         if (isHiddenInFrame) cardEl.classList.add('hidden-in-frame'); else cardEl.classList.remove('hidden-in-frame');
+
         bindCardDrag(cardEl, task);
         cardEl.setAttribute('data-sync-status', task.status || 'static'); cardEl.setAttribute('data-sync-retry', task.retryCount || 0); cardEl.setAttribute('data-sync-img-len', currentImgLen); cardEl.setAttribute('data-sync-progress', currentProgress); cardEl.setAttribute('data-sync-crop-src', cropSrc); cardEl.setAttribute('data-sync-crop-res', cropRes); cardEl.setAttribute('data-sync-channel', currentChannel); 
     });
     renderMinimap();
 }
 
+async function removeTask(id) { if(confirm('确定删除这张卡片吗？')) { await deleteTaskDB(id); const card = document.getElementById('card-' + id); if (card) card.remove(); renderMinimap(); } }
+function downloadVideo(url) { const a = document.createElement('a'); a.href = url; a.target = "_blank"; a.download = `Studio_${Date.now()}.mp4`; a.click(); }
+
 document.addEventListener('DOMContentLoaded', async () => {
     await initDB(); 
     board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; 
     document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; 
-    await renderBoard(); await renderMaterialLibrary();
-    bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
-    await updateBillingUI(); updateEstimatedCost();
+    
+    await renderBoard(); 
+    await renderMaterialLibrary();
+    
+    bindMainConsoleDrop('slot-ref-box', 'references'); 
+    bindMainConsoleDrop('slot-first-box', 'firstFrame'); 
+    bindMainConsoleDrop('slot-last-box', 'lastFrame');
+    await updateBillingUI(); 
+    updateEstimatedCost();
 });

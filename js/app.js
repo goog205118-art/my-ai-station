@@ -985,7 +985,7 @@ async function handleGenImageUpload(input, id) {
 }
 
 async function removeGenImage(e, id, index) { e.stopPropagation(); const task = await getTaskDB(id); if(task) { task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard(); } }
-async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
+async function updateImgGenState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); renderBoard(); } }
 
 async function submitImgGen(id) {
     const task = await getTaskDB(id);

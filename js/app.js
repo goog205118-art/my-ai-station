@@ -182,12 +182,16 @@ async function openBillingModal() {
 function closeBillingModal() { const modal = document.getElementById('billing-modal'); modal.classList.remove('show'); setTimeout(() => modal.style.display = 'none', 300); }
 
 function updateEstimatedCost() {
-    const state = globalStore.getState(); let cost = 0.13; 
-    if (state.model === 'veo3.1-components') cost = 0.35; 
-    else if (state.model === 'veo3.1-4k') cost = 0.43;
-    else if (state.model === 'veo3.1-components-4k') cost = 0.50;
-    const batchSelect = document.getElementById('batch-select'), batch = batchSelect ? parseInt(batchSelect.value) : 1, total = (cost * batch).toFixed(2);
-    const btn = document.getElementById('generate-btn'); if (btn) btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
+    const state = globalStore.getState(); 
+    // 默认普通模型为 0.35，只要名称里带 4k 就是 0.50
+    let cost = state.model.includes('4k') ? 0.50 : 0.35; 
+    
+    const batchSelect = document.getElementById('batch-select');
+    const batch = batchSelect ? parseInt(batchSelect.value) : 1;
+    const total = (cost * batch).toFixed(2);
+    
+    const btn = document.getElementById('generate-btn'); 
+    if (btn) btn.setAttribute('data-tip', `发送至服务器生成 | 预估消耗: ￥${total}`);
 }
 function updateBatchCount(select) { document.getElementById('batch-text').innerText = select.options[select.selectedIndex].text; updateEstimatedCost(); }
 
@@ -774,12 +778,19 @@ function startTaskPolling(taskId) {
             if (data && data.status === 'success' && data.videoUrl) { 
                 removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
                 if (!task.isBilled) {
-                    let cost = 0.13, detailDesc = "Veo 3.1 (首尾帧)";
-                    if (task.modelVal === 'veo3.1-components') { cost = 0.35; detailDesc = "Veo 3.1 Cmp (参考图)"; }
-                    else if (task.modelVal === 'veo3.1-4k') { cost = 0.43; detailDesc = "Veo 3.1 4K (首帧)"; }
-                    else if (task.modelVal === 'veo3.1-components-4k') { cost = 0.50; detailDesc = "Veo 3.1 Cmp 4K"; }
+                    let cost = 0.35, detailDesc = "Veo 3.1 (首尾帧)";
+                    
+                    if (task.modelVal === 'veo3.1-components') { 
+                        cost = 0.35; detailDesc = "Veo 3.1 Cmp (参考图)"; 
+                    } else if (task.modelVal === 'veo3.1-4k') { 
+                        cost = 0.50; detailDesc = "Veo 3.1 4K (首尾帧)"; 
+                    } else if (task.modelVal === 'veo3.1-components-4k') { 
+                        cost = 0.50; detailDesc = "Veo 3.1 Cmp 4K (参考图)"; 
+                    }
+                    
                     await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'video', cost: cost, detail: detailDesc }); 
-                    task.isBilled = true; updateBillingUI();
+                    task.isBilled = true; 
+                    updateBillingUI();
                 }
                 await saveTaskDB(task); renderBoard(); return; 
             }

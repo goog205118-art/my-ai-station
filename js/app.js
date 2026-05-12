@@ -1,17 +1,55 @@
 // ==========================================
 // 🟢 核心应用逻辑
 // ==========================================
-
-// ==========================================
-// 🎬 登录舱与系统初始化逻辑 (Login Gate & Particle Engine)
-// ==========================================
 let loginAnimationId = null;
 
+// ==============================
+// 🚫 安全警告：呼出错误警告弹窗
+// ==============================
+function showErrorModal() {
+    const modal = document.getElementById('error-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    modal.offsetHeight; // 强制浏览器重绘
+    modal.classList.add('show');
+    
+    // 给内容框加上震动动画
+    const content = document.getElementById('error-modal-content');
+    if (content) {
+        content.classList.remove('error-shake');
+        void content.offsetWidth; // 触发重绘
+        content.classList.add('error-shake');
+    }
+}
+
+// 🚫 安全警告：关闭警告弹窗
+function closeErrorModal() {
+    const modal = document.getElementById('error-modal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    setTimeout(() => modal.style.display = 'none', 300);
+    // 关闭后自动把焦点还给密码输入框
+    const input = document.getElementById('studio-pwd-input');
+    if (input) input.focus();
+}
+
+// ==============================
+// 🔐 核心新增：SHA-256 军工级哈希加密算法
+// ==============================
+async function hashPassword(password) {
+    const msgBuffer = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==============================
+// 🎬 登录舱与系统初始化逻辑 (Login Gate)
+// ==============================
 document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('login-gate');
     const savedPwd = sessionStorage.getItem('veo_admin_pwd');
     
-    // 如果已有密码，直接销毁大门，秒进工作台
     if (savedPwd) {
         gate.style.display = 'none';
         return;
@@ -32,35 +70,26 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('resize', resize);
         resize();
 
-        // 鼠标追踪
         gate.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
         gate.addEventListener('mouseleave', () => { mouse.x = null; mouse.y = null; });
 
-        // 尘埃粒子类
         class Particle {
             constructor() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.size = Math.random() * 1.5 + 0.5; // 极小的微尘
-                this.speedX = Math.random() * 0.5 - 0.25;
-                this.speedY = Math.random() * 0.5 - 0.25;
-                this.baseOpacity = Math.random() * 0.3 + 0.1;
-                this.opacity = this.baseOpacity;
+                this.x = Math.random() * width; this.y = Math.random() * height;
+                this.size = Math.random() * 1.5 + 0.5; 
+                this.speedX = Math.random() * 0.5 - 0.25; this.speedY = Math.random() * 0.5 - 0.25;
+                this.baseOpacity = Math.random() * 0.3 + 0.1; this.opacity = this.baseOpacity;
             }
             update() {
                 this.x += this.speedX; this.y += this.speedY;
                 if (this.x < 0 || this.x > width) this.speedX *= -1;
                 if (this.y < 0 || this.y > height) this.speedY *= -1;
 
-                // 🌟 优化 1：缩小粒子对鼠标的感应半径 (120 改为 80)，显得更加克制
                 if (mouse.x && mouse.y) {
-                    let dx = mouse.x - this.x;
-                    let dy = mouse.y - this.y;
+                    let dx = mouse.x - this.x; let dy = mouse.y - this.y;
                     let distance = Math.sqrt(dx*dx + dy*dy);
                     if (distance < 80) {
-                        this.x -= dx * 0.015; // 排开速度变柔和
-                        this.y -= dy * 0.015;
-                        this.opacity = 0.9;   // 靠近中心时高亮更清晰
+                        this.x -= dx * 0.015; this.y -= dy * 0.015; this.opacity = 0.9;
                     } else {
                         this.opacity = Math.max(this.baseOpacity, this.opacity - 0.02);
                     }
@@ -68,60 +97,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             draw() {
                 ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
             }
         }
 
-        // 生成 120 颗环境尘埃
         for (let i = 0; i < 120; i++) particles.push(new Particle());
 
         function animate() {
             ctx.clearRect(0, 0, width, height);
-
-            // 🌟 优化 2：重写鼠标光晕，缩小范围、提升质感边缘衰减
             if (mouse.x && mouse.y) {
-                // 半径从 250 大幅缩小到 120
                 let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 120);
-                // 中心亮度略微提升，但边缘极速衰减，形成高级的“点发光”
                 gradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
                 gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.02)');
                 gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, width, height);
+                ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
             }
-
             particles.forEach(p => { p.update(); p.draw(); });
             loginAnimationId = requestAnimationFrame(animate);
         }
         animate();
     }
 });
-
-// 呼出错误警告弹窗
-function showErrorModal() {
-    const modal = document.getElementById('error-modal');
-    modal.style.display = 'flex';
-    modal.offsetHeight; // 强制浏览器重绘
-    modal.classList.add('show');
-    
-    // 给内容框加上震动动画
-    const content = document.getElementById('error-modal-content');
-    content.classList.remove('error-shake');
-    void content.offsetWidth; // 触发重绘
-    content.classList.add('error-shake');
-}
-
-// 关闭警告弹窗
-function closeErrorModal() {
-    const modal = document.getElementById('error-modal');
-    modal.classList.remove('show');
-    setTimeout(() => modal.style.display = 'none', 300);
-    // 关闭后自动把焦点还给密码输入框
-    const input = document.getElementById('studio-pwd-input');
-    if (input) input.focus();
-}
 
 function startLoginTransition() {
     document.getElementById('gate-step-1').classList.remove('step-active');
@@ -133,58 +129,32 @@ function startLoginTransition() {
     }, 200); 
 }
 
-// ==============================
-// 🔐 核心新增：SHA-256 军工级哈希加密算法
-// ==============================
-async function hashPassword(password) {
-    const msgBuffer = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// ==============================
-// 🎬 运镜 2：哈希验证与解锁
-// ==============================
+// 🌟 必须是 async 异步函数才能使用 await
 async function handleLoginSubmit(e) {
     e.preventDefault(); 
     
     const pwdInput = document.getElementById('studio-pwd-input').value.trim();
     const btn = document.getElementById('login-submit-btn');
     
-    // 🌟 3. 哈希门卫拦截逻辑
-        if (inputHash !== TARGET_HASH) {
-            showErrorModal(); // 💥 核心修改：呼出巨大的红色震动弹窗！
-            
-            // 验证失败，恢复按钮状态，清空输入框
-            btn.innerHTML = `验证身份 / LOGIN`;
-            btn.style.pointerEvents = 'auto';
-            document.getElementById('studio-pwd-input').value = '';
-            return; // 强制阻断，绝对不放行
-        }
+    if (!pwdInput) return showToast("请输入密钥", "error");
 
-    // 按钮变为加载状态
     btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50" style="width:20px;height:20px;stroke:currentColor;margin:0 auto;"><circle cx="25" cy="25" r="20"></circle></svg>`;
     btn.style.pointerEvents = 'none';
 
     // 🌟 1. 计算用户输入密码的哈希值
     const inputHash = await hashPassword(pwdInput);
     
-    // 🌟 2. 你的专属哈希锁（将你在第一步获取的长字符串粘贴到这里的双引号内！）
+    // 🌟 2. 你的专属哈希锁 (已从截图自动提取填入)
     const TARGET_HASH = "acc8ca2c94bcfaf05736fe29176ad5ec6f766a47ae3597a4186507ece27e5f0f";
 
-    // 模拟一下网络验证的延迟感
     setTimeout(() => {
-        
         // 🌟 3. 哈希门卫拦截逻辑
         if (inputHash !== TARGET_HASH) {
-            showToast("系统密钥错误，拒绝访问", "error");
-            // 验证失败，恢复按钮状态，清空输入框
+            showErrorModal(); 
             btn.innerHTML = `验证身份 / LOGIN`;
             btn.style.pointerEvents = 'auto';
             document.getElementById('studio-pwd-input').value = '';
-            document.getElementById('studio-pwd-input').focus();
-            return; // 强制阻断，绝对不放行
+            return; 
         }
 
         // 🌟 4. 验证通过：保存明文用于 n8n 验证，并播放解锁运镜！
@@ -210,6 +180,10 @@ async function handleLoginSubmit(e) {
     }, 600);
 }
 
+
+// ==========================================
+// 工作台 API 与核心常量
+// ==========================================
 const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit'; 
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';     
 const API_IMAGE_GEN = 'https://api.wallyai.top/webhook/proxy-image-gen'; 
@@ -371,8 +345,10 @@ window.addEventListener('mousemove', (e) => {
                 const left = Math.min(startSelX, currentX), top = Math.min(startSelY, currentY);
                 const width = Math.abs(currentX - startSelX), height = Math.abs(currentY - startSelY);
 
-                marquee.style.left = left + 'px'; marquee.style.top = top + 'px';
-                marquee.style.width = width + 'px'; marquee.style.height = height + 'px';
+                if(marquee) {
+                    marquee.style.left = left + 'px'; marquee.style.top = top + 'px';
+                    marquee.style.width = width + 'px'; marquee.style.height = height + 'px';
+                }
 
                 const selRect = { left, top, right: left + width, bottom: top + height };
                 document.querySelectorAll('.video-card').forEach(card => {
@@ -404,9 +380,11 @@ viewport.addEventListener('mousedown', (e) => {
         if (e.shiftKey) { 
             isSelecting = true;
             startSelX = e.clientX; startSelY = e.clientY;
-            marquee.style.left = startSelX + 'px'; marquee.style.top = startSelY + 'px';
-            marquee.style.width = '0'; marquee.style.height = '0';
-            marquee.style.display = 'block';
+            if(marquee) {
+                marquee.style.left = startSelX + 'px'; marquee.style.top = startSelY + 'px';
+                marquee.style.width = '0'; marquee.style.height = '0';
+                marquee.style.display = 'block';
+            }
         } else {
             clearSelection();
             isPanning = true; 
@@ -423,7 +401,7 @@ window.addEventListener('mouseup', () => {
     
     if (isSelecting) {
         isSelecting = false;
-        marquee.style.display = 'none';
+        if(marquee) marquee.style.display = 'none';
     }
 
     if (draggingCardInfo) { 
@@ -941,7 +919,7 @@ async function updateGeneratorState(id, key, value) { const task = await getTask
 async function applyGeneratorToPrompt(id, btnElement) {
     const task = await getTaskDB(id); if(!task) return;
     const { format, opening, attribute, general } = task.state;
-    if (!format || !opening || !attribute || general === '') return alert("请先点击【随机抽取】生成完整的组合");
+    if (!format || !opening || !attribute || !general) return alert("请先点击【随机抽取】生成完整的组合");
     document.getElementById('prompt-input').value = `【带货形式】${format} | 【开头】${opening} | 【属性】${attribute} | 【通用】${general} \n\n围绕以上要求，帮我生成...`;
     document.getElementById('floating-console').classList.remove('minimized');
     const originalText = btnElement.innerHTML; btnElement.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">check_circle</span> 已应用`; btnElement.style.color = 'var(--success)'; setTimeout(() => { btnElement.innerHTML = originalText; btnElement.style.color = ''; }, 1500);

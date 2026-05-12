@@ -765,6 +765,19 @@ async function generateCrop(id) {
 }
 
 let activeCrop = null;
+let activeFrameResize = null; // 🌟 新增：框架拉伸状态
+
+// 🌟 新增：触发框架拉伸
+function startFrameResize(e, id) {
+    e.stopPropagation(); 
+    isPanning = false; board.classList.remove('is-moving');
+    const el = document.getElementById('card-' + id);
+    activeFrameResize = {
+        id: id, startX: e.clientX, startY: e.clientY,
+        startW: el.offsetWidth, startH: el.offsetHeight, el: el
+    };
+}
+
 window.addEventListener('pointerdown', (e) => {
     const handle = e.target.closest('.crop-handle'), box = e.target.closest('.crop-box');
     if (handle || box) {
@@ -773,6 +786,7 @@ window.addEventListener('pointerdown', (e) => {
         activeCrop = { taskId, type: handle ? 'resize' : 'move', dir: handle ? handle.dataset.dir : null, startX: e.clientX, startY: e.clientY, rectW: rect.width, rectH: rect.height, startLeft: parseFloat(targetBox.style.left), startTop: parseFloat(targetBox.style.top), startWidth: parseFloat(targetBox.style.width), startHeight: parseFloat(targetBox.style.height), boxEl: targetBox };
     }
 });
+
 window.addEventListener('pointermove', (e) => {
     if (activeCrop) {
         e.stopPropagation(); const dx = e.clientX - activeCrop.startX, dy = e.clientY - activeCrop.startY, dpX = (dx / activeCrop.rectW) * 100, dpY = (dy / activeCrop.rectH) * 100;
@@ -787,13 +801,102 @@ window.addEventListener('pointermove', (e) => {
         activeCrop.currentLeft = newLeft; activeCrop.currentTop = newTop; activeCrop.currentWidth = newWidth; activeCrop.currentHeight = newHeight;
     }
 });
-window.addEventListener('pointerup', async () => { if (activeCrop) { if (activeCrop.currentLeft !== undefined) { const task = await getTaskDB(activeCrop.taskId); if (task) { task.state.cropParams = { left: activeCrop.currentLeft, top: activeCrop.currentTop, width: activeCrop.currentWidth, height: activeCrop.currentHeight }; await saveTaskDB(task); } } activeCrop = null; } });
 
+window.addEventListener('pointerup', async () => { 
+    if (activeCrop) { 
+        if (activeCrop.currentLeft !== undefined) { const task = await getTaskDB(activeCrop.taskId); if (task) { task.state.cropParams = { left: activeCrop.currentLeft, top: activeCrop.currentTop, width: activeCrop.currentWidth, height: activeCrop.currentHeight }; await saveTaskDB(task); } } 
+        activeCrop = null; 
+    } 
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!ticking) {
+        requestAnimationFrame(() => {
+            if (isPanning) {
+                transform.x = e.clientX - startPanX; transform.y = e.clientY - startPanY; 
+                board.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+                document.body.style.backgroundPosition = `${transform.x}px ${transform.y}px`; document.body.style.backgroundSize = `${30 * transform.scale}px ${30 * transform.scale}px`;
+                syncMinimapViewport(); 
+            } 
+            else if (isSelecting) {
+                const currentX = e.clientX, currentY = e.clientY, left = Math.min(startSelX, currentX), top = Math.min(startSelY, currentY), width = Math.abs(currentX - startSelX), height = Math.abs(currentY - startSelY);
+                if(marquee) { marquee.style.left = left + 'px'; marquee.style.top = top + 'px'; marquee.style.width = width + 'px'; marquee.style.height = height + 'px'; }
+                const selRect = { left, top, right: left + width, bottom: top + height };
+                document.querySelectorAll('.video-card, .frame-box').forEach(card => {
+                    const rect = card.getBoundingClientRect();
+                    if(card.classList.contains('hidden-in-frame')) return;
+                    if (rect.left < selRect.right && rect.right > selRect.left && rect.top < selRect.bottom && rect.bottom > selRect.top) { card.classList.add('selected'); selectedTasks.add(card.id.replace('card-', '')); } 
+                    else { card.classList.remove('selected'); selectedTasks.delete(card.id.replace('card-', '')); }
+                });
+            } 
+            else if (draggingCardInfo) {
+                const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale, dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
+                draggingCardInfo.task.x = draggingCardInfo.initialX + dx; draggingCardInfo.task.y = draggingCardInfo.initialY + dy;
+                draggingCardInfo.el.style.transform = `translate(${draggingCardInfo.task.x}px, ${draggingCardInfo.task.y}px)`;
+                if (draggingCardInfo.children) {
+                    draggingCardInfo.children.forEach(child => {
+                        child.task.x = child.initialX + dx; child.task.y = child.initialY + dy;
+                        child.el.style.transform = `translate(${child.task.x}px, ${child.task.y}px)`;
+                    });
+                }
+            }
+            // 🌟 核心新增：监听框架尺寸拉伸
+            else if (activeFrameResize) {
+                const dx = (e.clientX - activeFrameResize.startX) / transform.scale;
+                const dy = (e.clientY - activeFrameResize.startY) / transform.scale;
+                const newW = Math.max(340, activeFrameResize.startW + dx); // 最小宽度
+                const newH = Math.max(200, activeFrameResize.startH + dy); // 最小高度
+                activeFrameResize.el.style.width = newW + 'px';
+                activeFrameResize.el.style.height = newH + 'px';
+                activeFrameResize.currentW = newW;
+                activeFrameResize.currentH = newH;
+            }
+            ticking = false;
+        });
+        ticking = true;
+    }
+});
+
+// 🌟 这里必须改为 async 异步函数
+window.addEventListener('mouseup', async () => { 
+    isPanning = false; board.classList.remove('is-moving'); 
+    if (isSelecting) { isSelecting = false; if(marquee) marquee.style.display = 'none'; }
+    if (draggingCardInfo) { 
+        draggingCardInfo.el.style.willChange = 'auto'; 
+        await saveTaskDB(draggingCardInfo.task); 
+        let needsRebind = false;
+        // 保存孩子们的新坐标
+        if (draggingCardInfo.children) { 
+            for(let child of draggingCardInfo.children) { 
+                child.el.style.willChange = 'auto'; 
+                await saveTaskDB(child.task); 
+            }
+            needsRebind = true; // 触发子节点闭包刷新
+        } 
+        draggingCardInfo = null; 
+        
+        // 🌟 彻底消灭瞬移 Bug：如果刚才拖动的是框架，强制全局重绘刷新孩子们的旧坐标闭包！
+        if (needsRebind) {
+            await renderBoard();
+        } else {
+            renderMinimap(); 
+        }
+    }
+    // 🌟 保存框架拉伸后的新尺寸
+    if (activeFrameResize) {
+        if (activeFrameResize.currentW) {
+            await updateTaskField(activeFrameResize.id, 'width', activeFrameResize.currentW);
+            await updateTaskField(activeFrameResize.id, 'height', activeFrameResize.currentH);
+        }
+        activeFrameResize = null;
+        renderMinimap();
+    }
+});
 // ==============================
 // 🖌️ UI 卡片模板与渲染中枢
 // ==============================
 function generateCardHTML(task) {
-    // 🌟 特殊渲染：如果是 Frame，绘制它科幻的紫色头部
+   // 🌟 特殊渲染：如果是 Frame，绘制头部和右下角的拉伸把手
     if (task.type === 'frame') {
         return `
         <div class="frame-header" onmousedown="event.stopPropagation()">
@@ -804,6 +907,7 @@ function generateCardHTML(task) {
                 <button class="frame-btn" onclick="removeFrame('${task.id}')" data-tip="解散该项目组"><span class="material-symbols-outlined" style="font-size:18px;">close</span></button>
             </div>
         </div>
+        ${!task.isCollapsed ? `<div class="frame-resize-handle" onmousedown="startFrameResize(event, '${task.id}')" data-tip="按住拖拽调节框架大小"></div>` : ''}
         `;
     }
 

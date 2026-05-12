@@ -456,3 +456,30 @@ body {
     border-radius: 4px; pointer-events: none;
     box-shadow: 0 0 10px rgba(10, 132, 255, 0.3);
 }
+/* ============================== */
+/* 🗂️ 框架 (Frame) 折叠收纳系统 */
+/* ============================== */
+.frame-box {
+    position: absolute; border: 2px dashed rgba(167, 139, 250, 0.4);
+    background: rgba(167, 139, 250, 0.03); border-radius: 16px;
+    pointer-events: none; z-index: 1; /* 垫在所有卡片底层 */
+    transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1), border 0.3s;
+}
+.frame-header {
+    position: absolute; top: -40px; left: -2px;
+    background: rgba(167, 139, 250, 0.9); color: #fff;
+    padding: 6px 14px; border-radius: 12px 12px 0 0;
+    font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 10px;
+    pointer-events: auto; cursor: grab; box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3);
+    backdrop-filter: blur(10px);
+}
+.frame-header:active { cursor: grabbing; }
+.frame-title-input {
+    background: transparent; border: none; color: #fff;
+    font-weight: 600; font-size: 14px; outline: none; width: 140px;
+}
+.frame-title-input::placeholder { color: rgba(255,255,255,0.6); }
+.frame-btn { background: transparent; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; padding: 0; opacity: 0.8; transition: 0.2s; }
+.frame-btn:hover { opacity: 1; transform: scale(1.1); }
+/* 核心：被折叠时的隐藏动画 */
+.hidden-in-frame { opacity: 0 !important; pointer-events: none !important; transform: scale(0.9) !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important; z-index: -1 !important; }

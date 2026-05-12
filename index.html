@@ -60,7 +60,9 @@
             </button>
             
             <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
-
+            <button class="top-btn icon-only" onclick="toggleMaterialDrawer()" data-tip="全局素材库 (集中存放所有图片)">
+                <span class="material-symbols-outlined">perm_media</span>
+            </button>
             <button class="top-btn icon-only" onclick="createStickyNote()" data-tip="新建文本便签">
                 <span class="material-symbols-outlined">sticky_note_2</span>
             </button>
@@ -256,6 +258,18 @@
         </div>
     </div>
 
+    <div class="material-drawer" id="material-drawer">
+        <div class="drawer-title" style="margin-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span class="material-symbols-outlined" style="font-size:18px;">perm_media</span> 全局素材库
+            </div>
+            <button class="help-close" onclick="toggleMaterialDrawer()" style="position:static; width:24px; height:24px; margin:0;">&times;</button>
+        </div>
+        <p style="font-size: 11px; color: var(--text-sub); margin-bottom: 12px; line-height: 1.4;">外部拖入与 Ctrl+V 粘贴的图片会在这里统一管理，保持画布清爽。</p>
+        <div class="material-grid" id="material-grid">
+            </div>
+    </div>
+    
     <script src="js/db.js"></script>
     <script src="js/store.js"></script> 
     <script src="js/app.js"></script>

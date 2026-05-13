@@ -1263,17 +1263,35 @@ async function handleGenImageUpload(input, taskId) {
     await saveTaskDB(task); renderCard(taskId); input.value = '';
 }
 
+// ==========================================
+// ✅ 修复版：生图卡片拖拽处理函数 (免疫 dataTransfer 销毁)
+// ==========================================
 async function handleGenImageDrop(e, taskId) {
     e.preventDefault(); e.stopPropagation();
-    document.getElementById(`img-gen-zone-${taskId}`)?.classList.remove('drag-over');
-    const task = await getTaskDB(taskId); if (!task) return;
-    if (task.state.images.length >= 5) return showToast("最多只能垫入 5 张图", "error");
+    const zone = document.getElementById(`img-gen-zone-${taskId}`);
+    if (zone) zone.classList.remove('drag-over');
+    
+    // 🌟 核心破局点：必须在任何 await (如查库) 发生之前，优先且“同步”地提取拖放数据！
     const srcToUse = await parseDroppedImage(e);
-    if (srcToUse) { 
-        task.state.images.push(srcToUse); 
-        task.timestamp = Date.now();
-        await saveTaskDB(task); renderCard(taskId); 
+    
+    // 如果没有拿到有效图片，直接拦截，节约性能
+    if (!srcToUse) return; 
+
+    // 数据落袋为安后，再从容地去查库和校验
+    const task = await getTaskDB(taskId); 
+    if (!task) return;
+    
+    if (task.state.images.length >= 5) {
+        return showToast("最多只能垫入 5 张图", "error");
     }
+    
+    // 赋值并击穿缓存
+    task.state.images.push(srcToUse);
+    task.timestamp = Date.now();
+    await saveTaskDB(task); 
+    
+    // 局部重绘
+    renderCard(taskId);
 }
 
 async function removeGenImage(e, taskId, index) {

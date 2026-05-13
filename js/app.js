@@ -895,8 +895,18 @@ function bindMainConsoleDrop(slotId, stateKey) {
     slot.addEventListener('drop', async (e) => {
         e.preventDefault(); slot.classList.remove('drag-over'); const srcToUse = await parseDroppedImage(e);
         if (srcToUse) {
-            if (stateKey === 'references') { if (globalStore.getState().references.length < 3) globalStore.getState().references.push(srcToUse); renderReferences(); document.getElementById('ref-popover').style.display = 'flex'; } 
-            else { globalStore.getState()[stateKey] = srcToUse; const t = stateKey === 'firstFrame' ? 'first' : 'last'; document.getElementById(`${t}-img`).src = getBlobUrl('temp_'+t, srcToUse); document.getElementById(`slot-${t}-box`).classList.add('has-img'); }
+            if (stateKey === 'references') { 
+                if (globalStore.getState().references.length < 3) globalStore.getState().references.push(srcToUse); 
+                renderReferences(); 
+                document.getElementById('ref-popover').style.display = 'flex'; 
+            } 
+            else { 
+                globalStore.getState()[stateKey] = srcToUse; 
+                const t = stateKey === 'firstFrame' ? 'first' : 'last'; 
+                // 🌟 核心：加上 Date.now() 打破缓存
+                document.getElementById(`${t}-img`).src = getBlobUrl(`temp_${t}_${Date.now()}`, srcToUse); 
+                document.getElementById(`slot-${t}-box`).classList.add('has-img'); 
+            }
         }
     });
 }
@@ -953,9 +963,18 @@ function removeReference(event, index) { event.stopPropagation(); globalStore.ge
 function clearReferences(e) { e.stopPropagation(); globalStore.getState().references = []; renderReferences(); document.getElementById('ref-popover').style.display = 'none'; }
 function renderReferences() {
     const box = document.getElementById('slot-ref-box'), imgEl = document.getElementById('ref-img'), countBadge = document.getElementById('ref-count-badge'), state = globalStore.getState();
-    if (state.references.length === 0) { box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; } 
-    else { box.classList.add('has-img'); imgEl.src = getBlobUrl('temp_ref_main', state.references[0]); countBadge.style.display = state.references.length > 1 ? 'flex' : 'none'; countBadge.innerText = state.references.length; }
-    document.getElementById('ref-list-container').innerHTML = state.references.map((b, index) => `<div class="popover-img-item"><img src="${getBlobUrl('temp_ref_'+index, b)}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
+    if (state.references.length === 0) { 
+        box.classList.remove('has-img'); imgEl.src = ''; countBadge.style.display = 'none'; 
+    } 
+    else { 
+        box.classList.add('has-img'); 
+        // 🌟 核心：加上 Date.now()
+        imgEl.src = getBlobUrl(`temp_ref_main_${Date.now()}`, state.references[0]); 
+        countBadge.style.display = state.references.length > 1 ? 'flex' : 'none'; 
+        countBadge.innerText = state.references.length; 
+    }
+    // 🌟 列表渲染同样加上时间戳
+    document.getElementById('ref-list-container').innerHTML = state.references.map((b, index) => `<div class="popover-img-item"><img src="${getBlobUrl(`temp_ref_${index}_${Date.now()}`, b)}"><div class="popover-rm-btn" onclick="removeReference(event, ${index})">×</div></div>`).join('');
     document.getElementById('ref-popover-add').style.display = state.references.length >= 3 ? 'none' : 'flex';
 }
 
@@ -966,12 +985,27 @@ async function submitBatchTask() {
     const prompt = document.getElementById('prompt-input').value.trim(); if (!prompt) return alert('请填写提示词');
     const batchCount = parseInt(document.getElementById('batch-select').value), btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.innerHTML = `<svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>`;
+    
     let submitRef = [...globalStore.getState().references], submitFirst = globalStore.getState().firstFrame, submitLast = globalStore.getState().lastFrame;
     if (globalStore.getState().currentMode === 'ref') { submitFirst = null; submitLast = null; } else submitRef = [];
     const taskParams = { model: globalStore.getState().model, aspectRatio: globalStore.getState().aspectRatio, enhancePrompt: globalStore.getState().enhancePrompt, enableUpsample: globalStore.getState().enableUpsample, autoRetry: globalStore.getState().autoRetry, firstFrame: submitFirst, lastFrame: submitLast, references: submitRef };
     let promises = []; for(let i=0; i<batchCount; i++) promises.push(executeSubmission(taskParams, prompt, i));
+    
     await Promise.allSettled(promises);
-    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
+    btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; updateEstimatedCost(); 
+    document.getElementById('prompt-input').value = ''; 
+
+    // 🌟 新增核心：发射后彻底清空控制台内存与缩略图
+    globalStore.getState().firstFrame = null;
+    globalStore.getState().lastFrame = null;
+    globalStore.getState().references = [];
+    document.getElementById('first-img').src = '';
+    document.getElementById('last-img').src = '';
+    document.getElementById('slot-first-box').classList.remove('has-img');
+    document.getElementById('slot-last-box').classList.remove('has-img');
+    document.getElementById('first-file').value = '';
+    document.getElementById('last-file').value = '';
+    renderReferences(); 
 }
 
 // 🌟 提交引擎 (高容错 ID 解析版)

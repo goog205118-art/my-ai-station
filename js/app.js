@@ -172,7 +172,13 @@ let activeTasks = [], activeRetries = new Set();
 function removeActiveTask(id) { const index = activeTasks.indexOf(id); if (index > -1) activeTasks.splice(index, 1); }
 function toggleDrawer() { document.getElementById('tool-drawer').classList.toggle('open'); }
 function toggleMaterialDrawer() { document.getElementById('material-drawer').classList.toggle('open'); }
-function handleAuthError() { sessionStorage.removeItem('veo_admin_pwd'); showToast("密钥验证失败或已过期，即将退回登录舱", "error"); setTimeout(() => location.reload(), 1500); }
+// 🌟 修复：如果本来就没登录（没密码），绝对不触发强制刷新死循环
+function handleAuthError() { 
+    if (!sessionStorage.getItem('veo_admin_pwd')) return; 
+    sessionStorage.removeItem('veo_admin_pwd'); 
+    showToast("密钥验证失败或已过期，即将退回登录舱", "error"); 
+    setTimeout(() => location.reload(), 1500); 
+}
 
 // ==========================================
 // 🗂️ 智能素材库管理引擎
@@ -888,7 +894,13 @@ function startTaskPolling(taskId) {
         attempts++;
         try {
             const task = await getTaskDB(taskId); if (!task) { removeActiveTask(taskId); return; }
-            const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
+            
+            // 🌟 核心修复：检查是否有密码。如果没有，就原地等待 2 秒再试，绝不向服务器发空请求！
+            const currentPwd = sessionStorage.getItem('veo_admin_pwd');
+            if (!currentPwd) { setTimeout(poll, 2000); return; } 
+
+            const response = await fetch(API_POLL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': currentPwd }, body: JSON.stringify({ taskId: taskId, model: task.modelVal }) });
+            // ... (下方原有代码保持不变)
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); handleAuthError(); return; }
             if (!response.ok) throw new Error("API 异常");
             const data = await response.json();

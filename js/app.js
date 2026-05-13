@@ -756,7 +756,98 @@ async function parseDroppedImage(e) {
     if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
     return srcToUse;
 }
+// ==========================================
+// ✂️ 局部裁切器 (Cropper) 核心交互逻辑
+// ==========================================
 
+// 🌟 1. 拖拽接入引擎（调用全能解析器）
+async function handleCropperDrop(e, taskId) {
+    e.preventDefault(); 
+    e.stopPropagation();
+    
+    // 使用我们写好的全能解析引擎，无论是从素材库、桌面还是其他卡片拖来的图，统统拿下！
+    const srcToUse = await parseDroppedImage(e); 
+    
+    if (srcToUse) {
+        const task = await getTaskDB(taskId);
+        if (task) { 
+            task.state.sourceBlob = srcToUse; 
+            await saveTaskDB(task); 
+            renderBoard(); 
+            showToast("✅ 成功导入待裁切素材", "success"); 
+        }
+    }
+}
+
+// 🌟 2. 点击上传按钮接入引擎
+async function handleCropperUpload(input, taskId) {
+    if (!input.files || input.files.length === 0) return;
+    const blob = await compressImageToBlob(input.files[0], 1024);
+    const task = await getTaskDB(taskId);
+    if (task) { 
+        task.state.sourceBlob = blob; 
+        await saveTaskDB(task); 
+        renderBoard(); 
+    }
+    input.value = '';
+}
+
+// 🌟 3. 重置与重新编辑逻辑
+async function resetCropper(taskId) {
+    const task = await getTaskDB(taskId);
+    if (task) { 
+        task.state.sourceBlob = null; 
+        task.state.resultBlob = null; 
+        await saveTaskDB(task); 
+        renderBoard(); 
+    }
+}
+
+async function reEditCropper(taskId) {
+    const task = await getTaskDB(taskId);
+    if (task) { 
+        task.state.resultBlob = null; 
+        await saveTaskDB(task); 
+        renderBoard(); 
+    }
+}
+
+// 🌟 4. 执行裁切生成逻辑 (利用 Canvas 截取并转为新 Blob 存入内存)
+async function generateCrop(taskId) {
+    const task = await getTaskDB(taskId); if (!task || !task.state.sourceBlob) return;
+    const imgEl = document.getElementById(`crop-img-${taskId}`);
+    const boxEl = document.getElementById(`crop-box-${taskId}`);
+    if (!imgEl || !boxEl) return;
+
+    // 动态计算相对缩放比例
+    const containerRect = imgEl.parentElement.getBoundingClientRect();
+    const boxRect = boxEl.getBoundingClientRect();
+    
+    const scaleX = imgEl.naturalWidth / containerRect.width;
+    const scaleY = imgEl.naturalHeight / containerRect.height;
+
+    const cropX = (boxRect.left - containerRect.left) * scaleX;
+    const cropY = (boxRect.top - containerRect.top) * scaleY;
+    const cropW = boxRect.width * scaleX;
+    const cropH = boxRect.height * scaleY;
+
+    // 内存中开辟画板提取像素
+    const canvas = document.createElement('canvas');
+    canvas.width = cropW; canvas.height = cropH;
+    const ctx = canvas.getContext('2d');
+    
+    const img = new Image();
+    img.src = imgEl.src;
+    img.onload = async () => {
+        ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        canvas.toBlob(async (blob) => {
+            task.state.resultBlob = blob;
+            await saveTaskDB(task);
+            renderBoard();
+            showToast("✂️ 裁切提取完成！可按住新图片拖拽复用", "success");
+        }, 'image/jpeg', 0.9);
+    };
+}
 function bindMainConsoleDrop(slotId, stateKey) {
     const slot = document.getElementById(slotId); slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); }); slot.addEventListener('dragleave', (e) => { e.preventDefault(); slot.classList.remove('drag-over'); });
     slot.addEventListener('drop', async (e) => {

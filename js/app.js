@@ -291,7 +291,7 @@ function updateEstimatedCost() {
     let cost = 0.35; 
     if (state.model.includes('4k')) {
         cost = 0.50; 
-    } else if (state.model === 'YOUR_NEW_MODEL_NAME') {
+    } else if (state.model.includes('lite')) { // 🌟 兼容特惠模型 fast-lite-1.0
         cost = 0.20; 
     }
     
@@ -747,16 +747,70 @@ viewport.addEventListener('drop', async (e) => {
     }
 });
 
+// 🌟 强力拖放解析引擎 (通杀所有数据格式)
 async function parseDroppedImage(e) {
     let srcToUse = null;
-    try { const jsonStr = e.dataTransfer.getData('application/json'); if (jsonStr) { const meta = JSON.parse(jsonStr), t = await getTaskDB(meta.taskId); if (t) { if (meta.type === 'local') srcToUse = t.src; else if (meta.type === 'thumb') srcToUse = t.rawImages.firstFrame || (t.rawImages.references && t.rawImages.references[0]); else if (meta.type === 'gen_result') srcToUse = t.state.resultBlob; else if (meta.type === 'crop_result') srcToUse = t.state.resultBlob; } } } catch(err) {}
-    if (!srcToUse) { let textData = e.dataTransfer.getData('text/plain'); if (textData && textData.startsWith('data:image')) srcToUse = textData; }
-    if (!srcToUse && e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].type.startsWith('image/')) srcToUse = await compressImageToBlob(e.dataTransfer.files[0], 1024);
+    try {
+        const jsonStr = e.dataTransfer.getData('application/json');
+        if (jsonStr) {
+            const meta = JSON.parse(jsonStr); const t = await getTaskDB(meta.taskId);
+            if (t) {
+                if (meta.type === 'local') srcToUse = t.src;
+                else if (meta.type === 'thumb') srcToUse = t.rawImages?.firstFrame || (t.rawImages?.references && t.rawImages.references[0]);
+                else if (meta.type === 'gen_result') srcToUse = t.state?.resultBlob;
+                else if (meta.type === 'crop_result') srcToUse = t.state?.resultBlob;
+            }
+        }
+    } catch(err) {}
+
+    // 兜底 1：解析 Base64 文本数据 (从其他网页拖拽)
+    if (!srcToUse) {
+        let textData = e.dataTransfer.getData('text/plain');
+        if (textData && textData.startsWith('data:image')) {
+            try { srcToUse = await (await fetch(textData)).blob(); } catch(err) {}
+        }
+    }
+
+    // 兜底 2：解析纯本地文件 (从电脑桌面或文件夹拖拽)
+    if (!srcToUse && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+        if (file) srcToUse = await compressImageToBlob(file, 1024);
+    }
+    
     return srcToUse;
 }
 
 // ==========================================
-// ✂️ 局部裁切器 (Cropper) 核心交互逻辑
+// 🚀 核心：单节点局部渲染引擎 (彻底告别全局闪烁)
+// ==========================================
+async function renderCard(taskId) {
+    const task = await getTaskDB(taskId); if (!task) return;
+    const cardEl = document.getElementById('card-' + taskId); if (!cardEl) return;
+
+    // 仅重绘当前的这一张卡片
+    cardEl.innerHTML = generateCardHTML(task);
+    bindCardDrag(cardEl, task);
+
+    // 同步追踪属性，防止后续被误刷
+    const currentImgLen = (task.state && task.state.images) ? task.state.images.length : 0;
+    const currentProgress = task.progress || '';
+    const cropSrc = task.state && task.state.sourceBlob ? 'hasSrc' : 'noSrc';
+    const cropRes = task.state && task.state.resultBlob ? 'hasRes' : 'noRes';
+    const currentChannel = (task.state && task.state.channel) ? task.state.channel : 'channel_1';
+
+    cardEl.setAttribute('data-sync-status', task.status || 'static');
+    cardEl.setAttribute('data-sync-retry', task.retryCount || 0);
+    cardEl.setAttribute('data-sync-img-len', currentImgLen);
+    cardEl.setAttribute('data-sync-progress', currentProgress);
+    cardEl.setAttribute('data-sync-crop-src', cropSrc);
+    cardEl.setAttribute('data-sync-crop-res', cropRes);
+    cardEl.setAttribute('data-sync-channel', currentChannel);
+    cardEl.setAttribute('data-sync-title', task.title || '');
+    cardEl.setAttribute('data-sync-collapsed', String(task.isCollapsed));
+}
+
+// ==========================================
+// ✂️ 局部裁切器 (Cropper) 核心交互逻辑 (局部渲染版)
 // ==========================================
 async function handleCropperDrop(e, taskId) {
     e.preventDefault(); e.stopPropagation();
@@ -767,7 +821,7 @@ async function handleCropperDrop(e, taskId) {
             task.state.sourceBlob = srcToUse;
             task.timestamp = Date.now();
             await saveTaskDB(task); 
-            renderBoard(); 
+            renderCard(taskId); 
             showToast("✅ 成功导入待裁切素材", "success"); 
         }
     }
@@ -781,7 +835,7 @@ async function handleCropperUpload(input, taskId) {
         task.state.sourceBlob = blob; 
         task.timestamp = Date.now();
         await saveTaskDB(task); 
-        renderBoard(); 
+        renderCard(taskId); 
     }
     input.value = '';
 }
@@ -792,7 +846,7 @@ async function resetCropper(taskId) {
         task.state.sourceBlob = null; 
         task.state.resultBlob = null; 
         await saveTaskDB(task); 
-        renderBoard(); 
+        renderCard(taskId); 
     }
 }
 
@@ -801,7 +855,7 @@ async function reEditCropper(taskId) {
     if (task) { 
         task.state.resultBlob = null; 
         await saveTaskDB(task); 
-        renderBoard(); 
+        renderCard(taskId); 
     }
 }
 
@@ -830,7 +884,7 @@ async function generateCrop(taskId) {
         canvas.toBlob(async (blob) => {
             task.state.resultBlob = blob;
             await saveTaskDB(task);
-            renderBoard();
+            renderCard(taskId);
             showToast("✂️ 裁切提取完成！可按住新图片拖拽复用", "success");
         }, 'image/jpeg', 0.9);
     };
@@ -851,7 +905,7 @@ function toggleRefPopover(e) { e.stopPropagation(); if (globalStore.getState().r
 
 const genData = { formats: ["主播带货", "街头采访", "教程演示", "前后反差", "开箱测评", "对比实验", "剧情短剧", "冲突夸张", "用户证言", "评论区回复", "生活方式植入"], openings: ["产品痛点开场", "夸张吸睛开场", "结果先给开场", "问题提问开场", "场景代入开场", "测评对比开场", "评论群回复开场", "数字清单开场"], attributes: ["强化主播人设", "情绪张力更强", "提前带出福利", "加入真实经历", "种草干货收尾", "单一卖点更聚焦"], generals: ["节奏更快", "情绪更强", "更像真实博主", "更强结果感", "更弱广告感", "强化收尾下单", "更强调产品细节", "UGC感", "更像评论区安利"] };
 function getRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-async function shuffleGenerator(id) { const task = await getTaskDB(id); if(!task) return; task.state.format = getRandom(genData.formats); task.state.opening = getRandom(genData.openings); task.state.attribute = getRandom(genData.attributes); task.state.general = getRandom(genData.generals); await saveTaskDB(task); renderBoard(); }
+async function shuffleGenerator(id) { const task = await getTaskDB(id); if(!task) return; task.state.format = getRandom(genData.formats); task.state.opening = getRandom(genData.openings); task.state.attribute = getRandom(genData.attributes); task.state.general = getRandom(genData.generals); await saveTaskDB(task); renderCard(id); }
 async function updateGeneratorState(id, key, value) { const task = await getTaskDB(id); if(task) { task.state[key] = value; await saveTaskDB(task); } }
 async function applyGeneratorToPrompt(id, btnElement) {
     const task = await getTaskDB(id); if(!task) return;
@@ -920,6 +974,7 @@ async function submitBatchTask() {
     btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined">arrow_upward</span>`; updateEstimatedCost(); document.getElementById('prompt-input').value = ''; 
 }
 
+// 🌟 提交引擎 (高容错 ID 解析版)
 async function executeSubmission(params, promptText, offsetIndex = 0) {
     try {
         const apiPayload = { model: params.model, prompt: promptText, aspectRatio: params.aspectRatio, enhancePrompt: params.enhancePrompt, enableUpsample: params.enableUpsample, firstFrame: await blobToBase64(params.firstFrame), lastFrame: await blobToBase64(params.lastFrame), references: await Promise.all(params.references.map(b => blobToBase64(b))) };
@@ -932,12 +987,14 @@ async function executeSubmission(params, promptText, offsetIndex = 0) {
         }
         
         const data = await response.json();
-        if (data && data.taskId) {
+        const returnedId = data.taskId || data.id || data.task_id; // 🌟 兼容各种 n8n 返回结构
+        
+        if (returnedId) {
             const spawnX = (-transform.x + window.innerWidth/2 - 170) / transform.scale + (offsetIndex * 360), spawnY = (-transform.y + window.innerHeight/2 - 150) / transform.scale + (offsetIndex * 40);
             let displayModelName = params.model.replace('veo3.1', 'Veo 3.1').replace('-components', ' Cmp').replace('-4k', ' 4K').toUpperCase();
-            if (params.model === 'YOUR_NEW_MODEL_NAME') displayModelName = '极速特惠版'; 
+            if (params.model.includes('lite')) displayModelName = '极速特惠版'; 
             
-            const newTask = { id: data.taskId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY, isBilled: false };
+            const newTask = { id: returnedId, prompt: promptText, modelStr: displayModelName, modelVal: params.model, ratio: params.aspectRatio, autoRetry: params.autoRetry, retryCount: 0, rawImages: { firstFrame: params.firstFrame, lastFrame: params.lastFrame, references: params.references || [] }, mode: params.references && params.references.length > 0 ? 'ref' : 'frame', status: 'processing', progress: null, timestamp: Date.now(), time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}), videoUrl: null, x: spawnX, y: spawnY, isBilled: false };
             await saveTaskDB(newTask); await renderBoard(); 
         }
     } catch (error) { 
@@ -956,14 +1013,17 @@ async function retryTask(taskId, btnElement) {
         if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
         if (!response.ok) throw new Error("API 异常");
         const data = await response.json();
-        if (data && data.taskId) { 
+        
+        const returnedId = data.taskId || data.id || data.task_id;
+        if (returnedId) { 
             await deleteTaskDB(taskId); removeActiveTask(taskId); 
-            task.id = data.taskId; task.status = 'processing'; task.progress = null; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); task.isBilled = false; 
+            task.id = returnedId; task.status = 'processing'; task.progress = null; task.retryCount = (task.retryCount || 0) + 1; task.timestamp = Date.now(); task.time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}); task.isBilled = false; 
             await saveTaskDB(task); activeRetries.delete(taskId); await renderBoard(); 
         } else throw new Error("无返回 ID");
-    } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderBoard(); }
+    } catch (error) { task.status = 'failed'; task.autoRetry = false; await saveTaskDB(task); activeRetries.delete(taskId); renderCard(taskId); }
 }
 
+// 🌟 轮询引擎 (高容错状态解析版)
 function startTaskPolling(taskId) {
     let attempts = 0;
     const poll = async () => {
@@ -977,24 +1037,37 @@ function startTaskPolling(taskId) {
             if (response.status === 401 || response.status === 403) { removeActiveTask(taskId); handleAuthError(); return; }
             if (!response.ok) throw new Error("API 异常");
             const data = await response.json();
-            if (data && data.status === 'success' && data.videoUrl) { 
-                removeActiveTask(taskId); task.status = 'success'; task.videoUrl = data.videoUrl; 
+            
+            // 🌟 强力兼容各种 n8n 的字段名与状态名
+            const currentStatus = (data.status || data.state || 'processing').toLowerCase();
+            const currentVideoUrl = data.videoUrl || data.video_url || data.url;
+
+            if (data && (currentStatus === 'success' || currentStatus === 'completed' || currentStatus === 'succeeded') && currentVideoUrl) { 
+                removeActiveTask(taskId); task.status = 'success'; task.videoUrl = currentVideoUrl; 
                 if (!task.isBilled) {
                     let cost = 0.35, detailDesc = "Veo 3.1 (首尾帧)";
                     if (task.modelVal === 'veo3.1-components') { cost = 0.35; detailDesc = "Veo 3.1 Cmp (参考图)"; } 
                     else if (task.modelVal === 'veo3.1-4k') { cost = 0.50; detailDesc = "Veo 3.1 4K (首尾帧)"; } 
                     else if (task.modelVal === 'veo3.1-components-4k') { cost = 0.50; detailDesc = "Veo 3.1 Cmp 4K (参考图)"; } 
-                    else if (task.modelVal === 'YOUR_NEW_MODEL_NAME') { cost = 0.20; detailDesc = "极速特惠版模型"; }
+                    else if (task.modelVal.includes('lite')) { cost = 0.20; detailDesc = "极速特惠版模型"; }
                     
                     await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'video', cost: cost, detail: detailDesc }); 
                     task.isBilled = true; 
                     updateBillingUI();
                 }
-                await saveTaskDB(task); renderBoard(); return; 
+                await saveTaskDB(task); renderCard(taskId); return; 
             }
-            if (data && data.status === 'failed') { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } return; }
-            if (data && (data.status === 'processing' || data.status === 'pending') && data.progress && task.progress !== data.progress) { task.progress = data.progress; await saveTaskDB(task); renderBoard(); }
-            if (attempts < 240) setTimeout(poll, 15000); else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderBoard(); } }
+            if (data && (currentStatus === 'failed' || currentStatus === 'error' || currentStatus === 'canceled' || currentStatus === 'rejected')) { 
+                removeActiveTask(taskId); 
+                if (task.autoRetry) retryTask(task.id, null); 
+                else { task.status = 'failed'; await saveTaskDB(task); renderCard(taskId); } 
+                return; 
+            }
+            if (data && (currentStatus === 'processing' || currentStatus === 'pending' || currentStatus === 'queued' || currentStatus === 'in_progress') && data.progress && task.progress !== data.progress) { 
+                task.progress = data.progress; await saveTaskDB(task); renderCard(taskId); 
+            }
+            
+            if (attempts < 240) setTimeout(poll, 15000); else { removeActiveTask(taskId); if (task.autoRetry) retryTask(task.id, null); else { task.status = 'failed'; await saveTaskDB(task); renderCard(taskId); } }
         } catch (error) { setTimeout(poll, 15000); }
     };
     poll();
@@ -1071,6 +1144,7 @@ function generateCardHTML(task) {
     return `<div class="card-header"><div class="time-model"><span class="material-symbols-outlined" style="font-size: 14px;">schedule</span> ${task.time} · ${task.modelStr}</div>${statusBadge}</div><div class="card-prompt">${thumbHtml}<p title="${task.prompt}">${task.prompt}</p></div><div class="card-tags"><span class="card-tag">${task.ratio}</span>${task.autoRetry ? `<span class="card-tag" style="color:var(--success); border: 1px solid var(--success);">已开挂机重试</span>` : ''}</div>${mediaHtml}<div class="card-actions">${task.status === 'success' ? `<button onclick="downloadVideo('${task.videoUrl}')" data-tip="下载此视频到本地"><span class="material-symbols-outlined">download</span></button>` : ''}${task.status === 'failed' ? `<button class="retry-btn" onclick="retryTask('${task.id}', this)" data-tip="原地重新发起此任务"><span class="material-symbols-outlined">refresh</span></button>` : ''}<button class="reuse-btn" onclick="reuseTask('${task.id}')" data-tip="提取该任务的所有图文参数，反填至底部控制台"><span class="material-symbols-outlined">edit_note</span></button><button onclick="removeTask('${task.id}')" data-tip="删除此生成记录"><span class="material-symbols-outlined">delete</span></button></div>`;
 }
 
+// 🌟 初次挂载与排版专用的全局刷新函数
 async function renderBoard() {
     const tasks = await getAllTasksDB(); const boardTasks = tasks.filter(t => t.type !== 'local_image'), boardTaskIds = new Set(boardTasks.map(t => 'card-' + t.id));
     const existingCards = Array.from(board.children); existingCards.forEach(card => { if (!boardTaskIds.has(card.id)) card.remove(); });
@@ -1140,9 +1214,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 🎨 AI 多模生图核心控制模块 (完全修复版)
+// 🎨 AI 多模生图核心控制模块 (局部渲染完全体)
 // ==========================================
-async function updateImgGenState(taskId, key, val) { const task = await getTaskDB(taskId); if (task) { task.state[key] = val; await saveTaskDB(task); renderBoard(); } }
+async function updateImgGenState(taskId, key, val) { const task = await getTaskDB(taskId); if (task) { task.state[key] = val; await saveTaskDB(task); renderCard(taskId); } }
 
 async function handleGenImageUpload(input, taskId) {
     if (!input.files || input.files.length === 0) return;
@@ -1152,7 +1226,7 @@ async function handleGenImageUpload(input, taskId) {
         task.state.images.push(await compressImageToBlob(file, 1024));
     }
     task.timestamp = Date.now();
-    await saveTaskDB(task); renderBoard(); input.value = '';
+    await saveTaskDB(task); renderCard(taskId); input.value = '';
 }
 
 async function handleGenImageDrop(e, taskId) {
@@ -1164,7 +1238,7 @@ async function handleGenImageDrop(e, taskId) {
     if (srcToUse) { 
         task.state.images.push(srcToUse); 
         task.timestamp = Date.now();
-        await saveTaskDB(task); renderBoard(); 
+        await saveTaskDB(task); renderCard(taskId); 
     }
 }
 
@@ -1172,13 +1246,13 @@ async function removeGenImage(e, taskId, index) {
     e.stopPropagation(); const task = await getTaskDB(taskId); if (!task) return;
     task.state.images.splice(index, 1); 
     task.timestamp = Date.now();
-    await saveTaskDB(task); renderBoard();
+    await saveTaskDB(task); renderCard(taskId);
 }
 
 async function submitImgGen(taskId) {
     const task = await getTaskDB(taskId); if (!task) return;
     if (!task.state.prompt) return showToast("请输入生图提示词", "error");
-    task.status = 'processing'; task.retryCount = 0; await saveTaskDB(task); renderBoard();
+    task.status = 'processing'; task.retryCount = 0; await saveTaskDB(task); renderCard(taskId);
     
     try {
         const payload = { prompt: task.state.prompt, size: task.state.size, images: await Promise.all(task.state.images.map(b => blobToBase64(b))) };
@@ -1194,11 +1268,11 @@ async function submitImgGen(taskId) {
             let cost = task.state.channel === 'channel_2' ? 0.06 : 0.084;
             await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${task.state.channel || '主通道'})` });
             updateBillingUI();
-            await saveTaskDB(task); renderBoard();
+            await saveTaskDB(task); renderCard(taskId);
         } else if (data && data.taskId) {
             task.genTaskId = data.taskId; await saveTaskDB(task); startTaskPolling(taskId); 
         } else throw new Error("无返回图片或ID");
-    } catch (err) { task.status = 'failed'; await saveTaskDB(task); renderBoard(); showToast("生图请求失败", "error"); }
+    } catch (err) { task.status = 'failed'; await saveTaskDB(task); renderCard(taskId); showToast("生图请求失败", "error"); }
 }
 
 // ==========================================

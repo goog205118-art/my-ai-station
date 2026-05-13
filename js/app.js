@@ -1249,30 +1249,99 @@ async function removeGenImage(e, taskId, index) {
     await saveTaskDB(task); renderCard(taskId);
 }
 
+// ==========================================
+// 🎨 AI 多模生图核心控制模块 (完全融合版)
+// ==========================================
 async function submitImgGen(taskId) {
-    const task = await getTaskDB(taskId); if (!task) return;
+    const task = await getTaskDB(taskId); 
+    if (!task) return;
     if (!task.state.prompt) return showToast("请输入生图提示词", "error");
-    task.status = 'processing'; task.retryCount = 0; await saveTaskDB(task); renderCard(taskId);
+
+    // 1. 初始化生图状态
+    task.status = 'processing'; 
+    task.retryCount = 0; 
+    task.isBilled = false; 
+    await saveTaskDB(task); 
+    renderCard(taskId); // 🌟 严格遵守局部渲染法则
     
-    try {
-        const payload = { prompt: task.state.prompt, size: task.state.size, images: await Promise.all(task.state.images.map(b => blobToBase64(b))) };
-        const response = await fetch(API_IMAGE_GEN, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(payload) });
-        if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
-        if (!response.ok) throw new Error("API 异常");
-        
-        const data = await response.json();
-        if (data && data.imageUrl) {
-            const imgBlob = await fetch(data.imageUrl).then(r => r.blob());
-            task.status = 'success'; task.state.resultBlob = imgBlob; task.timestamp = Date.now();
+    // 2. 构造 Payload，融合旧版丢失的 channel 参数
+    const apiPayload = { 
+        prompt: task.state.prompt, 
+        size: task.state.size, 
+        channel: task.state.channel || 'channel_1', 
+        images: await Promise.all(task.state.images.map(b => blobToBase64(b))) 
+    };
+
+    let success = false;
+    let attempts = 0;
+    // 恢复旧版的智能重试机制
+    const maxAttempts = task.state.autoRetry ? 3 : 1; 
+
+    while (attempts < maxAttempts && !success) {
+        attempts++;
+        try {
+            const response = await fetch(API_IMAGE_GEN, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, 
+                body: JSON.stringify(apiPayload) 
+            });
+
+            if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+            if (!response.ok) throw new Error("API 异常: " + response.status);
             
-            let cost = task.state.channel === 'channel_2' ? 0.06 : 0.084;
-            await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${task.state.channel || '主通道'})` });
-            updateBillingUI();
-            await saveTaskDB(task); renderCard(taskId);
-        } else if (data && data.taskId) {
-            task.genTaskId = data.taskId; await saveTaskDB(task); startTaskPolling(taskId); 
-        } else throw new Error("无返回图片或ID");
-    } catch (err) { task.status = 'failed'; await saveTaskDB(task); renderCard(taskId); showToast("生图请求失败", "error"); }
+            // 3. 🌟 n8n 高容错解析：剥离外层数组
+            const rawData = await response.json();
+            const resData = Array.isArray(rawData) ? rawData[0] : rawData;
+            
+            // 精准向下匹配你提供的结构: resData.data[0].url
+            let returnedUrl = resData.imageUrl || resData.url;
+            if (!returnedUrl && resData.data && Array.isArray(resData.data) && resData.data.length > 0) {
+                returnedUrl = resData.data[0].url;
+            }
+
+            if (returnedUrl) {
+                // 4. 成功提取图片
+                const imgBlob = await fetch(returnedUrl).then(r => r.blob());
+                task.status = 'success'; 
+                task.state.resultBlob = imgBlob; 
+                task.timestamp = Date.now(); // 🌟 核心：强行刷新时间戳，打穿幽灵缓存
+                success = true;
+
+                // 账单记录
+                if (!task.isBilled) {
+                    let cost = task.state.channel === 'channel_2' ? 0.06 : 0.084;
+                    await addBillingRecord({ id: 'bill_img_' + task.id + '_' + Date.now(), taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${task.state.channel || '主通道'})` });
+                    task.isBilled = true;
+                    updateBillingUI();
+                }
+            } else if (resData && resData.taskId) {
+                // 兜底：如果你的 API 变成了异步排队模式，交还给轮询引擎
+                task.genTaskId = resData.taskId; 
+                await saveTaskDB(task); 
+                startTaskPolling(taskId); 
+                return; 
+            } else {
+                throw new Error("无返回有效图片结构");
+            }
+        } catch (err) { 
+            // 失败重试逻辑
+            if (attempts >= maxAttempts) {
+                task.status = 'failed'; 
+            } else {
+                task.retryCount = attempts;
+                await saveTaskDB(task); 
+                renderCard(taskId);
+                await new Promise(r => setTimeout(r, 2000)); // 缓冲 2 秒后重试
+            }
+        }
+    }
+
+    // 5. 循环结束，统一渲染最终状态
+    await saveTaskDB(task); 
+    renderCard(taskId); 
+    if (!success && task.status === 'failed') {
+        showToast("生图请求失败，请检查通道余额或网络", "error"); 
+    }
 }
 
 // ==========================================

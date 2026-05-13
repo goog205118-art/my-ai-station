@@ -771,7 +771,8 @@ async function handleCropperDrop(e, taskId) {
     if (srcToUse) {
         const task = await getTaskDB(taskId);
         if (task) { 
-            task.state.sourceBlob = srcToUse; 
+            task.state.sourceBlob = srcToUse;
+            task.timestamp = Date.now();
             await saveTaskDB(task); 
             renderBoard(); 
             showToast("✅ 成功导入待裁切素材", "success"); 
@@ -786,6 +787,7 @@ async function handleCropperUpload(input, taskId) {
     const task = await getTaskDB(taskId);
     if (task) { 
         task.state.sourceBlob = blob; 
+        task.timestamp = Date.now();
         await saveTaskDB(task); 
         renderBoard(); 
     }
@@ -1070,7 +1072,7 @@ function generateCardHTML(task) {
         if (!hasSource) contentHtml = `<div class="img-slot" id="crop-zone-${task.id}" style="width:100%; height:200px; border-radius:8px;" data-tip="点击上传或从画布拖入素材图片" onclick="document.getElementById('crop-file-${task.id}').click()"><span class="material-symbols-outlined" style="font-size:32px; color:var(--text-sub);">add_photo_alternate</span><span style="margin-top:8px;">导入素材图片</span><input type="file" id="crop-file-${task.id}" style="display:none;" accept="image/*" onchange="handleCropperUpload(this, '${task.id}')"></div>`;
         else if (!hasResult) {
             const p = task.state.cropParams;
-            contentHtml = `<div class="cropper-workspace" id="crop-workspace-${task.id}"><img id="crop-img-${task.id}" src="${getBlobUrl(task.id+'_src', task.state.sourceBlob)}"><div class="crop-box" id="crop-box-${task.id}" data-task-id="${task.id}" style="left:${p.left}%; top:${p.top}%; width:${p.width}%; height:${p.height}%;"><div class="crop-grid"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div><div class="crop-handle ch-nw" data-dir="nw"></div><div class="crop-handle ch-ne" data-dir="ne"></div><div class="crop-handle ch-sw" data-dir="sw"></div><div class="crop-handle ch-se" data-dir="se"></div></div></div><div style="display:flex; gap:8px;"><button class="img-gen-btn" style="flex:1; background:var(--surface-hover); color:var(--text-main); margin:0;" onclick="resetCropper('${task.id}')">重置图片</button><button class="img-gen-btn" style="flex:2; background:var(--success); margin:0;" onclick="generateCrop('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">crop</span> 确认裁切提取</button></div>`;
+            contentHtml = `<div class="cropper-workspace" id="crop-workspace-${task.id}"><img id="crop-img-${task.id}" src="${getBlobUrl(task.id+'_src_'+(task.timestamp || ''), task.state.sourceBlob)}"><div class="crop-box" id="crop-box-${task.id}" data-task-id="${task.id}" style="left:${p.left}%; top:${p.top}%; width:${p.width}%; height:${p.height}%;"><div class="crop-grid"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div><div class="crop-handle ch-nw" data-dir="nw"></div><div class="crop-handle ch-ne" data-dir="ne"></div><div class="crop-handle ch-sw" data-dir="sw"></div><div class="crop-handle ch-se" data-dir="se"></div></div></div><div style="display:flex; gap:8px;"><button class="img-gen-btn" style="flex:1; background:var(--surface-hover); color:var(--text-main); margin:0;" onclick="resetCropper('${task.id}')">重置图片</button><button class="img-gen-btn" style="flex:2; background:var(--success); margin:0;" onclick="generateCrop('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">crop</span> 确认裁切提取</button></div>`;
         } else { contentHtml = `<div class="img-gen-result" style="border:none; border-radius:8px; background:transparent; min-height: unset;"><img src="${getBlobUrl(task.id+'_res', task.state.resultBlob)}" draggable="true" ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${task.id}', type: 'crop_result'}))" data-tip="按住拖拽，送至其他卡片组件复用" style="border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);"></div><button class="img-gen-btn" style="width:100%; margin: 0; background:var(--surface-hover); color:var(--text-main);" onclick="reEditCropper('${task.id}')"><span class="material-symbols-outlined" style="font-size:16px;">history</span> 返回重新调整框选区</button>`; }
         return `<div class="card-header"><span style="color:var(--success); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">crop</span> 局部裁切器</span><button onclick="removeTask('${task.id}')" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div style="padding: 0 12px 12px 12px; display:flex; flex-direction:column; gap:12px;" ondragover="event.preventDefault();" ondrop="handleCropperDrop(event, '${task.id}')">${contentHtml}</div>`;
     }
@@ -1161,4 +1163,108 @@ document.addEventListener('DOMContentLoaded', async () => {
     await renderBoard(); await renderMaterialLibrary();
     bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
     await updateBillingUI(); updateEstimatedCost();
+});
+// ==========================================
+// 🎨 AI 多模生图核心控制模块 (急救恢复版)
+// ==========================================
+async function updateImgGenState(taskId, key, val) { const task = await getTaskDB(taskId); if (task) { task.state[key] = val; await saveTaskDB(task); renderBoard(); } }
+
+async function handleGenImageUpload(input, taskId) {
+    if (!input.files || input.files.length === 0) return;
+    const task = await getTaskDB(taskId); if (!task) return;
+    for (let file of Array.from(input.files)) {
+        if (task.state.images.length >= 5) break;
+        task.state.images.push(await compressImageToBlob(file));
+    }
+    await saveTaskDB(task); renderBoard(); input.value = '';
+}
+
+async function handleGenImageDrop(e, taskId) {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById(`img-gen-zone-${taskId}`)?.classList.remove('drag-over');
+    const task = await getTaskDB(taskId); if (!task) return;
+    if (task.state.images.length >= 5) return showToast("最多只能垫入 5 张图", "error");
+    const srcToUse = await parseDroppedImage(e);
+    if (srcToUse) { task.state.images.push(srcToUse); await saveTaskDB(task); renderBoard(); }
+}
+
+async function removeGenImage(e, taskId, index) {
+    e.stopPropagation(); const task = await getTaskDB(taskId); if (!task) return;
+    task.state.images.splice(index, 1); await saveTaskDB(task); renderBoard();
+}
+
+async function submitImgGen(taskId) {
+    const task = await getTaskDB(taskId); if (!task) return;
+    if (!task.state.prompt) return showToast("请输入生图提示词", "error");
+    task.status = 'processing'; task.retryCount = 0; await saveTaskDB(task); renderBoard();
+    
+    try {
+        const payload = { prompt: task.state.prompt, size: task.state.size, images: await Promise.all(task.state.images.map(b => blobToBase64(b))) };
+        const response = await fetch(API_IMAGE_GEN, { method: 'POST', headers: { 'Content-Type': 'application/json', 'wally123': sessionStorage.getItem('veo_admin_pwd') }, body: JSON.stringify(payload) });
+        if (response.status === 401 || response.status === 403) { handleAuthError(); throw new Error("密码错误"); }
+        if (!response.ok) throw new Error("API 异常");
+        
+        const data = await response.json();
+        if (data && data.imageUrl) {
+            const imgBlob = await fetch(data.imageUrl).then(r => r.blob());
+            task.status = 'success'; task.state.resultBlob = imgBlob;
+            
+            // 自动扣费
+            let cost = task.state.channel === 'channel_2' ? 0.06 : 0.084;
+            await addBillingRecord({ id: 'bill_' + task.id, taskId: task.id, type: 'image', cost: cost, detail: `AI生图 (${task.state.channel || '主通道'})` });
+            updateBillingUI();
+            await saveTaskDB(task); renderBoard();
+        } else if (data && data.taskId) {
+            task.genTaskId = data.taskId; await saveTaskDB(task); startTaskPolling(taskId); // 若为轮询模式自动接入
+        } else throw new Error("无返回图片或ID");
+    } catch (err) { task.status = 'failed'; await saveTaskDB(task); renderBoard(); showToast("生图请求失败", "error"); }
+}
+// ==========================================
+// ✂️ 局部裁切器 物理引擎 (拖拽与缩放)
+// ==========================================
+document.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.crop-handle'); const box = e.target.closest('.crop-box');
+    if (!handle && (!box || e.target.tagName === 'BUTTON')) return;
+    
+    e.stopPropagation(); isPanning = false; if (document.getElementById('canvas-board')) document.getElementById('canvas-board').classList.remove('is-moving');
+
+    const targetBox = handle ? handle.closest('.crop-box') : box;
+    const taskId = targetBox.getAttribute('data-task-id');
+    const el = document.getElementById('card-' + taskId);
+    if (!el || !el.__veoTask) return;
+
+    activeCrop = {
+        task: el.__veoTask, boxEl: targetBox, container: targetBox.parentElement,
+        mode: handle ? handle.getAttribute('data-dir') : 'move',
+        startX: e.clientX, startY: e.clientY,
+        startLeft: el.__veoTask.state.cropParams.left, startTop: el.__veoTask.state.cropParams.top,
+        startWidth: el.__veoTask.state.cropParams.width, startHeight: el.__veoTask.state.cropParams.height
+    };
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!activeCrop) return;
+    const dx = (e.clientX - activeCrop.startX) / transform.scale, dy = (e.clientY - activeCrop.startY) / transform.scale;
+    const cw = activeCrop.container.offsetWidth, ch = activeCrop.container.offsetHeight;
+    const dxPct = (dx / cw) * 100, dyPct = (dy / ch) * 100;
+
+    let { startLeft, startTop, startWidth, startHeight, mode } = activeCrop;
+    let newLeft = startLeft, newTop = startTop, newWidth = startWidth, newHeight = startHeight;
+
+    if (mode === 'move') {
+        newLeft = Math.max(0, Math.min(100 - newWidth, startLeft + dxPct));
+        newTop = Math.max(0, Math.min(100 - newHeight, startTop + dyPct));
+    } else {
+        if (mode.includes('e')) newWidth = Math.max(5, Math.min(100 - startLeft, startWidth + dxPct));
+        if (mode.includes('s')) newHeight = Math.max(5, Math.min(100 - startTop, startHeight + dyPct));
+        if (mode.includes('w')) { let maxW = startLeft + startWidth; newLeft = Math.max(0, Math.min(maxW - 5, startLeft + dxPct)); newWidth = maxW - newLeft; }
+        if (mode.includes('n')) { let maxH = startTop + startHeight; newTop = Math.max(0, Math.min(maxH - 5, startTop + dyPct)); newHeight = maxH - newTop; }
+    }
+    activeCrop.task.state.cropParams = { left: newLeft, top: newTop, width: newWidth, height: newHeight };
+    activeCrop.boxEl.style.left = newLeft + '%'; activeCrop.boxEl.style.top = newTop + '%';
+    activeCrop.boxEl.style.width = newWidth + '%'; activeCrop.boxEl.style.height = newHeight + '%';
+});
+
+document.addEventListener('mouseup', async () => {
+    if (activeCrop) { await saveTaskDB(activeCrop.task); activeCrop = null; renderMinimap(); }
 });

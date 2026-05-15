@@ -89,12 +89,12 @@
                 await initDB();
                 console.log("🟢 Flow 节点数据库加载完毕");
                 
-                // 启动节点引擎 (只有这一行运行了，画面才会出节点和线)
+                // 🌟 核心：启动节点引擎 (少了这行就不会出图)
                 if (typeof initFlowEngine === 'function') {
                     initFlowEngine();
                     console.log("🚀 节点引擎启动成功");
                 } else {
-                    console.error("❌ 找不到 initFlowEngine 函数，请检查 js/flow/flow-engine.js 是否保存");
+                    console.error("❌ 找不到 initFlowEngine 函数，请检查 js/flow/flow-engine.js 文件是否存在且已保存");
                 }
             } catch (err) {
                 console.error("❌ 初始化失败:", err);

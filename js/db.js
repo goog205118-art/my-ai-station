@@ -1,3 +1,10 @@
+// ==========================================
+// 🗄️ IndexedDB 数据库封装 & Blob 内存优化核心
+// ==========================================
+const DB_NAME = 'VeoInfinityDB';
+let db;
+const blobUrlCache = new Map(); 
+
 function initDB() {
     return new Promise((resolve, reject) => {
         // 🌟 数据库无损升级至版本 4，接入 Flow 工作区表

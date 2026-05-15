@@ -37,10 +37,13 @@ let flowState = {
 // 🎨 渲染引擎
 // ==========================================
 
+// 🌟 升级版：支持双击断线(ondblclick) 和 右键菜单(oncontextmenu)
 function renderNodes() {
     if(!nodeBoard) return;
     nodeBoard.innerHTML = flowState.nodes.map(node => `
-        <div class="veo-node" id="${node.id}" style="transform: translate(${node.x}px, ${node.y}px);" onmousedown="startDragNode(event, '${node.id}')">
+        <div class="veo-node" id="${node.id}" style="transform: translate(${node.x}px, ${node.y}px);" 
+             onmousedown="startDragNode(event, '${node.id}')"
+             oncontextmenu="showNodeMenu(event, '${node.id}')">
             <div class="node-header" style="background: ${node.type === 'image_gen' ? 'rgba(192,132,252,0.1)' : 'rgba(56,189,248,0.1)'};">
                 ${node.title}
             </div>
@@ -49,7 +52,9 @@ function renderNodes() {
                     <div class="port-row">
                         <div class="port port-in port-${p.type}" id="${node.id}-${p.id}" 
                              onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')" 
-                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"></div>
+                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"
+                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"
+                             data-tip="双击断开连线"></div>
                         <span style="margin-left: 12px;">${p.label}</span>
                     </div>
                 `).join('')}
@@ -58,7 +63,9 @@ function renderNodes() {
                         <span style="margin-right: 12px;">${p.label}</span>
                         <div class="port port-out port-${p.type}" id="${node.id}-${p.id}" 
                              onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
-                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"></div>
+                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
+                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"
+                             data-tip="双击断开连线"></div>
                     </div>
                 `).join('')}
             </div>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veo Studio - Node Flow (Pro)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <style>
+        /* 独立工作区专属暗黑极客主题 */
+        :root { --bg-dark: #0f0f11; --grid-color: rgba(255,255,255,0.03); --accent: #c084fc; }
+        body { margin: 0; overflow: hidden; background-color: var(--bg-dark); color: #fff; font-family: 'Google Sans', sans-serif; user-select: none; }
+        
+        /* 无限点阵网格背景 */
+        .flow-viewport {
+            position: absolute; width: 100vw; height: 100vh; overflow: hidden; cursor: grab;
+            background-image: radial-gradient(var(--grid-color) 1px, transparent 1px);
+            background-size: 20px 20px; background-position: 0 0;
+        }
+        
+        /* 🌟 SVG 核心连线层 (必须要垫在节点下方) */
+        #svg-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;
+        }
+
+        /* 节点画布层 */
+        #node-board {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; transform-origin: 0 0;
+        }
+
+        /* 顶部导航 */
+        .flow-header {
+            position: absolute; top: 0; left: 0; width: 100%; height: 50px; background: rgba(15,15,17,0.8); backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.05); z-index: 100; display: flex; align-items: center; padding: 0 20px; box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flow-header">
+        <div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined" style="color: var(--accent);">account_tree</span>
+            Veo Flow <span style="font-size: 12px; color: #666; font-weight: normal;">| 节点架构师模式</span>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 12px;">
+            <button style="background: var(--accent); border: none; padding: 6px 16px; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer;">▶ 运行工作流</button>
+        </div>
+    </div>
+
+    <div class="flow-viewport" id="flow-viewport">
+        <svg id="svg-layer">
+            <path d="M 200 300 C 400 300, 300 500, 600 500" stroke="#c084fc" stroke-width="3" fill="none" opacity="0.6"/>
+        </svg>
+        
+        <div id="node-board">
+            </div>
+    </div>
+
+    <script src="js/db.js"></script>
+    <script>
+        // 初始化测试
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initDB();
+            console.log("🟢 Flow 节点数据库加载完毕");
+        });
+    </script>
+</body>
+</html>

@@ -1,24 +1,30 @@
-// ==========================================
-// 🗄️ IndexedDB 数据库封装 & Blob 内存优化核心
-// ==========================================
-const DB_NAME = 'VeoInfinityDB';
-let db;
-const blobUrlCache = new Map(); 
-
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 3); // 🌟 无损升级至版本 3
+        // 🌟 数据库无损升级至版本 4，接入 Flow 工作区表
+        const request = indexedDB.open(DB_NAME, 4); 
+        
         request.onupgradeneeded = (e) => {
             let database = e.target.result;
-            // 保留原有的任务表
+            
+            // 1. 原卡片工作区
             if (!database.objectStoreNames.contains('tasks')) {
                 database.createObjectStore('tasks', { keyPath: 'id' });
             }
-            // 🌟 核心新增：不可篡改的账单流水表
+            // 2. 账单中心
             if (!database.objectStoreNames.contains('billing')) {
                 database.createObjectStore('billing', { keyPath: 'id' });
             }
+            // 3. 🚀 新增：节点工作区数据表 (保存整个画布的拓扑结构)
+            if (!database.objectStoreNames.contains('flow_workspaces')) {
+                database.createObjectStore('flow_workspaces', { keyPath: 'id' });
+            }
+            // 4. 🚀 新增：全局素材共享库 (打通双工作区的核心)
+            if (!database.objectStoreNames.contains('material_store')) {
+                const materialStore = database.createObjectStore('material_store', { keyPath: 'id' });
+                materialStore.createIndex('timestamp', 'timestamp', { unique: false });
+            }
         };
+        
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
         request.onerror = (e) => reject(e);
     });

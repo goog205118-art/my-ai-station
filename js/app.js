@@ -864,17 +864,25 @@ async function resetCropper(taskId) {
     }
 }
 
+// ✅ 替换为：带状态重置的返回重选器
 async function reEditCropper(taskId) {
     const task = await getTaskDB(taskId);
     if (task) { 
         task.state.resultBlob = null; 
+        
+        // 🌟 补上这一行，清理掉上次裁切的残留指纹
+        task.timestamp = Date.now(); 
+        
         await saveTaskDB(task); 
         renderCard(taskId); 
     }
 }
 
+// ✅ 替换为：带“时间戳击穿缓存”功能的裁切生成器
 async function generateCrop(taskId) {
-    const task = await getTaskDB(taskId); if (!task || !task.state.sourceBlob) return;
+    const task = await getTaskDB(taskId); 
+    if (!task || !task.state.sourceBlob) return;
+    
     const imgEl = document.getElementById(`crop-img-${taskId}`);
     const boxEl = document.getElementById(`crop-box-${taskId}`);
     if (!imgEl || !boxEl) return;
@@ -897,8 +905,12 @@ async function generateCrop(taskId) {
         ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
         canvas.toBlob(async (blob) => {
             task.state.resultBlob = blob;
+            
+            // 🌟 核心修复：强制更新时间戳，让浏览器明白这是一张全新的图
+            task.timestamp = Date.now(); 
+            
             await saveTaskDB(task);
-            renderCard(taskId);
+            renderCard(taskId); // 局部重绘
             showToast("✂️ 裁切提取完成！可按住新图片拖拽复用", "success");
         }, 'image/jpeg', 0.9);
     };

@@ -33,6 +33,30 @@
             position: absolute; top: 0; left: 0; width: 100%; height: 50px; background: rgba(15,15,17,0.8); backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(255,255,255,0.05); z-index: 100; display: flex; align-items: center; padding: 0 20px; box-sizing: border-box;
         }
+        /* 🌟 节点与端口核心样式 */
+        #flow-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+        #svg-layer { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: 1; }
+        #node-board { position: absolute; top: 0; left: 0; z-index: 2; }
+        
+        .veo-node {
+            position: absolute; width: 260px; background: rgba(30, 30, 35, 0.95); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; cursor: grab; user-select: none;
+        }
+        .veo-node:active { cursor: grabbing; box-shadow: 0 8px 32px rgba(192,132,252,0.2); border-color: rgba(192,132,252,0.5); }
+        .node-header { padding: 12px 16px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 8px; font-size: 14px; border-radius: 10px 10px 0 0; }
+        .node-body { padding: 16px; font-size: 13px; color: #aaa; display: flex; flex-direction: column; gap: 12px; }
+        
+        /* 🔌 引脚端口 */
+        .port-row { display: flex; justify-content: space-between; position: relative; align-items: center; }
+        .port { width: 14px; height: 14px; border-radius: 50%; background: #2a2a30; border: 2px solid #555; position: absolute; top: 50%; transform: translateY(-50%); cursor: crosshair; transition: 0.2s; z-index: 10; }
+        .port:hover { transform: translateY(-50%) scale(1.3); }
+        .port-in { left: -8px; }
+        .port-out { right: -8px; }
+        
+        /* 颜色强类型约束 */
+        .port-image { border-color: #c084fc; background: rgba(192,132,252,0.2); }
+        .port-video { border-color: #38bdf8; background: rgba(56,189,248,0.2); }
     </style>
 </head>
 <body>
@@ -48,12 +72,10 @@
     </div>
 
     <div class="flow-viewport" id="flow-viewport">
-        <svg id="svg-layer">
-            <path d="M 200 300 C 400 300, 300 500, 600 500" stroke="#c084fc" stroke-width="3" fill="none" opacity="0.6"/>
-        </svg>
-        
-        <div id="node-board">
-            </div>
+        <div id="flow-canvas">
+            <svg id="svg-layer"></svg>
+            <div id="node-board"></div>
+        </div>
     </div>
 
     <script src="js/db.js"></script>

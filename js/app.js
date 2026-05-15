@@ -1343,14 +1343,15 @@ async function duplicateTask(originalTask, mouseEvent) {
         newCardEl.classList.add('selected');
 
         // 将系统的拖拽控制权移交给新卡片
-        draggingCardInfo = {
-            el: newCardEl,
-            task: clone,
-            startMouseX: mouseEvent.clientX,
-            startMouseY: mouseEvent.clientY,
-            initialX: clone.x,
-            initialY: clone.y
-        };
+            draggingCardInfo = {
+                el: newCardEl,
+                // 🌟 核心修复：抛弃局部变量 clone，直接指向 DOM 身上绑定的真实内存地址
+                task: newCardEl.__veoTask, 
+                startMouseX: mouseEvent.clientX,
+                startMouseY: mouseEvent.clientY,
+                initialX: newCardEl.__veoTask.x,
+                initialY: newCardEl.__veoTask.y
+            };
         
         showToast("🪄 已克隆组件及参数", "success");
     }

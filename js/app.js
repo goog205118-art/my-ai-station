@@ -1158,11 +1158,34 @@ function generateCardHTML(task) {
         if (task.state.images.length < 5) slotsHtml += `<div class="img-gen-slot" id="img-gen-zone-${task.id}" data-tip="点击上传或从画布拖入垫图 (最多5张)" onclick="document.getElementById('file-input-${task.id}').click()"><span class="material-symbols-outlined" style="color:var(--text-sub);font-size:20px;">add</span><input type="file" id="file-input-${task.id}" style="display:none;" multiple accept="image/*" onchange="handleGenImageUpload(this, '${task.id}')" onclick="event.stopPropagation()"></div>`;
         
         const isChannel2 = task.state.channel === 'channel_2', currentCost = isChannel2 ? '0.06' : '0.084';
-        let btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像 <span style="font-family:monospace; opacity:0.8; margin-left:4px;">￥${currentCost}</span>`;
+        // 🌟 1. 正常/成功状态下的按钮 (显示历史耗时)
+        let costTxt = task.state.costTime ? `<span style="font-family:monospace; opacity:0.8; margin-left:auto;">⏱️ ${task.state.costTime}s</span>` : '';
+        let btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">draw</span> 生成图像 <span style="font-family:monospace; opacity:0.8; margin-left:4px;">￥${currentCost}</span> ${costTxt}`;
         
         const retryTxt = task.retryCount ? ` (重试 ${task.retryCount})` : '';
-        if (isProcessing) btnContent = `<svg class="spinner" viewBox="0 0 50 50" style="width:18px;height:18px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> 生成中...${retryTxt}`;
-        if (isFailed) btnContent = '<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试';
+        
+        // 🌟 2. 生成中：展示跳动的秒表与进度条
+        if (isProcessing) {
+            btnContent = `
+                <div style="display:flex; flex-direction:column; width:100%; gap:6px; align-items:center;">
+                    <div style="display:flex; justify-content:space-between; width:100%; font-size:13px;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <svg class="spinner" viewBox="0 0 50 50" style="width:14px;height:14px;stroke:currentColor;"><circle cx="25" cy="25" r="20"></circle></svg> 
+                            生成中...${retryTxt}
+                        </div>
+                        <div class="veo-dynamic-timer" data-start-time="${task.state.startTime || Date.now()}" style="font-family:monospace; color:var(--accent); font-weight:bold; letter-spacing:1px;">00:00</div>
+                    </div>
+                    <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                        <div style="height: 100%; background: var(--accent); width: 0%; animation: fakeImgProgress 60s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 🌟 3. 失败状态
+        if (isFailed) {
+            btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试 ${task.state.costTime ? `(在 ${task.state.costTime}s 处断开)` : ''}`;
+        }
         
         return `<div class="card-header"><span style="color:var(--accent); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">brush</span> AI 多模生图</span><button onclick="removeTask('${task.id}')" data-tip="删除该组件" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="img-gen-slots" ondragover="event.preventDefault(); document.getElementById('img-gen-zone-${task.id}')?.classList.add('drag-over');" ondragleave="document.getElementById('img-gen-zone-${task.id}')?.classList.remove('drag-over');" ondrop="handleGenImageDrop(event, '${task.id}')">${slotsHtml}</div><div class="img-gen-controls"><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)" data-tip="选择图像生成比例"><option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option><option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option><option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option></select><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;" data-tip="若生成失败，可尝试切换备用 API 节点"><option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option><option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option></select><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'autoRetry', this.value === 'true')" data-tip="遇网络异常是否自动重试 (最多3次)"><option value="false" ${!task.state.autoRetry?'selected':''}>单次</option><option value="true" ${task.state.autoRetry?'selected':''}>自动重试</option></select></div><textarea class="img-gen-prompt" onchange="updateImgGenState('${task.id}', 'prompt', this.value)" placeholder="输入画面提示词，可垫入 1-5 张图配合描述...">${task.state.prompt||''}</textarea><button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''} style="${isFailed ? 'background: var(--danger);' : ''}">${btnContent}</button>${resultHtml}`;
     }
@@ -1399,6 +1422,7 @@ async function submitImgGen(taskId) {
     task.status = 'processing'; 
     task.retryCount = 0; 
     task.isBilled = false; 
+    task.state.startTime = Date.now();
     await saveTaskDB(task); 
     renderCard(taskId); // 🌟 严格遵守局部渲染法则
     
@@ -1442,6 +1466,7 @@ async function submitImgGen(taskId) {
                 const imgBlob = await fetch(returnedUrl).then(r => r.blob());
                 task.status = 'success'; 
                 task.state.resultBlob = imgBlob; 
+                task.state.costTime = Math.floor((Date.now() - task.state.startTime) / 1000);
                 task.timestamp = Date.now(); // 🌟 核心：强行刷新时间戳，打穿幽灵缓存
                 success = true;
 
@@ -1531,3 +1556,18 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', async () => {
     if (activeCrop) { await saveTaskDB(activeCrop.task); activeCrop = null; renderMinimap(); }
 });
+// ==========================================
+// ⏱️ 动态秒表引擎 (Vanilla JS DOM 侧渲染，不触发重绘)
+// ==========================================
+setInterval(() => {
+    document.querySelectorAll('.veo-dynamic-timer').forEach(el => {
+        const startTime = parseInt(el.getAttribute('data-start-time'));
+        if (!startTime) return;
+        
+        const diff = Math.floor((Date.now() - startTime) / 1000);
+        const m = String(Math.floor(diff / 60)).padStart(2, '0');
+        const s = String(diff % 60).padStart(2, '0');
+        
+        el.innerText = `${m}:${s}`;
+    });
+}, 1000);

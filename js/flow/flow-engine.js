@@ -33,14 +33,31 @@ let flowState = {
     ]
 };
 
-// ==========================================
-// 🎨 渲染引擎
-// ==========================================
-
-// 🌟 升级版：支持双击断线(ondblclick) 和 右键菜单(oncontextmenu)
+// 🌟 升级版：支持渲染内部参数表单 (inputs)
 function renderNodes() {
     if(!nodeBoard) return;
-    nodeBoard.innerHTML = flowState.nodes.map(node => `
+    nodeBoard.innerHTML = flowState.nodes.map(node => {
+        // 动态生成参数表单 HTML
+        let inputsHtml = '';
+        if (node.inputs && node.inputs.length > 0) {
+            inputsHtml = '<div class="node-inputs-container">';
+            node.inputs.forEach(inp => {
+                const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
+                inputsHtml += `<div class="node-input-group"><div class="node-input-label">${inp.label}</div>`;
+                if (inp.type === 'textarea') {
+                    // onmousedown="event.stopPropagation()" 防止在框内点击时触发节点拖拽
+                    inputsHtml += `<textarea class="node-input" rows="3" onmousedown="event.stopPropagation()" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)">${val}</textarea>`;
+                } else if (inp.type === 'select') {
+                    inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value)">
+                        ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    </select>`;
+                }
+                inputsHtml += `</div>`;
+            });
+            inputsHtml += '</div>';
+        }
+
+        return `
         <div class="veo-node" id="${node.id}" style="transform: translate(${node.x}px, ${node.y}px);" 
              onmousedown="startDragNode(event, '${node.id}')"
              oncontextmenu="showNodeMenu(event, '${node.id}')">
@@ -48,13 +65,12 @@ function renderNodes() {
                 ${node.title}
             </div>
             <div class="node-body">
-                ${(node.ports.in || []).map(p => `
+                ${inputsHtml} ${(node.ports.in || []).map(p => `
                     <div class="port-row">
                         <div class="port port-in port-${p.type}" id="${node.id}-${p.id}" 
                              onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')" 
                              onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"
-                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"
-                             data-tip="双击断开连线"></div>
+                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
                         <span style="margin-left: 12px;">${p.label}</span>
                     </div>
                 `).join('')}
@@ -64,13 +80,13 @@ function renderNodes() {
                         <div class="port port-out port-${p.type}" id="${node.id}-${p.id}" 
                              onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
                              onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
-                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"
-                             data-tip="双击断开连线"></div>
+                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
                     </div>
                 `).join('')}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function renderLinks() {
@@ -115,7 +131,10 @@ function renderLinks() {
 // ==========================================
 
 function startDragNode(e, nodeId) {
-    if (e.button !== 0 || e.target.classList.contains('port')) return; 
+    const tag = e.target.tagName;
+    // 🌟 核心拦截：如果是右键、或者是引脚、或者是表单元素，绝对不要触发节点拖拽！
+    if (e.button !== 0 || e.target.classList.contains('port') || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return; 
+    
     e.stopPropagation();
     flowState.activeNode = flowState.nodes.find(n => n.id === nodeId);
     flowState.startX = e.clientX; flowState.startY = e.clientY;
@@ -257,11 +276,34 @@ window.disconnectPort = function(e, nodeId, portId) {
     if (flowState.links.length !== initialLen) renderLinks();
 };
 
-// 2. 节点蓝图库 (定义可以生成的节点)
+// 2. 🌟 升级版：节点蓝图库 (加入 inputs 定义参数)
 const NodeBlueprints = {
-    'image_gen': { type: 'image_gen', title: '🎨 生图节点 (AI)', ports: { out: [{ id: 'out_img', type: 'image', label: '输出图像' }] } },
-    'video_gen': { type: 'video_gen', title: '🎞️ 视频生成 (Veo)', ports: { in: [{ id: 'in_img', type: 'image', label: '首帧参考图' }] } },
-    'export': { type: 'video_gen', title: '📥 导出/保存节点', ports: { in: [{ id: 'in_media', type: 'video', label: '输入媒体' }] } }
+    'image_gen': { 
+        type: 'image_gen', title: '🎨 生图节点 (AI)', 
+        ports: { out: [{ id: 'out_img', type: 'image', label: '输出图像' }] },
+        inputs: [
+            { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，背景是雪山，8k分辨率，电影级光影' },
+            { id: 'model', type: 'select', label: '生成模型', options: ['Veo 3.1 Fast', 'Veo 3.1 Quality', 'Grok Imagine'], default: 'Veo 3.1 Quality' }
+        ],
+        data: {} // 自动存放用户输入的数据
+    },
+    'video_gen': { 
+        type: 'video_gen', title: '🎞️ 视频生成 (Veo)', 
+        ports: { in: [{ id: 'in_img', type: 'image', label: '首帧参考图' }] },
+        inputs: [
+            { id: 'duration', type: 'select', label: '视频时长', options: ['5秒 (标准)', '10秒 (长效)'], default: '5秒 (标准)' }
+        ],
+        data: {}
+    }
+};
+
+// 🌟 新增：数据双向绑定引擎
+window.updateNodeData = function(nodeId, key, value) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (node) {
+        if (!node.data) node.data = {};
+        node.data[key] = value;
+    }
 };
 
 // 3. 动态创建右键菜单 DOM

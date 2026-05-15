@@ -85,6 +85,17 @@
             await initDB();
             console.log("🟢 Flow 节点数据库加载完毕");
         });
+        <script src="js/db.js"></script>
+    <script src="js/flow/flow-engine.js"></script> 
+    <script>
+        // 初始化测试
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initDB();
+            console.log("🟢 Flow 节点数据库加载完毕");
+            
+            // 启动节点引擎
+            initFlowEngine();
+        });
     </script>
 </body>
 </html>

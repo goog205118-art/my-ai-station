@@ -539,14 +539,28 @@ function startFrameResize(e, id) {
     };
 }
 
+// ✅ 替换为支持 Alt 克隆的拖拽绑定引擎
 function bindCardDrag(cardEl, task) {
     cardEl.__veoTask = task; 
-    cardEl.onmousedown = (e) => { if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.classList.contains('frame-resize-handle')) { highestZIndex++; cardEl.style.zIndex = highestZIndex; } };
+    cardEl.onmousedown = (e) => { 
+        if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.classList.contains('frame-resize-handle')) { 
+            highestZIndex++; cardEl.style.zIndex = highestZIndex; 
+        } 
+    };
     
     const header = cardEl.querySelector('.card-header') || cardEl.querySelector('.frame-header');
     if(header) {
-        header.onmousedown = (e) => {
+        // 🌟 改为 async 函数，因为克隆需要查库
+        header.onmousedown = async (e) => {
             if(e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+            // 🌟🌟🌟 新增：侦测到按住 Alt 键，直接执行克隆并阻断原卡片的拖拽
+            if (e.altKey) {
+                e.stopPropagation();
+                await duplicateTask(task, e);
+                return;
+            }
+
             highestZIndex++; cardEl.style.zIndex = highestZIndex; cardEl.style.willChange = 'transform'; 
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 if (selectedTasks.has(task.id)) { selectedTasks.delete(task.id); cardEl.classList.remove('selected'); } else { selectedTasks.add(task.id); cardEl.classList.add('selected'); }
@@ -571,7 +585,7 @@ function bindCardDrag(cardEl, task) {
     const resizeHandle = cardEl.querySelector('.frame-resize-handle');
     if (resizeHandle) {
         resizeHandle.onmousedown = (e) => {
-            e.stopPropagation(); isPanning = false; board.classList.remove('is-moving');
+            e.stopPropagation(); isPanning = false; if(board) board.classList.remove('is-moving');
             startFrameResize(e, task.id);
         };
     }
@@ -1246,6 +1260,78 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindMainConsoleDrop('slot-ref-box', 'references'); bindMainConsoleDrop('slot-first-box', 'firstFrame'); bindMainConsoleDrop('slot-last-box', 'lastFrame');
     await updateBillingUI(); updateEstimatedCost();
 });
+
+// ==========================================
+// 🌟 智能克隆引擎 (Alt + Drag 专用)
+// ==========================================
+async function duplicateTask(originalTask, mouseEvent) {
+    // 1. 生成新 ID 与基础浅克隆
+    const newId = originalTask.type + '_copy_' + Date.now();
+    let clone = { ...originalTask, id: newId, timestamp: Date.now() };
+
+    // 解除从属关系，让克隆出的卡片自由散落
+    delete clone.parentId; 
+
+    // 2. 深度克隆内部状态 (保护提示词、尺寸等，防止引用污染)
+    if (originalTask.state) {
+        clone.state = { ...originalTask.state };
+        if (Array.isArray(originalTask.state.images)) clone.state.images = [...originalTask.state.images]; // 继承多模态垫图
+        if (originalTask.state.cropParams) clone.state.cropParams = { ...originalTask.state.cropParams };
+
+        // ⚠️ 生图组件特判：继承参数，但必须清空之前的生成结果和状态！
+        if (clone.type === 'tool_image_gen') {
+            clone.status = 'idle';
+            clone.state.resultBlob = null;
+            clone.state.resultUrl = null;
+            clone.retryCount = 0;
+        }
+        
+        // ⚠️ 裁切器特判：继承原图和选区，清空裁切结果
+        if (clone.type === 'tool_cropper') {
+            clone.state.resultBlob = null;
+        }
+    }
+
+    // 3. 针对视频记录卡片，深拷贝参考图
+    if (originalTask.rawImages) {
+        clone.rawImages = { ...originalTask.rawImages };
+        if (Array.isArray(originalTask.rawImages.references)) {
+            clone.rawImages.references = [...originalTask.rawImages.references];
+        }
+    }
+
+    // 4. 将新卡片位置错开一点点
+    clone.x += 20;
+    clone.y += 20;
+
+    // 5. 入库并触发局部重绘挂载
+    await saveTaskDB(clone);
+    await renderBoard(); 
+
+    // 6. 🌟 核心：瞬间劫持鼠标焦点，让克隆出来的卡片直接跟着鼠标走！
+    const newCardEl = document.getElementById('card-' + newId);
+    if (newCardEl) {
+        highestZIndex++;
+        newCardEl.style.zIndex = highestZIndex;
+        newCardEl.style.willChange = 'transform';
+
+        clearSelection();
+        selectedTasks.add(newId);
+        newCardEl.classList.add('selected');
+
+        // 将系统的拖拽控制权移交给新卡片
+        draggingCardInfo = {
+            el: newCardEl,
+            task: clone,
+            startMouseX: mouseEvent.clientX,
+            startMouseY: mouseEvent.clientY,
+            initialX: clone.x,
+            initialY: clone.y
+        };
+        
+        showToast("🪄 已克隆组件及参数", "success");
+    }
+}
 
 // ==========================================
 // 🎨 AI 多模生图核心控制模块 (局部渲染完全体)

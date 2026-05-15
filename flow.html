@@ -100,6 +100,17 @@
                 console.error("❌ 初始化失败:", err);
             }
         });
+        /* 🌟 节点内部表单控件样式 */
+        .node-inputs-container { margin: 10px 0; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); }
+        .node-input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .node-input-label { font-size: 11px; color: #888; font-weight: 500; letter-spacing: 0.5px; }
+        .node-input {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            color: #eee; padding: 6px 8px; border-radius: 4px; font-size: 12px; outline: none;
+            font-family: inherit; transition: 0.2s; resize: vertical;
+        }
+        .node-input:focus { border-color: var(--accent); background: rgba(0,0,0,0.5); box-shadow: 0 0 0 2px rgba(192,132,252,0.2); }
+        .node-input option { background: #1e1e23; color: #fff; }
     </script>
 </body>
 </html>

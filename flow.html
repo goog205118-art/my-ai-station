@@ -79,22 +79,26 @@
     </div>
 
     <script src="js/db.js"></script>
-    <script>
-        // 初始化测试
-        document.addEventListener('DOMContentLoaded', async () => {
-            await initDB();
-            console.log("🟢 Flow 节点数据库加载完毕");
-        });
-        <script src="js/db.js"></script>
+    
     <script src="js/flow/flow-engine.js"></script> 
+
     <script>
-        // 初始化测试
         document.addEventListener('DOMContentLoaded', async () => {
-            await initDB();
-            console.log("🟢 Flow 节点数据库加载完毕");
-            
-            // 启动节点引擎
-            initFlowEngine();
+            try {
+                // 初始化数据库
+                await initDB();
+                console.log("🟢 Flow 节点数据库加载完毕");
+                
+                // 启动节点引擎 (只有这一行运行了，画面才会出节点和线)
+                if (typeof initFlowEngine === 'function') {
+                    initFlowEngine();
+                    console.log("🚀 节点引擎启动成功");
+                } else {
+                    console.error("❌ 找不到 initFlowEngine 函数，请检查 js/flow/flow-engine.js 是否保存");
+                }
+            } catch (err) {
+                console.error("❌ 初始化失败:", err);
+            }
         });
     </script>
 </body>

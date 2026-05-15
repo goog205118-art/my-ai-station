@@ -241,3 +241,97 @@ function initFlowEngine() {
     setTimeout(renderLinks, 50); 
     updateCanvasTransform();
 }
+// ==========================================
+// 🔪 生命与毁灭引擎 (断线、删除、右键菜单)
+// ==========================================
+
+// 1. 双击引脚断线逻辑
+window.disconnectPort = function(e, nodeId, portId) {
+    e.stopPropagation();
+    const initialLen = flowState.links.length;
+    // 过滤掉所有起点或终点是当前引脚的连线
+    flowState.links = flowState.links.filter(l => !(
+        (l.source === nodeId && l.sourcePort === portId) ||
+        (l.target === nodeId && l.targetPort === portId)
+    ));
+    if (flowState.links.length !== initialLen) renderLinks();
+};
+
+// 2. 节点蓝图库 (定义可以生成的节点)
+const NodeBlueprints = {
+    'image_gen': { type: 'image_gen', title: '🎨 生图节点 (AI)', ports: { out: [{ id: 'out_img', type: 'image', label: '输出图像' }] } },
+    'video_gen': { type: 'video_gen', title: '🎞️ 视频生成 (Veo)', ports: { in: [{ id: 'in_img', type: 'image', label: '首帧参考图' }] } },
+    'export': { type: 'video_gen', title: '📥 导出/保存节点', ports: { in: [{ id: 'in_media', type: 'video', label: '输入媒体' }] } }
+};
+
+// 3. 动态创建右键菜单 DOM
+const ctxMenu = document.createElement('div');
+ctxMenu.id = 'veo-context-menu';
+ctxMenu.style.cssText = `
+    position: absolute; display: none; z-index: 1000; background: rgba(25, 25, 30, 0.95);
+    backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8); padding: 6px; min-width: 160px; color: #fff; font-size: 13px;
+`;
+document.body.appendChild(ctxMenu);
+
+// 全局隐藏菜单
+window.addEventListener('click', () => ctxMenu.style.display = 'none');
+viewport.addEventListener('mousedown', () => ctxMenu.style.display = 'none'); // 画布拖拽时也隐藏
+
+let menuTargetNodeId = null; 
+let menuClickWorldPos = { x: 0, y: 0 };
+
+// 4. 右键节点 -> 唤出【删除菜单】
+window.showNodeMenu = function(e, nodeId) {
+    e.preventDefault(); e.stopPropagation();
+    menuTargetNodeId = nodeId;
+    ctxMenu.innerHTML = `
+        <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; color: #ef4444;" 
+             onmouseover="this.style.background='rgba(239,68,68,0.1)'" onmouseout="this.style.background='transparent'"
+             onclick="deleteNode('${nodeId}')">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete</span> 删除节点
+        </div>
+    `;
+    ctxMenu.style.left = e.clientX + 'px'; ctxMenu.style.top = e.clientY + 'px'; ctxMenu.style.display = 'block';
+};
+
+window.deleteNode = function(nodeId) {
+    flowState.nodes = flowState.nodes.filter(n => n.id !== nodeId);
+    flowState.links = flowState.links.filter(l => l.source !== nodeId && l.target !== nodeId); // 级联删除相关的线
+    renderNodes(); renderLinks();
+};
+
+// 5. 右键画布空白处 -> 唤出【添加节点菜单】
+viewport.addEventListener('contextmenu', (e) => {
+    if (e.target !== viewport && e.target !== svgLayer) return; // 确保点的是空白处
+    e.preventDefault(); e.stopPropagation();
+    
+    // 记录鼠标在真实画布世界里的坐标
+    const rect = canvas.getBoundingClientRect();
+    menuClickWorldPos.x = (e.clientX - rect.left) / flowState.transform.scale;
+    menuClickWorldPos.y = (e.clientY - rect.top) / flowState.transform.scale;
+
+    let html = `<div style="padding: 4px 8px; font-size: 11px; color: #666; border-bottom: 1px solid #333; margin-bottom: 4px;">添加节点</div>`;
+    for (let key in NodeBlueprints) {
+        html += `
+            <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;" 
+                 onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'"
+                 onclick="spawnNode('${key}')">
+                ${NodeBlueprints[key].title}
+            </div>
+        `;
+    }
+    ctxMenu.innerHTML = html;
+    ctxMenu.style.left = e.clientX + 'px'; ctxMenu.style.top = e.clientY + 'px'; ctxMenu.style.display = 'block';
+});
+
+window.spawnNode = function(blueprintKey) {
+    const blueprint = NodeBlueprints[blueprintKey];
+    const newNode = JSON.parse(JSON.stringify(blueprint)); // 深拷贝蓝图
+    newNode.id = 'node_' + Date.now();
+    newNode.x = menuClickWorldPos.x;
+    newNode.y = menuClickWorldPos.y;
+    
+    flowState.nodes.push(newNode);
+    renderNodes(); // 重新渲染画布
+};

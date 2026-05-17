@@ -290,42 +290,36 @@ window.disconnectPort = function(e, nodeId, portId) {
 };
 
 // ==========================================
-// 🌟 升级版节点蓝图：完全对齐原有工作台模型
+// 🌟 升级版节点蓝图：完全对齐 GPT / Veo 真实模型
 // ==========================================
 const NodeBlueprints = {
     'tool_image_gen': { 
-        type: 'tool_image_gen', title: '🎨 AI 多模态生图', 
+        type: 'tool_image_gen', title: '🎨 GPT 多模态生图', 
         ports: { 
             in: [{ id: 'in_ref', type: 'image', label: '风格垫图 (选填)' }],
             out: [{ id: 'out_img', type: 'image', label: '输出图像' }] 
         },
         inputs: [
-            { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，背景是雪山，8k分辨率，电影级光影' },
-            { id: 'ratio', type: 'select', label: '画幅比例', options: ['1:1 (正方)', '16:9 (横屏)', '9:16 (竖屏)'], default: '1:1 (正方)' },
-            { id: 'channel', type: 'select', label: '生成引擎', options: ['Veo 3.1 Fast (快速)', 'Veo 3.1 Quality (高质)', 'Grok Imagine'], default: 'Veo 3.1 Quality (高质)' }
+            { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，雪山背景，8k' },
+            { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024'], default: '1024x1024' },
+            { id: 'channel', type: 'select', label: '生成通道', options: ['通道 1 (主干)', '通道 2 (备用)'], default: '通道 1 (主干)' }
         ],
         data: {} 
     },
     'tool_video_gen': { 
-        type: 'tool_video_gen', title: '🎞️ AI 视频生成', 
+        type: 'tool_video_gen', title: '🎞️ Veo 视频生成', 
         ports: { 
-            in: [{ id: 'in_first_frame', type: 'image', label: '首帧参考图' }],
+            in: [
+                { id: 'in_first_frame', type: 'image', label: '首帧参考图 (优先)' },
+                { id: 'in_last_frame', type: 'image', label: '尾帧参考图 (选填)' },
+                { id: 'in_ref', type: 'image', label: '通用垫图 (兜底)' }
+            ],
             out: [{ id: 'out_video', type: 'video', label: '输出视频' }] 
         },
         inputs: [
             { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
-            { id: 'duration', type: 'select', label: '视频时长', options: ['5秒 (标准)', '10秒 (延长)'], default: '5秒 (标准)' }
-        ],
-        data: {}
-    },
-    'tool_cropper': {
-        type: 'tool_cropper', title: '✂️ 图像智能裁切',
-        ports: {
-            in: [{ id: 'in_img', type: 'image', label: '输入原图' }],
-            out: [{ id: 'out_img', type: 'image', label: '裁切后图像' }]
-        },
-        inputs: [
-            { id: 'aspect', type: 'select', label: '裁切比例', options: ['自由比例', '1:1', '16:9', '9:16'], default: '自由比例' }
+            { id: 'model', type: 'select', label: '生成模型', options: ['veo-3.1', 'veo-3.1-4k'], default: 'veo-3.1' },
+            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' }
         ],
         data: {}
     }
@@ -438,11 +432,18 @@ window.runFlow = async function() {
 };
 
 // ==========================================
-// 🔌 真实 API 对接与异步轮询引擎
+// 🔌 真实 API 对接与异步轮询引擎 (带鉴权版)
 // ==========================================
 
-// ⚠️ 必改项：请填入你 n8n webhook 的基础地址
 const BASE_N8N_URL = 'https://api.wallyai.top/webhook'; 
+// 👇 在这里填入你 n8n Header Auth 里配置的鉴权密码
+const N8N_AUTH_PASSWORD = '2026veo'; 
+
+// 统一的鉴权请求头
+const API_HEADERS = { 
+    'Content-Type': 'application/json',
+    'Authorization': N8N_AUTH_PASSWORD // 根据n8n设置，有时如果需要Bearer，请写成 `Bearer ${N8N_AUTH_PASSWORD}`
+};
 
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
@@ -452,7 +453,7 @@ async function executeNode(nodeId) {
     console.log(`\n▶️ [启动节点] ${node.title}`);
 
     try {
-        // 1. 索要上游弹药
+        // 1. 索要上游弹药 (收集所有连线的图片)
         let upstreamInputs = {};
         const incomingLinks = flowState.links.filter(l => l.target === nodeId);
         for (let link of incomingLinks) {
@@ -466,100 +467,103 @@ async function executeNode(nodeId) {
         const nodeData = node.data || {};
 
         // ----------------------------------------------------
-        // 🎨 分支 A：处理图片生成节点 (对应 work-gpt图片.json)
+        // 🎨 分支 A：处理 GPT 生图节点
         // ----------------------------------------------------
         if (node.type === 'tool_image_gen') {
-            // 映射画幅参数
-            const sizeMap = { '1:1 (正方)': '1024x1024', '16:9 (横屏)': '1024x576', '9:16 (竖屏)': '576x1024' };
-            const isChannel2 = nodeData.channel && nodeData.channel.includes('Fast');
+            const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
             
             const payload = {
                 prompt: nodeData.prompt || '',
-                size: sizeMap[nodeData.ratio] || '1024x1024',
+                size: nodeData.size || '1024x1024',
                 channel: isChannel2 ? 'channel_2' : 'channel_1',
                 images: upstreamInputs.in_ref ? [upstreamInputs.in_ref] : []
             };
 
             console.log("   📦 发送生图请求:", payload);
             const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }, // 如果你的webhook需要鉴权，请在这里加 headers
-                body: JSON.stringify(payload)
+                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
             });
-            const data = await res.json();
             
-            // 提取 Yunwu API 返回的图片 URL
+            // 强力防御拦截：如果服务器没返回 200 OK，直接拦截文本，防止 JSON 解析崩溃
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+            
+            const data = await res.json();
+            // 适配你 n8n 原样返回的结构
             finalResult = data.data && data.data[0] ? data.data[0].url : (data.url || data[0]?.url);
             if (!finalResult) throw new Error("API 未返回图片 URL");
         } 
         
         // ----------------------------------------------------
-        // 🎞️ 分支 B：处理视频生成节点 (对应 统一Veo请求 & 查询)
+        // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            if (!upstreamInputs.in_first_frame) throw new Error("缺少首帧参考图连线！");
+            // 提取各种模式的垫图
+            const firstFrame = upstreamInputs.in_first_frame;
+            const lastFrame = upstreamInputs.in_last_frame;
+            const refImages = [];
+            if (upstreamInputs.in_ref) refImages.push(upstreamInputs.in_ref);
+            
+            if (!firstFrame && refImages.length === 0) {
+                throw new Error("缺少首帧或参考垫图，Veo 拒绝执行！");
+            }
 
             const payload = {
-                model: "veo-3.1",
+                model: nodeData.model || "veo-3.1",
                 prompt: nodeData.prompt || '',
-                firstFrame: upstreamInputs.in_first_frame,
-                duration: nodeData.duration // n8n 会忽略未知字段，但可以传过去
+                aspectRatio: nodeData.aspectRatio || "16:9",
+                enhancePrompt: true,
+                enableUpsample: false,
+                firstFrame: firstFrame || undefined,
+                lastFrame: lastFrame || undefined,
+                references: refImages.length > 0 ? refImages : undefined
             };
 
             console.log("   📦 发送视频提交请求:", payload);
-            // 1. 提交任务
             const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
             });
-            const submitData = await submitRes.json();
+            if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status}: ${await submitRes.text()}`);
             
+            const submitData = await submitRes.json();
             if (!submitData.taskId) throw new Error("提交任务失败，未获得 TaskID");
-            const taskId = submitData.taskId;
-            console.log(`   ⏳ 视频已提交云端 (ID: ${taskId})，启动异步轮询...`);
+            
+            console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
 
-            // 2. 轮询状态
+            // 轮询状态
             let isComplete = false;
             while (!isComplete) {
-                await new Promise(r => setTimeout(r, 6000)); // 每 6 秒查询一次
+                await new Promise(r => setTimeout(r, 6000)); 
                 
                 const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId: taskId })
+                    method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId })
                 });
-                const pollData = await pollRes.json();
+                if (!pollRes.ok) throw new Error(`轮询 HTTP ${pollRes.status} 异常`);
                 
-                console.log(`   🔄 节点 ${node.title} - 进度: ${pollData.progress} | 状态: ${pollData.status}`);
+                const pollData = await pollRes.json();
+                console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
                 
                 if (pollData.status === 'success') {
                     finalResult = pollData.videoUrl;
                     isComplete = true;
                 } else if (pollData.status === 'failed') {
-                    throw new Error(`视频生成失败: ${pollData.raw_status}`);
+                    throw new Error(`生成失败: ${pollData.raw_status}`);
                 }
             }
         } 
         
-        // 其他未知节点
-        else {
-            finalResult = "OK";
-        }
+        else { finalResult = "OK"; }
 
         // ==========================================
-        // 🌟 收尾流转：渲染产物与点燃下游
+        // 🌟 收尾流转
         // ==========================================
         node.result = finalResult; 
         setNodeStatus(nodeId, 'success');
-        
-        // 强制局部刷新该节点，让图片/视频显示在屏幕上
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
-
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
 
-        // 点燃下游
         const outgoingLinks = flowState.links.filter(l => l.source === nodeId);
         for (let link of outgoingLinks) {
-            setTimeout(() => executeNode(link.target), 500); // 错峰触发下游
+            setTimeout(() => executeNode(link.target), 500); 
         }
 
     } catch (error) {
@@ -567,7 +571,6 @@ async function executeNode(nodeId) {
         setNodeStatus(nodeId, 'error');
     }
 }
-
 // ==========================================
 // 💡 节点 UI 状态控制器 (加入错误红灯状态)
 // ==========================================

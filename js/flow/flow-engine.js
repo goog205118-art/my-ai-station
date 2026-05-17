@@ -318,7 +318,8 @@ const NodeBlueprints = {
         },
         inputs: [
             { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
-            { id: 'model', type: 'select', label: '生成模型', options: ['veo-3.1', 'veo-3.1-4k'], default: 'veo-3.1' },
+            // 🌟 修复：严格对齐云雾 API 的 4 个合法模型名称 (去掉横杠，补齐 components)
+            { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
             { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' }
         ],
         data: {}
@@ -538,7 +539,7 @@ async function executeNode(nodeId) {
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            // 🌟 核心升级：强行把上游传来的图片转成 Base64，满足 Veo 的胃口
+            // 将上游图片转为 Base64
             const firstFrame = await forceBase64(upstreamInputs.in_first_frame);
             const lastFrame = await forceBase64(upstreamInputs.in_last_frame);
             const refImages = [];
@@ -550,8 +551,19 @@ async function executeNode(nodeId) {
                 throw new Error("缺少首帧或通用垫图连线，Veo 拒绝执行！");
             }
 
+            // 🌟 智能模型校验：提取下拉框模型，默认防呆为 veo3.1
+            let targetModel = nodeData.model || "veo3.1";
+            
+            // 🌟 核心智能纠错机制：
+            // 如果用户选了首尾帧模型，但实际连线却只连了"垫图(ref)"，帮他自动更正为 components 模型，防止 API 拒绝！
+            if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
+                if (targetModel === 'veo3.1') targetModel = 'veo3.1-components';
+                if (targetModel === 'veo3.1-4k') targetModel = 'veo3.1-components-4k';
+                console.log(`   💡 [智能纠错] 侦测到垫图连线，已将模型自动更正为: ${targetModel}`);
+            }
+
             const payload = {
-                model: nodeData.model || "veo-3.1",
+                model: targetModel,
                 prompt: nodeData.prompt || '',
                 aspectRatio: nodeData.aspectRatio || "16:9",
                 enhancePrompt: true,

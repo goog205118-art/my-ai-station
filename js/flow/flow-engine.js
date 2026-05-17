@@ -436,13 +436,12 @@ window.runFlow = async function() {
 // ==========================================
 
 const BASE_N8N_URL = 'https://api.wallyai.top/webhook'; 
-// 👇 在这里填入你 n8n Header Auth 里配置的鉴权密码
-const N8N_AUTH_PASSWORD = '2026veo'; 
 
-// 统一的鉴权请求头
+// 统一的鉴权请求头 (完美对齐旧版工作流)
 const API_HEADERS = { 
     'Content-Type': 'application/json',
-    'Authorization': N8N_AUTH_PASSWORD // 根据n8n设置，有时如果需要Bearer，请写成 `Bearer ${N8N_AUTH_PASSWORD}`
+    // 直接从你的旧版登录态里读取密码，连硬编码都省了！
+    'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
 async function executeNode(nodeId) {

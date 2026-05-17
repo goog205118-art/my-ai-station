@@ -29,36 +29,55 @@
         #svg-layer { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: 1; }
         #node-board { position: absolute; top: 0; left: 0; z-index: 2; }
         
-        /* 节点基础样式 */
+        /* ========================================== */
+        /* 🌟 节点核心 UI (专业连线优化版) */
+        /* ========================================== */
         .veo-node {
-            position: absolute; width: 260px; background: rgba(30, 30, 35, 0.95); backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-            display: flex; flex-direction: column; cursor: grab; user-select: none;
+            position: absolute; width: 280px; background: rgba(22, 22, 26, 0.95); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; cursor: grab; user-select: none; transition: border-color 0.2s;
         }
-        .veo-node:active { cursor: grabbing; box-shadow: 0 8px 32px rgba(192,132,252,0.2); border-color: rgba(192,132,252,0.5); }
-        .node-header { padding: 12px 16px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 8px; font-size: 14px; border-radius: 10px 10px 0 0; }
-        .node-body { padding: 16px; font-size: 13px; color: #aaa; display: flex; flex-direction: column; gap: 12px; }
+        .veo-node:hover { border-color: rgba(255,255,255,0.2); }
+        .veo-node:active { cursor: grabbing; box-shadow: 0 10px 40px rgba(192,132,252,0.15); border-color: rgba(192,132,252,0.4); }
         
-        /* 引脚端口样式 */
-        .port-row { display: flex; justify-content: space-between; position: relative; align-items: center; }
-        .port { width: 14px; height: 14px; border-radius: 50%; background: #2a2a30; border: 2px solid #555; position: absolute; top: 50%; transform: translateY(-50%); cursor: crosshair; transition: 0.2s; z-index: 10; }
-        .port:hover { transform: translateY(-50%) scale(1.3); }
+        /* 头部栏 */
+        .node-header { 
+            padding: 12px 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.05); 
+            display: flex; align-items: center; gap: 8px; font-size: 14px; border-radius: 12px 12px 0 0; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .node-body { padding: 12px 0; font-size: 13px; color: #bbb; display: flex; flex-direction: column; }
+        
+        /* 🔌 引脚端口排版优化 (左侧输入，右侧输出) */
+        .port-group { padding: 4px 0; }
+        .port-row { display: flex; position: relative; align-items: center; padding: 4px 16px; transition: background 0.2s; }
+        .port-row:hover { background: rgba(255,255,255,0.03); color: #fff; }
+        
+        /* 引脚原点设计 */
+        .port { 
+            width: 14px; height: 14px; border-radius: 50%; background: #1a1a20; 
+            border: 2px solid #666; position: absolute; top: 50%; transform: translateY(-50%); 
+            cursor: crosshair; transition: all 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28); z-index: 10; 
+        }
+        .port:hover { transform: translateY(-50%) scale(1.4); box-shadow: 0 0 10px currentColor; }
         .port-in { left: -8px; }
         .port-out { right: -8px; }
-        .port-image { border-color: #c084fc; background: rgba(192,132,252,0.2); }
-        .port-video { border-color: #38bdf8; background: rgba(56,189,248,0.2); }
-
-        /* 🌟 新增：节点内部表单控件样式 */
-        .node-inputs-container { margin: 10px 0; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); }
-        .node-input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        
+        /* 引脚强类型颜色 */
+        .port-image { border-color: #c084fc; color: #c084fc; } /* 图片类型：紫色 */
+        .port-video { border-color: #38bdf8; color: #38bdf8; } /* 视频类型：蓝色 */
+        
+        /* 📝 表单控件区 */
+        .node-inputs-container { margin-top: 8px; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); }
+        .node-input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .node-input-group:last-child { margin-bottom: 0; }
         .node-input-label { font-size: 11px; color: #888; font-weight: 500; letter-spacing: 0.5px; }
         .node-input {
-            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
-            color: #eee; padding: 6px 8px; border-radius: 4px; font-size: 12px; outline: none;
-            font-family: inherit; transition: 0.2s; resize: vertical;
+            background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+            color: #eee; padding: 8px 10px; border-radius: 6px; font-size: 12px; outline: none;
+            font-family: inherit; transition: 0.2s; resize: vertical; line-height: 1.4;
         }
-        .node-input:focus { border-color: var(--accent); background: rgba(0,0,0,0.5); box-shadow: 0 0 0 2px rgba(192,132,252,0.2); }
-        .node-input option { background: #1e1e23; color: #fff; }
+        .node-input:focus { border-color: var(--accent); background: rgba(0,0,0,0.6); box-shadow: 0 0 0 2px rgba(192,132,252,0.15); }
+        .node-input option { background: #1e1e23; color: #fff; padding: 4px; }
     </style>
 </head>
 <body>

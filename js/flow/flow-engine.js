@@ -432,15 +432,12 @@ window.runFlow = async function() {
 };
 
 // ==========================================
-// 🔌 真实 API 对接与异步轮询引擎 (带鉴权版)
+// 🔌 真实 API 对接与异步轮询引擎 (终极防弹版)
 // ==========================================
 
 const BASE_N8N_URL = 'https://api.wallyai.top/webhook'; 
-
-// 统一的鉴权请求头 (完美对齐旧版工作流)
 const API_HEADERS = { 
     'Content-Type': 'application/json',
-    // 直接从你的旧版登录态里读取密码，连硬编码都省了！
     'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
@@ -452,7 +449,7 @@ async function executeNode(nodeId) {
     console.log(`\n▶️ [启动节点] ${node.title}`);
 
     try {
-        // 1. 索要上游弹药 (收集所有连线的图片)
+        // 1. 索要上游弹药
         let upstreamInputs = {};
         const incomingLinks = flowState.links.filter(l => l.target === nodeId);
         for (let link of incomingLinks) {
@@ -469,10 +466,14 @@ async function executeNode(nodeId) {
         // 🎨 分支 A：处理 GPT 生图节点
         // ----------------------------------------------------
         if (node.type === 'tool_image_gen') {
+            // 🌟 强力拦截：如果没写提示词，直接拒绝发车！
+            if (!nodeData.prompt || nodeData.prompt.trim() === '') {
+                throw new Error("节点缺少弹药！请先在卡片里填写『正向提示词』再运行。");
+            }
+
             const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
-            
             const payload = {
-                prompt: nodeData.prompt || '',
+                prompt: nodeData.prompt.trim(),
                 size: nodeData.size || '1024x1024',
                 channel: isChannel2 ? 'channel_2' : 'channel_1',
                 images: upstreamInputs.in_ref ? [upstreamInputs.in_ref] : []
@@ -483,27 +484,32 @@ async function executeNode(nodeId) {
                 method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
             });
             
-            // 强力防御拦截：如果服务器没返回 200 OK，直接拦截文本，防止 JSON 解析崩溃
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+            // 🌟 终极防弹：先读纯文本，不急着转 JSON，彻底搞清楚 n8n 返回了什么
+            const rawText = await res.text();
+            console.log("   📩 n8n 生图接口原始返回:", rawText);
+
+            if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
+            if (!rawText) throw new Error("n8n 返回了空数据。可能是云雾 API 报错导致 n8n 没有输出节点数据。");
             
-            const data = await res.json();
-            // 适配你 n8n 原样返回的结构
+            let data;
+            try { data = JSON.parse(rawText); } 
+            catch (e) { throw new Error(`n8n 返回的不是合法 JSON: ${rawText.substring(0, 40)}...`); }
+            
             finalResult = data.data && data.data[0] ? data.data[0].url : (data.url || data[0]?.url);
-            if (!finalResult) throw new Error("API 未返回图片 URL");
+            if (!finalResult) throw new Error("API 成功返回，但未找到图片 URL: " + rawText.substring(0, 50));
         } 
         
         // ----------------------------------------------------
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            // 提取各种模式的垫图
             const firstFrame = upstreamInputs.in_first_frame;
             const lastFrame = upstreamInputs.in_last_frame;
             const refImages = [];
             if (upstreamInputs.in_ref) refImages.push(upstreamInputs.in_ref);
             
             if (!firstFrame && refImages.length === 0) {
-                throw new Error("缺少首帧或参考垫图，Veo 拒绝执行！");
+                throw new Error("缺少首帧或通用垫图连线，Veo 拒绝执行！");
             }
 
             const payload = {
@@ -521,14 +527,21 @@ async function executeNode(nodeId) {
             const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, {
                 method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
             });
-            if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status}: ${await submitRes.text()}`);
             
-            const submitData = await submitRes.json();
-            if (!submitData.taskId) throw new Error("提交任务失败，未获得 TaskID");
+            const submitRawText = await submitRes.text();
+            console.log("   📩 n8n 视频提交原始返回:", submitRawText);
+
+            if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
+            if (!submitRawText) throw new Error("n8n 视频提交返回了空数据。");
+            
+            let submitData;
+            try { submitData = JSON.parse(submitRawText); } 
+            catch (e) { throw new Error("提交接口返回非 JSON 数据"); }
+
+            if (!submitData.taskId) throw new Error("提交失败，未获得 TaskID: " + submitRawText);
             
             console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
 
-            // 轮询状态
             let isComplete = false;
             while (!isComplete) {
                 await new Promise(r => setTimeout(r, 6000)); 
@@ -536,9 +549,14 @@ async function executeNode(nodeId) {
                 const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, {
                     method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId })
                 });
-                if (!pollRes.ok) throw new Error(`轮询 HTTP ${pollRes.status} 异常`);
                 
-                const pollData = await pollRes.json();
+                const pollRawText = await pollRes.text();
+                if (!pollRes.ok) throw new Error(`轮询 HTTP ${pollRes.status} 异常: ${pollRawText}`);
+                
+                let pollData;
+                try { pollData = JSON.parse(pollRawText); } 
+                catch (e) { throw new Error("轮询接口返回非 JSON 数据"); }
+
                 console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
                 
                 if (pollData.status === 'success') {
@@ -549,7 +567,6 @@ async function executeNode(nodeId) {
                 }
             }
         } 
-        
         else { finalResult = "OK"; }
 
         // ==========================================

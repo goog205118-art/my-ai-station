@@ -424,44 +424,87 @@ window.runFlow = async function() {
     console.log("✅ [执行引擎] 工作流全链路执行完毕！");
 };
 
-// 核心节点执行逻辑 (递归)
+// ==========================================
+// 🔌 核心执行引擎：依赖解析与 API 路由
+// ==========================================
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // 1. UI 反馈：节点进入“执行中”状态 (蓝色发光)
     setNodeStatus(nodeId, 'running');
-    console.log(`⏳ [运行中] 节点: ${node.title} | 提取参数:`, node.data || '默认参数');
+    console.log(`\n▶️ [启动节点] ${node.title} (${node.id})`);
 
-    // ==========================================
-    // 🔌 核心 API 对接区 (这里未来将替换为你 app.js 里的 n8n 真实请求)
-    // ==========================================
-    // 我们先用 Promise 模拟一个 2~3 秒的网络耗时，让你看清状态流转的魔法
-    const mockLatency = Math.floor(Math.random() * 1500) + 1500; 
-    await new Promise(resolve => setTimeout(resolve, mockLatency));
-    // ==========================================
-
-    // 2. UI 反馈：节点进入“成功”状态 (绿色发光)
-    setNodeStatus(nodeId, 'success');
-    console.log(`✅ [完成] 节点: ${node.title} 产出成功。`);
-
-    // 3. 顺藤摸瓜：寻找下游节点 (级联触发)
-    const outgoingLinks = flowState.links.filter(l => l.source === nodeId);
-    if (outgoingLinks.length > 0) {
-        console.log(`🔗 [数据流转] ${node.title} 将产出结果分发给 ${outgoingLinks.length} 个下游节点...`);
-        for (let link of outgoingLinks) {
-            // 在这里，你可以把当前节点的 node.state.resultBlob 传递给 link.target 节点的输入
-            await executeNode(link.target); // 递归点燃下一个节点
+    try {
+        // 🌟 1. 依赖解析 (Dependency Injection)：向上游索要弹药
+        let upstreamInputs = {};
+        const incomingLinks = flowState.links.filter(l => l.target === nodeId);
+        
+        for (let link of incomingLinks) {
+            const sourceNode = flowState.nodes.find(n => n.id === link.source);
+            if (sourceNode && sourceNode.result) {
+                // 将上游的产出(result) 绑定到当前节点的输入端口(targetPort)上
+                upstreamInputs[link.targetPort] = sourceNode.result; 
+                console.log(`   📥 接收上游数据 [引脚: ${link.targetPort}] ->`, sourceNode.result);
+            } else {
+                console.warn(`   ⚠️ 上游节点 ${link.source} 尚未产出数据，本节点可能执行失败！`);
+            }
         }
+
+        // 🌟 2. 组装终极 Payload (自身参数 + 上游垫图/视频)
+        const apiPayload = {
+            taskId: node.id,
+            params: node.data || {},       // 比如你填的 Prompt、Veo 3.1 比例等
+            inputs: upstreamInputs         // 比如上游传过来的 { in_first_frame: "blob:http..." }
+        };
+        console.log("   📦 发送给 n8n 的请求体:", apiPayload);
+
+        // 🌟 3. API 路由分发 (对接你原有的 n8n Webhook)
+        let finalResult = null;
+
+        if (node.type === 'tool_image_gen') {
+            // TODO: 这里替换为你的生图 API (比如 fetch 到 n8n 生图节点)
+            // const res = await fetch('YOUR_N8N_WEBHOOK/veo-image', { method: 'POST', body: JSON.stringify(apiPayload) });
+            // finalResult = (await res.json()).imageUrl;
+            
+            await new Promise(r => setTimeout(r, 2000)); // 模拟网路耗时
+            finalResult = "https://fake-veo-image.com/generated_img_" + Date.now() + ".jpg"; // 模拟成功出图
+            
+        } else if (node.type === 'tool_video_gen') {
+            // TODO: 这里替换为你的生视频 API (比如 fetch 到 n8n 视频节点，开启轮询)
+            if (!apiPayload.inputs.in_first_frame) throw new Error("缺少首帧参考图，拒绝执行！");
+            
+            await new Promise(r => setTimeout(r, 3000)); // 模拟视频生成极长的耗时
+            finalResult = "https://fake-veo-video.com/generated_video_" + Date.now() + ".mp4"; // 模拟视频完成
+        } else {
+            // 处理未知的节点类型
+            finalResult = "OK";
+        }
+
+        // 🌟 4. 保存节点产出，并更新状态
+        node.result = finalResult; 
+        setNodeStatus(nodeId, 'success');
+        console.log(`   ✅ [节点完成] ${node.title} 产出成功 ->`, finalResult);
+
+        // 🌟 5. 顺藤摸瓜，点燃下游节点
+        const outgoingLinks = flowState.links.filter(l => l.source === nodeId);
+        if (outgoingLinks.length > 0) {
+            console.log(`   🔗 [数据流转] 准备触发下游 ${outgoingLinks.length} 个节点...`);
+            for (let link of outgoingLinks) {
+                // 等待短暂延迟让 UI 动画平滑，然后递归执行
+                setTimeout(() => executeNode(link.target), 300);
+            }
+        }
+
+    } catch (error) {
+        console.error(`   ❌ [节点崩溃] ${node.title} 运行失败:`, error.message);
+        setNodeStatus(nodeId, 'error'); // 亮红灯
     }
 }
 
-// 节点 UI 状态控制器
+// 补充：节点 UI 状态控制器 (加入错误红灯状态)
 function setNodeStatus(nodeId, status) {
     const el = document.getElementById(nodeId);
     if (!el) return;
-    
-    // 清理之前的状态动画
     el.style.transition = 'all 0.3s ease';
     
     if (status === 'running') {
@@ -470,10 +513,10 @@ function setNodeStatus(nodeId, status) {
     } else if (status === 'success') {
         el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
         el.style.borderColor = '#22c55e';
-        // 3秒后恢复正常外观
-        setTimeout(() => {
-            el.style.boxShadow = '0 10px 40px rgba(0,0,0,0.6)';
-            el.style.borderColor = 'rgba(255,255,255,0.08)';
-        }, 3000);
+        setTimeout(() => { el.style.boxShadow = '0 10px 40px rgba(0,0,0,0.6)'; el.style.borderColor = 'rgba(255,255,255,0.08)'; }, 3000);
+    } else if (status === 'error') {
+        // 🌟 报错时变红，并且不自动消失，提醒用户处理
+        el.style.boxShadow = '0 0 30px 5px rgba(239, 68, 68, 0.5)';
+        el.style.borderColor = '#ef4444';
     }
 }

@@ -495,9 +495,20 @@ async function executeNode(nodeId) {
             try { data = JSON.parse(rawText); } 
             catch (e) { throw new Error(`n8n 返回的不是合法 JSON: ${rawText.substring(0, 40)}...`); }
             
-            finalResult = data.data && data.data[0] ? data.data[0].url : (data.url || data[0]?.url);
-            if (!finalResult) throw new Error("API 成功返回，但未找到图片 URL: " + rawText.substring(0, 50));
-        } 
+            // 🌟 核心升级：兼容 URL 与 Base64 两种混合返回模式
+            const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
+            
+            if (imgObj.url) {
+                // 情况 1：API 返回了标准的图片链接
+                finalResult = imgObj.url;
+            } else if (imgObj.b64_json) {
+                // 情况 2：API 返回了 Base64 编码
+                // 我们必须加上 Data URI 前缀，这样浏览器和下游的 Veo 才能认识它是一张图
+                finalResult = "data:image/png;base64," + imgObj.b64_json;
+            } else {
+                throw new Error("API 成功返回，但未找到 url 或 b64_json 字段: " + rawText.substring(0, 50));
+            }
+        }
         
         // ----------------------------------------------------
         // 🎞️ 分支 B：处理 Veo 视频节点

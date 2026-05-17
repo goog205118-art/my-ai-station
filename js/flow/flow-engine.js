@@ -441,6 +441,25 @@ const API_HEADERS = {
     'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
+// 🌟 核心新增：万能图片 Base64 转换器 (专治各种 API 挑食)
+async function forceBase64(src) {
+    if (!src) return undefined;
+    if (src.startsWith('data:image')) return src; // 已经是 Base64，直接放行
+    try {
+        // 如果是 URL，强制在前端拉取并碾碎成 Base64 Data URI
+        const res = await fetch(src);
+        const blob = await res.blob();
+        return await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.warn("图片转 Base64 失败，降级使用 URL:", e);
+        return src; 
+    }
+}
+
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -514,10 +533,13 @@ async function executeNode(nodeId) {
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            const firstFrame = upstreamInputs.in_first_frame;
-            const lastFrame = upstreamInputs.in_last_frame;
+            // 🌟 核心升级：强行把上游传来的图片转成 Base64，满足 Veo 的胃口
+            const firstFrame = await forceBase64(upstreamInputs.in_first_frame);
+            const lastFrame = await forceBase64(upstreamInputs.in_last_frame);
             const refImages = [];
-            if (upstreamInputs.in_ref) refImages.push(upstreamInputs.in_ref);
+            if (upstreamInputs.in_ref) {
+                refImages.push(await forceBase64(upstreamInputs.in_ref));
+            }
             
             if (!firstFrame && refImages.length === 0) {
                 throw new Error("缺少首帧或通用垫图连线，Veo 拒绝执行！");
@@ -577,7 +599,7 @@ async function executeNode(nodeId) {
                     throw new Error(`生成失败: ${pollData.raw_status}`);
                 }
             }
-        } 
+        }
         else { finalResult = "OK"; }
 
         // ==========================================

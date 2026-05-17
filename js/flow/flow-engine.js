@@ -441,13 +441,18 @@ const API_HEADERS = {
     'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
-// 🌟 核心新增：万能图片 Base64 转换器 (专治各种 API 挑食)
+// 🌟 核心新增：万能图片 Base64 转换器 (自带跨域穿透补丁)
 async function forceBase64(src) {
     if (!src) return undefined;
     if (src.startsWith('data:image')) return src; // 已经是 Base64，直接放行
     try {
-        // 如果是 URL，强制在前端拉取并碾碎成 Base64 Data URI
-        const res = await fetch(src);
+        console.log("   🔄 触发跨域保护，正在通过代理通道转换图片...");
+        // 🚀 核心修复：使用 corsproxy 代理穿透 OSS 的跨域限制
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(src);
+        
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error(`代理下载失败: ${res.status}`);
+        
         const blob = await res.blob();
         return await new Promise((resolve) => {
             const reader = new FileReader();

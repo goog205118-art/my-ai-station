@@ -568,13 +568,9 @@ async function executeNode(nodeId) {
     }
 }
 
-    } catch (error) {
-        console.error(`   ❌ [节点崩溃] ${node.title} 运行失败:`, error.message);
-        setNodeStatus(nodeId, 'error'); // 亮红灯
-    }
-}
-
-// 补充：节点 UI 状态控制器 (加入错误红灯状态)
+// ==========================================
+// 💡 节点 UI 状态控制器 (加入错误红灯状态)
+// ==========================================
 function setNodeStatus(nodeId, status) {
     const el = document.getElementById(nodeId);
     if (!el) return;

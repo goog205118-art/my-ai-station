@@ -276,28 +276,49 @@ window.disconnectPort = function(e, nodeId, portId) {
     if (flowState.links.length !== initialLen) renderLinks();
 };
 
-// 2. 🌟 升级版：节点蓝图库 (加入 inputs 定义参数)
+// ==========================================
+// 🌟 升级版节点蓝图：完全对齐原有工作台模型
+// ==========================================
 const NodeBlueprints = {
-    'image_gen': { 
-        type: 'image_gen', title: '🎨 生图节点 (AI)', 
-        ports: { out: [{ id: 'out_img', type: 'image', label: '输出图像' }] },
+    'tool_image_gen': { 
+        type: 'tool_image_gen', title: '🎨 AI 多模态生图', 
+        ports: { 
+            in: [{ id: 'in_ref', type: 'image', label: '风格垫图 (选填)' }],
+            out: [{ id: 'out_img', type: 'image', label: '输出图像' }] 
+        },
         inputs: [
             { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，背景是雪山，8k分辨率，电影级光影' },
-            { id: 'model', type: 'select', label: '生成模型', options: ['Veo 3.1 Fast', 'Veo 3.1 Quality', 'Grok Imagine'], default: 'Veo 3.1 Quality' }
+            { id: 'ratio', type: 'select', label: '画幅比例', options: ['1:1 (正方)', '16:9 (横屏)', '9:16 (竖屏)'], default: '1:1 (正方)' },
+            { id: 'channel', type: 'select', label: '生成引擎', options: ['Veo 3.1 Fast (快速)', 'Veo 3.1 Quality (高质)', 'Grok Imagine'], default: 'Veo 3.1 Quality (高质)' }
         ],
-        data: {} // 自动存放用户输入的数据
+        data: {} 
     },
-    'video_gen': { 
-        type: 'video_gen', title: '🎞️ 视频生成 (Veo)', 
-        ports: { in: [{ id: 'in_img', type: 'image', label: '首帧参考图' }] },
+    'tool_video_gen': { 
+        type: 'tool_video_gen', title: '🎞️ AI 视频生成', 
+        ports: { 
+            in: [{ id: 'in_first_frame', type: 'image', label: '首帧参考图' }],
+            out: [{ id: 'out_video', type: 'video', label: '输出视频' }] 
+        },
         inputs: [
-            { id: 'duration', type: 'select', label: '视频时长', options: ['5秒 (标准)', '10秒 (长效)'], default: '5秒 (标准)' }
+            { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
+            { id: 'duration', type: 'select', label: '视频时长', options: ['5秒 (标准)', '10秒 (延长)'], default: '5秒 (标准)' }
+        ],
+        data: {}
+    },
+    'tool_cropper': {
+        type: 'tool_cropper', title: '✂️ 图像智能裁切',
+        ports: {
+            in: [{ id: 'in_img', type: 'image', label: '输入原图' }],
+            out: [{ id: 'out_img', type: 'image', label: '裁切后图像' }]
+        },
+        inputs: [
+            { id: 'aspect', type: 'select', label: '裁切比例', options: ['自由比例', '1:1', '16:9', '9:16'], default: '自由比例' }
         ],
         data: {}
     }
 };
 
-// 🌟 新增：数据双向绑定引擎
+// 确保双向绑定引擎存在
 window.updateNodeData = function(nodeId, key, value) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (node) {

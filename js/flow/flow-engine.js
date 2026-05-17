@@ -398,3 +398,82 @@ window.spawnNode = function(blueprintKey) {
     flowState.nodes.push(newNode);
     renderNodes(); // 重新渲染画布
 };
+// ==========================================
+// ⚙️ Phase 6: DAG 拓扑执行引擎 (工作流大脑)
+// ==========================================
+
+window.runFlow = async function() {
+    console.log("🚀 [执行引擎] 开始扫描工作流拓扑结构...");
+    
+    // 1. 寻找起源节点 (没有任何连线指向它的节点)
+    const targetNodeIds = flowState.links.map(l => l.target);
+    const startNodes = flowState.nodes.filter(n => !targetNodeIds.includes(n.id));
+    
+    if (startNodes.length === 0) {
+        alert("⚠️ 未找到起源节点！请至少放置一个独立的起点节点。");
+        return;
+    }
+
+    console.log(`[执行引擎] 找到 ${startNodes.length} 个起源节点，开始链式触发...`);
+    
+    // 2. 并发或顺序执行起源节点
+    for (let node of startNodes) {
+        await executeNode(node.id);
+    }
+    
+    console.log("✅ [执行引擎] 工作流全链路执行完毕！");
+};
+
+// 核心节点执行逻辑 (递归)
+async function executeNode(nodeId) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // 1. UI 反馈：节点进入“执行中”状态 (蓝色发光)
+    setNodeStatus(nodeId, 'running');
+    console.log(`⏳ [运行中] 节点: ${node.title} | 提取参数:`, node.data || '默认参数');
+
+    // ==========================================
+    // 🔌 核心 API 对接区 (这里未来将替换为你 app.js 里的 n8n 真实请求)
+    // ==========================================
+    // 我们先用 Promise 模拟一个 2~3 秒的网络耗时，让你看清状态流转的魔法
+    const mockLatency = Math.floor(Math.random() * 1500) + 1500; 
+    await new Promise(resolve => setTimeout(resolve, mockLatency));
+    // ==========================================
+
+    // 2. UI 反馈：节点进入“成功”状态 (绿色发光)
+    setNodeStatus(nodeId, 'success');
+    console.log(`✅ [完成] 节点: ${node.title} 产出成功。`);
+
+    // 3. 顺藤摸瓜：寻找下游节点 (级联触发)
+    const outgoingLinks = flowState.links.filter(l => l.source === nodeId);
+    if (outgoingLinks.length > 0) {
+        console.log(`🔗 [数据流转] ${node.title} 将产出结果分发给 ${outgoingLinks.length} 个下游节点...`);
+        for (let link of outgoingLinks) {
+            // 在这里，你可以把当前节点的 node.state.resultBlob 传递给 link.target 节点的输入
+            await executeNode(link.target); // 递归点燃下一个节点
+        }
+    }
+}
+
+// 节点 UI 状态控制器
+function setNodeStatus(nodeId, status) {
+    const el = document.getElementById(nodeId);
+    if (!el) return;
+    
+    // 清理之前的状态动画
+    el.style.transition = 'all 0.3s ease';
+    
+    if (status === 'running') {
+        el.style.boxShadow = '0 0 30px 5px rgba(56, 189, 248, 0.4)';
+        el.style.borderColor = '#38bdf8';
+    } else if (status === 'success') {
+        el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
+        el.style.borderColor = '#22c55e';
+        // 3秒后恢复正常外观
+        setTimeout(() => {
+            el.style.boxShadow = '0 10px 40px rgba(0,0,0,0.6)';
+            el.style.borderColor = 'rgba(255,255,255,0.08)';
+        }, 3000);
+    }
+}

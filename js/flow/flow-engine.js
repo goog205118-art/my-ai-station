@@ -778,6 +778,9 @@ async function executeNode(nodeId) {
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
 
+        // 🌟 核心新增：工作流节点独立记账
+        await recordNodeBilling(node);
+
     } catch (error) {
         console.error(`   ❌ [崩溃拦截] ${node.title} 异常:`, error.message);
         setNodeStatus(nodeId, 'error');
@@ -802,5 +805,66 @@ function setNodeStatus(nodeId, status) {
         // 🌟 报错时变红，并且不自动消失，提醒用户处理
         el.style.boxShadow = '0 0 30px 5px rgba(239, 68, 68, 0.5)';
         el.style.borderColor = '#ef4444';
+    }
+}
+// ==========================================
+// 💰 独立记账结算器 (双引擎账单互通核心)
+// ==========================================
+async function recordNodeBilling(node) {
+    if (!node || !node.data) return;
+    
+    let cost = 0;
+    let detailStr = '';
+
+    // 1. 严格按照 index.html 的官方费率计算
+    if (node.type === 'tool_image_gen') {
+        const isChannel2 = node.data.channel && node.data.channel.includes('2');
+        cost = isChannel2 ? 0.06 : 0.084;
+        detailStr = `Pro工作流：多模态生图 (${isChannel2 ? '备用通道' : '主干通道'})`;
+    } 
+    else if (node.type === 'tool_video_gen') {
+        const is4K = node.data.model && node.data.model.includes('4k');
+        cost = is4K ? 0.50 : 0.35;
+        detailStr = `Pro工作流：Veo 视频生成 (${is4K ? '4K高画质' : '标准画质'})`;
+    }
+
+    // 2. 写入 IndexedDB (跨页面共享的数据金库)
+    if (cost > 0) {
+        const record = {
+            id: 'bill_flow_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+            timestamp: Date.now(),
+            amount: cost,
+            detail: detailStr,
+            nodeId: node.id
+        };
+
+        return new Promise((resolve) => {
+            try {
+                // 这里的 db 来自你的 db.js 全局变量
+                const tx = db.transaction('billing', 'readwrite');
+                tx.objectStore('billing').put(record);
+                
+                tx.oncomplete = () => {
+                    console.log(`💸 [记账中心] 节点 ${node.id} 结算完成: -￥${cost} (${detailStr})`);
+                    
+                    // 🌟 触发 UI 刷新机制：如果主引擎有全局刷新函数，直接调用
+                    // (兼容处理：如果 flow.html 和 index.html 是独立页面，可以使用事件派发)
+                    if (typeof window.updateTotalBalance === 'function') {
+                        window.updateTotalBalance(); 
+                    } else if (typeof sysBus !== 'undefined') {
+                        sysBus.emit('SYSTEM:BILLING_UPDATED', record);
+                    }
+                    resolve();
+                };
+                
+                tx.onerror = () => {
+                    console.warn("⚠️ [记账中心] 写入被拒绝或失败");
+                    resolve(); // 失败不阻塞业务流
+                };
+            } catch (error) {
+                console.warn("⚠️ [记账中心] 数据库事务异常 (可能 DB 未完全就绪):", error);
+                resolve();
+            }
+        });
     }
 }

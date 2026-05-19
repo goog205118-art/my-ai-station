@@ -407,29 +407,83 @@ window.spawnNode = function(blueprintKey) {
     renderNodes(); // 重新渲染画布
 };
 // ==========================================
-// ⚙️ Phase 6: DAG 拓扑执行引擎 (工作流大脑)
+// ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
 // ==========================================
 
 window.runFlow = async function() {
-    console.log("🚀 [执行引擎] 开始扫描工作流拓扑结构...");
+    console.log("🚀 [执行引擎] 启动工业级 DAG 拓扑扫描...");
+
+    // 1. 构建依赖关系图谱
+    const nodeDeps = {};      // 记录每个节点依赖的【上游节点列表】
+    const nodePromises = {};  // 记录每个节点的【执行 Promise】，用于下游等待
     
-    // 1. 寻找起源节点 (没有任何连线指向它的节点)
-    const targetNodeIds = flowState.links.map(l => l.target);
-    const startNodes = flowState.nodes.filter(n => !targetNodeIds.includes(n.id));
+    // 初始化所有节点的依赖表
+    flowState.nodes.forEach(n => {
+        nodeDeps[n.id] = new Set();
+    });
+
+    // 根据连线填充依赖关系
+    flowState.links.forEach(link => {
+        if (nodeDeps[link.target]) {
+            nodeDeps[link.target].add(link.source);
+        }
+    });
+
+    // 2. 检查循环引用 (简单的拓扑排序死锁检测)
+    let executionPlan = [];
+    let readyQueue = flowState.nodes.filter(n => nodeDeps[n.id].size === 0).map(n => n.id);
     
-    if (startNodes.length === 0) {
-        alert("⚠️ 未找到起源节点！请至少放置一个独立的起点节点。");
-        return;
+    if (readyQueue.length === 0) {
+        return alert("⚠️ 错误：未找到起点节点，或者工作流中存在死循环连线！");
     }
 
-    console.log(`[执行引擎] 找到 ${startNodes.length} 个起源节点，开始链式触发...`);
-    
-    // 2. 并发或顺序执行起源节点
-    for (let node of startNodes) {
-        await executeNode(node.id);
+    // 3. 核心升级：基于 Promise 链的智能并发执行
+    // 这次我们不手动 `setTimeout` 递归了，而是让系统自行判断依赖是否满足
+    console.log(`[执行引擎] 探测到 ${readyQueue.length} 个起源节点，构建执行管线...`);
+
+    // 重置所有节点的状态和结果
+    flowState.nodes.forEach(n => {
+        n.result = null; // 清空上次跑的缓存
+        setNodeStatus(n.id, 'idle');
+    });
+
+    // 封装一个包装函数：等待上游，再执行自己
+    const scheduleNode = async (nodeId) => {
+        // 如果这个节点的 Promise 已经创建了，说明已经在管线里了，直接返回
+        if (nodePromises[nodeId]) return nodePromises[nodeId];
+
+        const deps = Array.from(nodeDeps[nodeId]);
+        
+        // 【核心等待机制】：必须等待所有上游节点的 Promise 执行完毕！
+        const upstreamPromises = deps.map(depId => scheduleNode(depId));
+        
+        // 创建自己的执行 Promise
+        nodePromises[nodeId] = (async () => {
+            // 等待所有上游兄弟干完活
+            if (upstreamPromises.length > 0) {
+                console.log(`   ⏳ [管线调度] 节点 ${nodeId} 正在等待上游就绪...`);
+                await Promise.all(upstreamPromises);
+            }
+            // 上游全跑完了，开始跑自己
+            await executeNode(nodeId);
+        })();
+
+        return nodePromises[nodeId];
+    };
+
+    // 4. 触发全图执行
+    try {
+        // 找出所有节点，把它们全塞进调度管线里去
+        const allExecutions = flowState.nodes.map(n => scheduleNode(n.id));
+        
+        // 等待整个图执行完毕
+        await Promise.all(allExecutions);
+        console.log("✅ [执行引擎] 工作流全链路并发执行完毕！");
+        
+    } catch (err) {
+        console.error("❌ [执行引擎] 链路崩溃:", err);
+        alert("执行流异常中断，请查看控制台日志。");
     }
-    
-    console.log("✅ [执行引擎] 工作流全链路执行完毕！");
 };
 
 // ==========================================
@@ -626,11 +680,6 @@ async function executeNode(nodeId) {
         setNodeStatus(nodeId, 'success');
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
-
-        const outgoingLinks = flowState.links.filter(l => l.source === nodeId);
-        for (let link of outgoingLinks) {
-            setTimeout(() => executeNode(link.target), 500); 
-        }
 
     } catch (error) {
         console.error(`   ❌ [崩溃拦截] ${node.title} 异常:`, error.message);

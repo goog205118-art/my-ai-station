@@ -607,6 +607,7 @@ async function executeNode(nodeId) {
     if (!node) return;
 
     setNodeStatus(nodeId, 'running');
+    const nodeStartTime = Date.now();
     console.log(`\n▶️ [启动节点] ${node.title}`);
 
     try {
@@ -774,7 +775,11 @@ async function executeNode(nodeId) {
         // 🌟 收尾流转
         // ==========================================
         node.result = finalResult; 
-        setNodeStatus(nodeId, 'success');
+        
+        // 🌟 新增：计算真实耗时 (精确到小数点后一位)，并传给状态渲染器
+        const costTime = ((Date.now() - nodeStartTime) / 1000).toFixed(1);
+        setNodeStatus(nodeId, 'success', { costTime: costTime });
+        
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
 
@@ -787,24 +792,81 @@ async function executeNode(nodeId) {
     }
 }
 // ==========================================
-// 💡 节点 UI 状态控制器 (加入错误红灯状态)
+// 💡 节点 UI 状态控制器 (极客读秒与视觉增强版)
 // ==========================================
-function setNodeStatus(nodeId, status) {
+function setNodeStatus(nodeId, status, meta = {}) {
     const el = document.getElementById(nodeId);
     if (!el) return;
     el.style.transition = 'all 0.3s ease';
-    
+
+    // 1. 动态注入/获取节点的专属状态栏 (绝不污染原有的内部结构)
+    let statusBar = el.querySelector('.node-status-bar');
+    if (!statusBar) {
+        statusBar = document.createElement('div');
+        statusBar.className = 'node-status-bar';
+        statusBar.style.cssText = 'position: absolute; bottom: -24px; left: 0; width: 100%; font-size: 11px; font-family: monospace; text-align: center; padding: 4px 0; border-radius: 6px; transition: 0.3s; z-index: 10; opacity: 0; pointer-events: none; backdrop-filter: blur(4px); box-shadow: 0 2px 10px rgba(0,0,0,0.5);';
+        el.appendChild(statusBar);
+    }
+
+    // 2. 垃圾回收：清理上一轮的计时器 (防止内存泄漏和跳秒)
+    if (el.dataset.timerId) {
+        clearInterval(parseInt(el.dataset.timerId));
+        delete el.dataset.timerId;
+    }
+
+    // 3. 状态分支渲染
     if (status === 'running') {
+        // 蓝光呼吸效果
         el.style.boxShadow = '0 0 30px 5px rgba(56, 189, 248, 0.4)';
         el.style.borderColor = '#38bdf8';
+        
+        statusBar.style.background = 'rgba(56, 189, 248, 0.15)';
+        statusBar.style.color = '#38bdf8';
+        statusBar.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+        statusBar.style.opacity = '1';
+        statusBar.style.bottom = '-30px'; // 稍微向下滑出
+        
+        const startTime = Date.now();
+        // 挂载专属秒表，DOM 级每秒局部重绘，丝滑无感
+        const timerId = setInterval(() => {
+            const sec = Math.floor((Date.now() - startTime) / 1000);
+            const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+            const ss = String(sec % 60).padStart(2, '0');
+            statusBar.innerHTML = `⚙️ 引擎轰鸣中... <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>`;
+        }, 1000);
+        
+        el.dataset.timerId = timerId;
+
     } else if (status === 'success') {
         el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
         el.style.borderColor = '#22c55e';
-        setTimeout(() => { el.style.boxShadow = '0 10px 40px rgba(0,0,0,0.6)'; el.style.borderColor = 'rgba(255,255,255,0.08)'; }, 3000);
+        
+        statusBar.style.background = 'rgba(34, 197, 94, 0.15)';
+        statusBar.style.color = '#22c55e';
+        statusBar.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+        statusBar.style.opacity = '1';
+        
+        const costTime = meta.costTime || 0;
+        statusBar.innerHTML = `✅ 跑通完毕 ⏱️ <span style="font-weight:bold;">${costTime}s</span>`;
+        
+        // 成功后，展示 4 秒钟让用户看清楚耗时，然后隐去
+        setTimeout(() => { statusBar.style.opacity = '0'; statusBar.style.bottom = '-24px'; }, 4000);
+
     } else if (status === 'error') {
-        // 🌟 报错时变红，并且不自动消失，提醒用户处理
-        el.style.boxShadow = '0 0 30px 5px rgba(239, 68, 68, 0.5)';
+        el.style.boxShadow = '0 0 30px 5px rgba(239, 68, 68, 0.3)';
         el.style.borderColor = '#ef4444';
+        
+        statusBar.style.background = 'rgba(239, 68, 68, 0.15)';
+        statusBar.style.color = '#ef4444';
+        statusBar.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        statusBar.style.opacity = '1';
+        statusBar.innerHTML = `❌ 链路崩溃`;
+        
+    } else {
+        // Idle (空闲状态)
+        el.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+        el.style.borderColor = 'rgba(255,255,255,0.1)';
+        statusBar.style.opacity = '0';
     }
 }
 // ==========================================

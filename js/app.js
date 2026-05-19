@@ -1221,8 +1221,8 @@ function generateCardHTML(task) {
         <div class="img-gen-controls">
             <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)" data-tip="选择图像生成比例">
                 <option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option>
-                <option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option>
-                <option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option>
+                <option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>3:2</option>
+                <option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>2:3</option>
                 <option value="" ${task.state.size===''?'selected':''}>自定义</option>
             </select>
             <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;" data-tip="若生成失败，可尝试切换备用 API 节点"><option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option><option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option></select>

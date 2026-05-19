@@ -546,28 +546,43 @@ const API_HEADERS = {
     'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
-// 🌟 核心新增：万能图片 Base64 转换器 (自带跨域穿透补丁)
-async function forceBase64(src) {
+// ==========================================
+// 🛡️ 工业级图片载荷处理器 (彻底告别三方代理)
+// ==========================================
+async function prepareImagePayload(src) {
     if (!src) return undefined;
-    if (src.startsWith('data:image')) return src; // 已经是 Base64，直接放行
-    try {
-        console.log("   🔄 触发跨域保护，正在通过代理通道转换图片...");
-        // 🚀 核心修复：使用 corsproxy 代理穿透 OSS 的跨域限制
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(src);
-        
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error(`代理下载失败: ${res.status}`);
-        
-        const blob = await res.blob();
-        return await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-        });
-    } catch (e) {
-        console.warn("图片转 Base64 失败，降级使用 URL:", e);
-        return src; 
+
+    // 1. 已经是 Base64 编码，直接放行
+    if (src.startsWith('data:image')) return src;
+
+    // 2. 如果是纯网络 URL (http/https)，直接丢给后端！
+    // 💡 架构核心：CORS 只是浏览器的限制，服务端的 n8n 和 API 厂商没有跨域限制！
+    // 让 Veo 模型的服务器自己去拉取这个 URL，速度最快，数据最安全。
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+        console.log("   🌐 探测到公网 URL，直接透传交由大模型服务端拉取:", src);
+        return src;
     }
+
+    // 3. 只有本地 Blob 内存文件 (blob:http://...)，服务端无法访问，才必须在前端转成 Base64
+    if (src.startsWith('blob:')) {
+        console.log("   📦 探测到本地 Blob 文件，正在安全序列化为 Base64...");
+        try {
+            // 本地读取 Blob 不存在跨域问题
+            const res = await fetch(src);
+            const blob = await res.blob();
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        } catch (e) {
+            console.error("Blob 转换 Base64 失败:", e);
+            return undefined;
+        }
+    }
+
+    return src; // 兜底原样返回
 }
 
 async function executeNode(nodeId) {
@@ -643,12 +658,12 @@ async function executeNode(nodeId) {
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            // 将上游图片转为 Base64
-            const firstFrame = await forceBase64(upstreamInputs.in_first_frame);
-            const lastFrame = await forceBase64(upstreamInputs.in_last_frame);
+            // 🌟 启用全新载荷处理器：公网图片传 URL，本地图片传 Base64
+            const firstFrame = await prepareImagePayload(upstreamInputs.in_first_frame);
+            const lastFrame = await prepareImagePayload(upstreamInputs.in_last_frame);
             const refImages = [];
             if (upstreamInputs.in_ref) {
-                refImages.push(await forceBase64(upstreamInputs.in_ref));
+                refImages.push(await prepareImagePayload(upstreamInputs.in_ref));
             }
             
             if (!firstFrame && refImages.length === 0) {

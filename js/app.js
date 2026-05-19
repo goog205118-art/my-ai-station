@@ -1223,7 +1223,7 @@ function generateCardHTML(task) {
                 <option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option>
                 <option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option>
                 <option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option>
-                <option value="" ${task.state.size===''?'selected':''}>自定义 (AI嗅探)</option>
+                <option value="" ${task.state.size===''?'selected':''}>自定义</option>
             </select>
             <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;" data-tip="若生成失败，可尝试切换备用 API 节点"><option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option><option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option></select>
             <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'autoRetry', this.value === 'true')" data-tip="遇网络异常是否自动重试 (最多3次)"><option value="false" ${!task.state.autoRetry?'selected':''}>单次</option><option value="true" ${task.state.autoRetry?'selected':''}>自动重试</option></select>

@@ -372,9 +372,10 @@ const NodeBlueprints = {
             out: [{ id: 'out_img', type: 'image', label: '输出图像' }] 
         },
         inputs: [
+            // 🌟 增加本地直传垫图
+            { id: 'local_ref', type: 'image_upload', label: '本地直传垫图 (选填)' },
             { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，雪山背景，8k' },
             { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024', '自定义 (AI嗅探)'], default: '1024x1024' },
-            // 🌟 新增条件渲染参数：仅当 size 等于自定义时才显示
             { id: 'customW', type: 'number', label: '自定义宽度比例 (W)', default: 9, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
             { id: 'customH', type: 'number', label: '自定义高度比例 (H)', default: 21, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
             { id: 'channel', type: 'select', label: '生成通道', options: ['通道 1 (主干)', '通道 2 (备用)'], default: '通道 1 (主干)' }
@@ -392,10 +393,13 @@ const NodeBlueprints = {
             out: [{ id: 'out_video', type: 'video', label: '输出视频' }] 
         },
         inputs: [
+            // 🌟 增加本地直传首尾帧与垫图
+            { id: 'local_first_frame', type: 'image_upload', label: '直传首帧 (优先于连线)' },
+            { id: 'local_last_frame', type: 'image_upload', label: '直传尾帧 (选填)' },
+            { id: 'local_ref', type: 'image_upload', label: '直传通用垫图 (Cmp模型)' },
             { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
             { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
             { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
-            // 🌟 补齐主引擎的高级参数
             { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
             { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
             { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (最多3次)'], default: '关闭' }
@@ -667,7 +671,6 @@ async function executeNode(nodeId) {
             let finalPrompt = nodeData.prompt.trim();
             let finalSize = nodeData.size || '1024x1024';
 
-            // 🌟 注入主引擎同款隐式拼接逻辑
             if (finalSize === '自定义 (AI嗅探)') {
                 finalSize = ""; 
                 const w = nodeData.customW || 9;
@@ -675,55 +678,31 @@ async function executeNode(nodeId) {
                 finalPrompt += ` 画面比例${w}:${h}`;
             }
 
+            // 🌟 核心：优先取本地上传的垫图，没有的话再取上游连线的垫图
+            const refImgSource = nodeData.local_ref || upstreamInputs.in_ref;
+
             const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
             const payload = {
                 prompt: finalPrompt,
                 size: finalSize,
                 channel: isChannel2 ? 'channel_2' : 'channel_1',
-                images: upstreamInputs.in_ref ? [upstreamInputs.in_ref] : []
+                images: refImgSource ? [refImgSource] : []
             };
-
-            console.log("   📦 发送生图请求:", payload);
-            const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, {
-                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
-            });
-            
-            // 🌟 终极防弹：先读纯文本，不急着转 JSON，彻底搞清楚 n8n 返回了什么
-            const rawText = await res.text();
-            console.log("   📩 n8n 生图接口原始返回:", rawText);
-
-            if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
-            if (!rawText) throw new Error("n8n 返回了空数据。可能是云雾 API 报错导致 n8n 没有输出节点数据。");
-            
-            let data;
-            try { data = JSON.parse(rawText); } 
-            catch (e) { throw new Error(`n8n 返回的不是合法 JSON: ${rawText.substring(0, 40)}...`); }
-            
-            // 🌟 核心升级：兼容 URL 与 Base64 两种混合返回模式
-            const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
-            
-            if (imgObj.url) {
-                // 情况 1：API 返回了标准的图片链接
-                finalResult = imgObj.url;
-            } else if (imgObj.b64_json) {
-                // 情况 2：API 返回了 Base64 编码
-                // 我们必须加上 Data URI 前缀，这样浏览器和下游的 Veo 才能认识它是一张图
-                finalResult = "data:image/png;base64," + imgObj.b64_json;
-            } else {
-                throw new Error("API 成功返回，但未找到 url 或 b64_json 字段: " + rawText.substring(0, 50));
-            }
-        }
         
         // ----------------------------------------------------
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            // 🌟 启用全新载荷处理器：公网图片传 URL，本地图片传 Base64
-            const firstFrame = await prepareImagePayload(upstreamInputs.in_first_frame);
-            const lastFrame = await prepareImagePayload(upstreamInputs.in_last_frame);
+            // 🌟 核心合并逻辑：优先使用本地上传的图片 (nodeData.local_xxx)，若无，则回退使用连线传来的图片 (upstreamInputs.in_xxx)
+            const firstFrameRaw = nodeData.local_first_frame || upstreamInputs.in_first_frame;
+            const lastFrameRaw = nodeData.local_last_frame || upstreamInputs.in_last_frame;
+            const refRaw = nodeData.local_ref || upstreamInputs.in_ref;
+
+            const firstFrame = await prepareImagePayload(firstFrameRaw);
+            const lastFrame = await prepareImagePayload(lastFrameRaw);
             const refImages = [];
-            if (upstreamInputs.in_ref) {
-                refImages.push(await prepareImagePayload(upstreamInputs.in_ref));
+            if (refRaw) {
+                refImages.push(await prepareImagePayload(refRaw));
             }
             
             if (!firstFrame && refImages.length === 0) {

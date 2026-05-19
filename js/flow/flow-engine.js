@@ -73,15 +73,18 @@ function renderNodes() {
                     // 🌟 新增支持：数字输入框
                     inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${val}" onchange="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
                 } else if (inp.type === 'image_upload') {
-                    // 🌟 新增支持：本地图片极速直传控件 (转为 Base64 内存直读)
-                    const hasImage = val && val.length > 100; // 简单判断是否已有 Base64 数据
+                    const hasImage = val && val.length > 100; 
+                    // 🌟 核心升级：加入拖拽事件拦截，鼠标拖入时边框高亮反馈
                     inputsHtml += `
-                    <div style="display:flex; gap:8px; align-items:center; margin-top: 4px;">
-                        <label class="node-input" style="flex:1; text-align:center; cursor:pointer; background: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.3); color: #38bdf8; padding: 6px; transition: 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.2)'" onmouseout="this.style.background='rgba(56,189,248,0.1)'">
+                    <div style="display:flex; gap:8px; align-items:center; margin-top: 4px; padding: 2px; border: 1px dashed transparent; border-radius: 6px; transition: 0.2s;"
+                         ondragover="event.preventDefault(); this.style.borderColor='var(--accent)';" 
+                         ondragleave="this.style.borderColor='transparent';" 
+                         ondrop="handleNodeImageDrop(event, '${node.id}', '${inp.id}'); this.style.borderColor='transparent';">
+                        <label class="node-input" style="flex:1; text-align:center; cursor:pointer; background: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.3); color: #38bdf8; padding: 6px; transition: 0.2s; margin:0;" onmouseover="this.style.background='rgba(56,189,248,0.2)'" onmouseout="this.style.background='rgba(56,189,248,0.1)'">
                             <input type="file" accept="image/*" style="display:none;" onchange="handleNodeImageUpload(event, '${node.id}', '${inp.id}')">
-                            <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">upload</span> ${hasImage ? '更换本地图' : '点击上传图片'}
+                            <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">upload</span> ${hasImage ? '更换图片' : '点击 / 拖入图片'}
                         </label>
-                        ${hasImage ? `<img src="${val}" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()">` : ''}
+                        ${hasImage ? `<img src="${val}" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()" data-tip="已挂载本地内存">` : ''}
                     </div>`;
                 }
                 inputsHtml += `</div>`;
@@ -436,8 +439,46 @@ window.handleNodeImageUpload = function(e, nodeId, inputId) {
     e.target.value = '';
 };
 
-// 3. 动态创建右键菜单 DOM
+// 👇👇👇 直接在这里追加万能拖拽解析器 👇👇👇
+window.handleNodeImageDrop = async function(e, nodeId, inputId) {
+    e.preventDefault();
+    e.stopPropagation();
 
+    let srcToUse = null;
+
+    // 1. 尝试解析从侧边栏【全局素材库】拖过来的 JSON 内存指针
+    try {
+        const jsonStr = e.dataTransfer.getData('application/json');
+        if (jsonStr) {
+            const meta = JSON.parse(jsonStr);
+            // 调用 db.js 里的全局函数，直接从 IndexedDB 提取跨页面素材
+            const t = await getTaskDB(meta.taskId); 
+            if (t && t.src) {
+                console.log("🌟 [跨维传输] 成功捕获全局素材库图片！");
+                srcToUse = await blobToBase64(t.src); // 将 Blob 转为内存流供节点消费
+            }
+        }
+    } catch(err) {}
+
+    // 2. 兜底方案：如果不是跨页面素材，则尝试解析电脑桌面拖进来的物理文件
+    if (!srcToUse && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+        if (file) {
+            console.log("🌟 [物理传输] 成功捕获桌面拖拽图片！");
+            srcToUse = await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
+        }
+    }
+
+    // 3. 注入数据并刷新节点 UI
+    if (srcToUse) {
+        updateNodeData(nodeId, inputId, srcToUse);
+        renderNodes();
+    }
+};
 // 3. 动态创建右键菜单 DOM
 const ctxMenu = document.createElement('div');
 ctxMenu.id = 'veo-context-menu';

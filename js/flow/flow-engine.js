@@ -54,13 +54,24 @@ function renderNodes() {
             inputsHtml = '<div class="node-inputs-container">';
             node.inputs.forEach(inp => {
                 const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
+                
+                // 🌟 新增核心：处理条件渲染 (条件不满足则跳过绘制该表单项)
+                if (inp.condition) {
+                    const depVal = node.data && node.data[inp.condition.field] !== undefined ? node.data[inp.condition.field] : node.inputs.find(i => i.id === inp.condition.field).default;
+                    if (depVal !== inp.condition.value) return; 
+                }
+
                 inputsHtml += `<div class="node-input-group"><div class="node-input-label">${inp.label}</div>`;
                 if (inp.type === 'textarea') {
                     inputsHtml += `<textarea class="node-input" rows="3" onmousedown="event.stopPropagation()" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)">${val}</textarea>`;
                 } else if (inp.type === 'select') {
-                    inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value)">
+                    // 🌟 针对 select 修改：选择变更后，调用 renderNodes() 刷新 UI（这样可以立即滑出隐藏的输入框）
+                    inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); renderNodes();">
                         ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
                     </select>`;
+                } else if (inp.type === 'number') {
+                    // 🌟 新增支持：数字输入框
+                    inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${val}" onchange="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
                 }
                 inputsHtml += `</div>`;
             });
@@ -340,7 +351,7 @@ window.disconnectPort = function(e, nodeId, portId) {
 };
 
 // ==========================================
-// 🌟 升级版节点蓝图：完全对齐 GPT / Veo 真实模型
+// 🌟 升级版节点蓝图：完全对齐主引擎的所有高级参数
 // ==========================================
 const NodeBlueprints = {
     'tool_image_gen': { 
@@ -351,7 +362,10 @@ const NodeBlueprints = {
         },
         inputs: [
             { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，雪山背景，8k' },
-            { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024'], default: '1024x1024' },
+            { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024', '自定义 (AI嗅探)'], default: '1024x1024' },
+            // 🌟 新增条件渲染参数：仅当 size 等于自定义时才显示
+            { id: 'customW', type: 'number', label: '自定义宽度比例 (W)', default: 9, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
+            { id: 'customH', type: 'number', label: '自定义高度比例 (H)', default: 21, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
             { id: 'channel', type: 'select', label: '生成通道', options: ['通道 1 (主干)', '通道 2 (备用)'], default: '通道 1 (主干)' }
         ],
         data: {} 
@@ -368,9 +382,12 @@ const NodeBlueprints = {
         },
         inputs: [
             { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
-            // 🌟 修复：严格对齐云雾 API 的 4 个合法模型名称 (去掉横杠，补齐 components)
             { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
-            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' }
+            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
+            // 🌟 补齐主引擎的高级参数
+            { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
+            { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
+            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (最多3次)'], default: '关闭' }
         ],
         data: {}
     }
@@ -610,15 +627,25 @@ async function executeNode(nodeId) {
         // 🎨 分支 A：处理 GPT 生图节点
         // ----------------------------------------------------
         if (node.type === 'tool_image_gen') {
-            // 🌟 强力拦截：如果没写提示词，直接拒绝发车！
             if (!nodeData.prompt || nodeData.prompt.trim() === '') {
                 throw new Error("节点缺少弹药！请先在卡片里填写『正向提示词』再运行。");
             }
 
+            let finalPrompt = nodeData.prompt.trim();
+            let finalSize = nodeData.size || '1024x1024';
+
+            // 🌟 注入主引擎同款隐式拼接逻辑
+            if (finalSize === '自定义 (AI嗅探)') {
+                finalSize = ""; 
+                const w = nodeData.customW || 9;
+                const h = nodeData.customH || 21;
+                finalPrompt += ` 画面比例${w}:${h}`;
+            }
+
             const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
             const payload = {
-                prompt: nodeData.prompt.trim(),
-                size: nodeData.size || '1024x1024',
+                prompt: finalPrompt,
+                size: finalSize,
                 channel: isChannel2 ? 'channel_2' : 'channel_1',
                 images: upstreamInputs.in_ref ? [upstreamInputs.in_ref] : []
             };
@@ -674,19 +701,24 @@ async function executeNode(nodeId) {
             let targetModel = nodeData.model || "veo3.1";
             
             // 🌟 核心智能纠错机制：
-            // 如果用户选了首尾帧模型，但实际连线却只连了"垫图(ref)"，帮他自动更正为 components 模型，防止 API 拒绝！
             if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
                 if (targetModel === 'veo3.1') targetModel = 'veo3.1-components';
                 if (targetModel === 'veo3.1-4k') targetModel = 'veo3.1-components-4k';
                 console.log(`   💡 [智能纠错] 侦测到垫图连线，已将模型自动更正为: ${targetModel}`);
             }
 
+            // 🌟 提取新增的高级参数，并转化为 API 需要的 Boolean 值
+            const doEnhance = nodeData.enhancePrompt !== '关闭 (原词)'; // 只要不是明确关闭，默认开启
+            const doUpsample = nodeData.enableUpsample === '开启 (更慢)'; 
+
+            // (如果你要在下一阶段做重试逻辑，这里也可以把 nodeData.autoRetry 取出来保存到 node 状态里)
+
             const payload = {
                 model: targetModel,
                 prompt: nodeData.prompt || '',
                 aspectRatio: nodeData.aspectRatio || "16:9",
-                enhancePrompt: true,
-                enableUpsample: false,
+                enhancePrompt: doEnhance,      // 🌟 发送真正的布尔值
+                enableUpsample: doUpsample,    // 🌟 发送真正的布尔值
                 firstFrame: firstFrame || undefined,
                 lastFrame: lastFrame || undefined,
                 references: refImages.length > 0 ? refImages : undefined

@@ -102,41 +102,91 @@ function renderNodes() {
         </div>`;
     }).join('');
 }
+// ==========================================
+// 🎨 SVG 局部靶向渲染引擎 (拒绝 innerHTML 全局重绘)
+// ==========================================
 function renderLinks() {
-    if(!svgLayer) return;
-    let svgPaths = '';
+    if (!svgLayer) return;
     const canvasRect = canvas.getBoundingClientRect();
     
     // 1. 渲染已固化的连线
     flowState.links.forEach(link => {
         const sourcePortEl = document.getElementById(`${link.source}-${link.sourcePort}`);
         const targetPortEl = document.getElementById(`${link.target}-${link.targetPort}`);
+        
         if (sourcePortEl && targetPortEl) {
             const sRect = sourcePortEl.getBoundingClientRect();
             const tRect = targetPortEl.getBoundingClientRect();
+            
+            // 计算基于当前画布缩放的坐标
             const x1 = (sRect.left + sRect.width/2 - canvasRect.left) / flowState.transform.scale;
             const y1 = (sRect.top + sRect.height/2 - canvasRect.top) / flowState.transform.scale;
             const x2 = (tRect.left + tRect.width/2 - canvasRect.left) / flowState.transform.scale;
             const y2 = (tRect.top + tRect.height/2 - canvasRect.top) / flowState.transform.scale;
             
+            // 贝塞尔曲线控制点偏移量
             const offset = Math.max(Math.abs(x2 - x1) / 2, 60);
-            const color = link.type === 'image' ? '#c084fc' : '#38bdf8';
-            svgPaths += `<path d="M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}" stroke="${color}" stroke-width="3" fill="none" opacity="0.8" stroke-linecap="round"/>`;
+            const pathData = `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
+            
+            // 🌟 核心：精准复用已存在的 DOM，只改路径
+            let pathEl = document.getElementById('svgpath_' + link.id);
+            if (!pathEl) {
+                // 如果是新线，创建并挂载 (必须用 createElementNS 创建 SVG 元素)
+                pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                pathEl.id = 'svgpath_' + link.id;
+                pathEl.setAttribute('stroke', link.type === 'image' ? '#c084fc' : '#38bdf8');
+                pathEl.setAttribute('stroke-width', '3');
+                pathEl.setAttribute('fill', 'none');
+                pathEl.setAttribute('opacity', '0.8');
+                pathEl.setAttribute('stroke-linecap', 'round');
+                svgLayer.appendChild(pathEl);
+            }
+            
+            // 只有坐标发生变化时，才触发属性写入，极致压榨性能
+            if (pathEl.getAttribute('d') !== pathData) {
+                pathEl.setAttribute('d', pathData);
+            }
         }
     });
 
-    // 2. 🌟 渲染用户正在拖拽的动态连线
+    // 🌟 核心：垃圾回收 (Garbage Collection)
+    // 找出画布上所有的固化线 DOM，如果它在内存 (flowState.links) 里不存在了，就删掉它
+    const existingPaths = Array.from(svgLayer.querySelectorAll('path[id^="svgpath_link_"]'));
+    const validLinkIds = new Set(flowState.links.map(l => 'svgpath_' + l.id));
+    existingPaths.forEach(p => {
+        if (!validLinkIds.has(p.id)) p.remove();
+    });
+
+    // 2. 渲染动态拉线 (鼠标正在拖出的那条虚线)
+    let drawingPath = document.getElementById('svgpath_drawing_temp');
+    
     if (flowState.drawingLink.active) {
         const x1 = flowState.drawingLink.startX;
         const y1 = flowState.drawingLink.startY;
         const x2 = flowState.drawingLink.currentX;
         const y2 = flowState.drawingLink.currentY;
         const offset = Math.max(Math.abs(x2 - x1) / 2, 60);
-        const color = flowState.drawingLink.type === 'image' ? '#c084fc' : '#38bdf8';
-        svgPaths += `<path d="M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}" stroke="${color}" stroke-width="3" fill="none" stroke-dasharray="6,6" opacity="0.9" stroke-linecap="round"/>`;
-    }
+        const pathData = `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
 
-    svgLayer.innerHTML = svgPaths;
+        if (!drawingPath) {
+            drawingPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            drawingPath.id = 'svgpath_drawing_temp';
+            drawingPath.setAttribute('stroke-width', '3');
+            drawingPath.setAttribute('fill', 'none');
+            drawingPath.setAttribute('stroke-dasharray', '6,6');
+            drawingPath.setAttribute('opacity', '0.9');
+            drawingPath.setAttribute('stroke-linecap', 'round');
+            svgLayer.appendChild(drawingPath);
+        }
+        
+        // 动态适配引脚的颜色 (图像紫 / 视频蓝)
+        drawingPath.setAttribute('stroke', flowState.drawingLink.type === 'image' ? '#c084fc' : '#38bdf8');
+        drawingPath.setAttribute('d', pathData);
+        drawingPath.style.display = 'block';
+    } else if (drawingPath) {
+        // 松开鼠标后，不销毁 DOM，只是隐藏它，下次拉线直接复用
+        drawingPath.style.display = 'none';
+    }
 }
 
 // ==========================================

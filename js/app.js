@@ -1199,7 +1199,38 @@ function generateCardHTML(task) {
             btnContent = `<span class="material-symbols-outlined" style="font-size:18px;">refresh</span> 失败，点击重试 ${task.state.costTime ? `(在 ${task.state.costTime}s 处断开)` : ''}`;
         }
         
-        return `<div class="card-header"><span style="color:var(--accent); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">brush</span> AI 多模生图</span><button onclick="removeTask('${task.id}')" data-tip="删除该组件" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div><div class="img-gen-slots" ondragover="event.preventDefault(); document.getElementById('img-gen-zone-${task.id}')?.classList.add('drag-over');" ondragleave="document.getElementById('img-gen-zone-${task.id}')?.classList.remove('drag-over');" ondrop="handleGenImageDrop(event, '${task.id}')">${slotsHtml}</div><div class="img-gen-controls"><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)" data-tip="选择图像生成比例"><option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option><option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option><option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option></select><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;" data-tip="若生成失败，可尝试切换备用 API 节点"><option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option><option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option></select><select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'autoRetry', this.value === 'true')" data-tip="遇网络异常是否自动重试 (最多3次)"><option value="false" ${!task.state.autoRetry?'selected':''}>单次</option><option value="true" ${task.state.autoRetry?'selected':''}>自动重试</option></select></div><textarea class="img-gen-prompt" onchange="updateImgGenState('${task.id}', 'prompt', this.value)" placeholder="输入画面提示词，可垫入 1-5 张图配合描述...">${task.state.prompt||''}</textarea><button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''} style="${isFailed ? 'background: var(--danger);' : ''}">${btnContent}</button>${resultHtml}`;
+        // 🌟 核心修改 1：处理自定义比例 UI
+        let customRatioHtml = '';
+        if (task.state.size === '') {
+            const w = task.state.customW || 9; 
+            const h = task.state.customH || 21;
+            customRatioHtml = `
+            <div style="display:flex; align-items:center; gap:6px; padding: 0 12px; margin-top:-4px; margin-bottom:8px;">
+                <span class="material-symbols-outlined" style="font-size:14px; color:var(--accent);">aspect_ratio</span>
+                <span style="font-size:11px; color:var(--text-sub);">画幅:</span>
+                <input type="number" class="img-gen-select" style="width:40px; text-align:center; padding:4px;" value="${w}" onchange="updateImgGenState('${task.id}', 'customW', this.value)">
+                <span style="color:var(--text-sub);">:</span>
+                <input type="number" class="img-gen-select" style="width:40px; text-align:center; padding:4px;" value="${h}" onchange="updateImgGenState('${task.id}', 'customH', this.value)">
+                <span style="font-size:10px; color:rgba(255,255,255,0.3); margin-left:auto;">提交时将自动隐式拼接</span>
+            </div>`;
+        }
+        
+        // 🌟 核心修改 2：打散原本超长的 return，加入自定义选项和动态框
+        return `<div class="card-header"><span style="color:var(--accent); display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:14px;">brush</span> AI 多模生图</span><button onclick="removeTask('${task.id}')" data-tip="删除该组件" style="background:transparent; border:none; color:var(--text-sub); cursor:pointer;"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button></div>
+        <div class="img-gen-slots" ondragover="event.preventDefault(); document.getElementById('img-gen-zone-${task.id}')?.classList.add('drag-over');" ondragleave="document.getElementById('img-gen-zone-${task.id}')?.classList.remove('drag-over');" ondrop="handleGenImageDrop(event, '${task.id}')">${slotsHtml}</div>
+        <div class="img-gen-controls">
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'size', this.value)" data-tip="选择图像生成比例">
+                <option value="1024x1024" ${task.state.size==='1024x1024'?'selected':''}>1:1</option>
+                <option value="1536x1024" ${task.state.size==='1536x1024'?'selected':''}>16:9</option>
+                <option value="1024x1536" ${task.state.size==='1024x1536'?'selected':''}>9:16</option>
+                <option value="" ${task.state.size===''?'selected':''}>自定义 (AI嗅探)</option>
+            </select>
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'channel', this.value)" style="flex: 1.5;" data-tip="若生成失败，可尝试切换备用 API 节点"><option value="channel_1" ${task.state.channel==='channel_1' || !task.state.channel ? 'selected' : ''}>节点 1 (主)</option><option value="channel_2" ${task.state.channel==='channel_2'?'selected':''}>节点 2 (备)</option></select>
+            <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'autoRetry', this.value === 'true')" data-tip="遇网络异常是否自动重试 (最多3次)"><option value="false" ${!task.state.autoRetry?'selected':''}>单次</option><option value="true" ${task.state.autoRetry?'selected':''}>自动重试</option></select>
+        </div>
+        ${customRatioHtml}
+        <textarea class="img-gen-prompt" onchange="updateImgGenState('${task.id}', 'prompt', this.value)" placeholder="输入画面提示词，可垫入 1-5 张图配合描述...">${task.state.prompt||''}</textarea>
+        <button class="img-gen-btn" onclick="submitImgGen('${task.id}')" ${isProcessing?'disabled':''} style="${isFailed ? 'background: var(--danger);' : ''}">${btnContent}</button>${resultHtml}`;
     }
 
     if (task.type === 'tool_cropper') {
@@ -1439,10 +1470,19 @@ async function submitImgGen(taskId) {
     await saveTaskDB(task); 
     renderCard(taskId); // 🌟 严格遵守局部渲染法则
     
+    // 🌟 拦截处理：如果 size 是空值，进行比例提示词的隐式无感拼接
+    let finalPrompt = task.state.prompt;
+    if (task.state.size === '') {
+        const w = task.state.customW || 9;
+        const h = task.state.customH || 21;
+        // 在发给服务器前，悄悄在用户提示词末尾加上比例要求
+        finalPrompt = finalPrompt + ` 画面比例${w}:${h}`; 
+    }
+
     // 2. 构造 Payload，融合旧版丢失的 channel 参数
     const apiPayload = { 
-        prompt: task.state.prompt, 
-        size: task.state.size, 
+        prompt: finalPrompt,  // 🌟 使用拼接后的新 Prompt
+        size: task.state.size, // 照样传空字符串给 n8n
         channel: task.state.channel || 'channel_1', 
         images: await Promise.all(task.state.images.map(b => blobToBase64(b))) 
     };

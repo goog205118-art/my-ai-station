@@ -1009,3 +1009,57 @@ async function recordNodeBilling(node) {
         });
     }
 }
+// ==========================================
+// 🗂️ 虫洞引擎：全局素材库桥接 (跨越 IndexedDB)
+// ==========================================
+
+window.toggleMaterialDrawer = function() {
+    const drawer = document.getElementById('material-drawer');
+    if (drawer) {
+        drawer.classList.toggle('open');
+        // 展开时自动刷新 DB 数据
+        if (drawer.classList.contains('open')) {
+            renderMaterialLibrary();
+        }
+    }
+};
+
+window.renderMaterialLibrary = async function() {
+    const grid = document.getElementById('material-grid');
+    if (!grid) return;
+    
+    try {
+        // 1. 调用底层的 db.js 全量查询
+        const tasks = await getAllTasksDB(); 
+        
+        // 2. 筛选出主页面里所有的 "本地图" 类型素材
+        const materials = tasks.filter(t => t.type === 'local_image');
+        
+        if (materials.length === 0) { 
+            grid.innerHTML = `<div style="grid-column: span 2; text-align: center; padding: 40px 0; color: #555; font-size: 12px;">主画布仓库空空如也，请先去主页传图</div>`; 
+            return; 
+        }
+
+        let html = '';
+        materials.forEach(m => {
+            // 3. 借用 db.js 的专属协议极速挂载 Blob 内存流
+            const url = getBlobUrl(m.id, m.src);
+            
+            // 🌟 核心破局：我们在这里给拖拽的数据包塞入一段 JSON 凭证
+            // 这恰好能被我们在上一步写的 handleNodeImageDrop "万能解析器" 完美拦截接管！
+            html += `
+                <div class="material-item" draggable="true" 
+                     ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${m.id}', type: 'local'}))">
+                    <img src="${url}" loading="lazy">
+                </div>
+            `;
+        });
+        
+        grid.innerHTML = html;
+        console.log(`🌌 [虫洞引擎] 成功从 IndexedDB 映射 ${materials.length} 张素材`);
+        
+    } catch (err) {
+        console.error("❌ 读取全局素材库失败 (请确保 db.js 已就绪):", err);
+        grid.innerHTML = `<div style="color: #ef4444; font-size: 12px; grid-column: span 2;">数据库穿透异常</div>`;
+    }
+};

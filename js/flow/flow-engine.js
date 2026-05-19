@@ -688,6 +688,33 @@ async function executeNode(nodeId) {
                 channel: isChannel2 ? 'channel_2' : 'channel_1',
                 images: refImgSource ? [refImgSource] : []
             };
+
+            // 👇👇👇 这里是被误删的 API 请求代码和闭合大括号 👇👇👇
+            console.log("   📦 发送生图请求:", payload);
+            const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, {
+                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
+            });
+            
+            const rawText = await res.text();
+            console.log("   📩 n8n 生图接口原始返回:", rawText);
+
+            if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
+            if (!rawText) throw new Error("n8n 返回了空数据。可能是云雾 API 报错导致 n8n 没有输出节点数据。");
+            
+            let data;
+            try { data = JSON.parse(rawText); } 
+            catch (e) { throw new Error(`n8n 返回的不是合法 JSON: ${rawText.substring(0, 40)}...`); }
+            
+            const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
+            
+            if (imgObj.url) {
+                finalResult = imgObj.url;
+            } else if (imgObj.b64_json) {
+                finalResult = "data:image/png;base64," + imgObj.b64_json;
+            } else {
+                throw new Error("API 成功返回，但未找到 url 或 b64_json 字段: " + rawText.substring(0, 50));
+            }
+        } // 🌟🌟🌟 这里是关键缺失的大括号！🌟🌟🌟
         
         // ----------------------------------------------------
         // 🎞️ 分支 B：处理 Veo 视频节点

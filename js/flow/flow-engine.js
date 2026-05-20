@@ -24,27 +24,50 @@ const nodeBoard = document.getElementById('node-board');
 canvas.style.width = '1px'; canvas.style.height = '1px'; canvas.style.overflow = 'visible';
 svgLayer.style.width = '1px'; svgLayer.style.height = '1px'; svgLayer.style.overflow = 'visible';
 
-// 1. 全局状态机
+// 1. 全局状态机 (🔴 清空了所有硬编码假数据)
 let flowState = {
     transform: { x: 0, y: 0, scale: 1 },
     isPanning: false, startX: 0, startY: 0,
     activeNode: null,
-    
-    // 🌟 新增：动态拉线状态
-    drawingLink: { 
-        active: false, sourceNode: null, sourcePort: null, type: null, 
-        startX: 0, startY: 0, currentX: 0, currentY: 0 
-    },
-    
-    nodes: [
-        { id: 'node_1', type: 'image_gen', title: '🎨 生图节点 (源)', x: 100, y: 150, ports: { out: [{ id: 'out_img', type: 'image', label: '输出图像' }] } },
-        { id: 'node_2', type: 'video_gen', title: '🎞️ 视频节点 (目标)', x: 600, y: 200, ports: { in: [{ id: 'in_img', type: 'image', label: '首帧参考图' }] } },
-        { id: 'node_3', type: 'video_gen', title: '🎞️ 视频节点 (分发)', x: 600, y: 400, ports: { in: [{ id: 'in_img2', type: 'image', label: '备用参考图' }] } }
-    ],
-    links: [
-        { id: 'link_1', source: 'node_1', sourcePort: 'out_img', target: 'node_2', targetPort: 'in_img', type: 'image' }
-    ]
+    drawingLink: { active: false, sourceNode: null, sourcePort: null, type: null, startX: 0, startY: 0, currentX: 0, currentY: 0 },
+    nodes: [], 
+    links: []
 };
+
+// ==========================================
+// 💾 工作流本地持久化引擎 (IndexedDB)
+// ==========================================
+async function saveFlowToDB() {
+    if (typeof db === 'undefined') return;
+    return new Promise((resolve) => {
+        const tx = db.transaction('flow_workspaces', 'readwrite');
+        tx.objectStore('flow_workspaces').put({
+            id: 'default_workspace',
+            nodes: flowState.nodes,
+            links: flowState.links,
+            transform: flowState.transform,
+            timestamp: Date.now()
+        });
+        tx.oncomplete = () => resolve();
+    });
+}
+
+async function loadFlowFromDB() {
+    if (typeof db === 'undefined') return false;
+    return new Promise((resolve) => {
+        const tx = db.transaction('flow_workspaces', 'readonly');
+        const req = tx.objectStore('flow_workspaces').get('default_workspace');
+        req.onsuccess = () => {
+            if (req.result) {
+                flowState.nodes = req.result.nodes || [];
+                flowState.links = req.result.links || [];
+                if (req.result.transform) flowState.transform = req.result.transform;
+                resolve(true);
+            } else resolve(false);
+        };
+        req.onerror = () => resolve(false);
+    });
+}
 
 // ==========================================
 // 🎨 支持内联预览的渲染引擎
@@ -290,37 +313,50 @@ window.finishDrawLink = function(e, targetNodeId, targetPortId, targetPortType, 
 };
 
 
-window.addEventListener('mousemove', (e) => {
-    // 处理拉线动画
-    if (flowState.drawingLink.active) {
-        const cRect = canvas.getBoundingClientRect();
-        flowState.drawingLink.currentX = (e.clientX - cRect.left) / flowState.transform.scale;
-        flowState.drawingLink.currentY = (e.clientY - cRect.top) / flowState.transform.scale;
-        renderLinks();
-        return; 
-    }
+// 🌟 核心提效：注入 rAF 渲染锁
+let isTicking = false;
 
-    // 处理节点拖拽
-    if (flowState.activeNode) {
-        const dx = (e.clientX - flowState.startX) / flowState.transform.scale;
-        const dy = (e.clientY - flowState.startY) / flowState.transform.scale;
-        flowState.activeNode.x += dx; flowState.activeNode.y += dy;
-        flowState.startX = e.clientX; flowState.startY = e.clientY;
-        document.getElementById(flowState.activeNode.id).style.transform = `translate(${flowState.activeNode.x}px, ${flowState.activeNode.y}px)`;
-        renderLinks(); 
-    }
-    
-    // 处理画布平移
-    if (flowState.isPanning) {
-        flowState.transform.x += (e.clientX - flowState.startX);
-        flowState.transform.y += (e.clientY - flowState.startY);
-        flowState.startX = e.clientX; flowState.startY = e.clientY;
-        updateCanvasTransform();
+window.addEventListener('mousemove', (e) => {
+    if (!isTicking) {
+        requestAnimationFrame(() => {
+            // 处理拉线动画
+            if (flowState.drawingLink.active) {
+                const cRect = canvas.getBoundingClientRect();
+                flowState.drawingLink.currentX = (e.clientX - cRect.left) / flowState.transform.scale;
+                flowState.drawingLink.currentY = (e.clientY - cRect.top) / flowState.transform.scale;
+                renderLinks();
+            }
+            // 处理节点拖拽
+            else if (flowState.activeNode) {
+                const dx = (e.clientX - flowState.startX) / flowState.transform.scale;
+                const dy = (e.clientY - flowState.startY) / flowState.transform.scale;
+                flowState.activeNode.x += dx; flowState.activeNode.y += dy;
+                flowState.startX = e.clientX; flowState.startY = e.clientY;
+                document.getElementById(flowState.activeNode.id).style.transform = `translate(${flowState.activeNode.x}px, ${flowState.activeNode.y}px)`;
+                renderLinks(); 
+            }
+            // 处理画布平移
+            else if (flowState.isPanning) {
+                flowState.transform.x += (e.clientX - flowState.startX);
+                flowState.transform.y += (e.clientY - flowState.startY);
+                flowState.startX = e.clientX; flowState.startY = e.clientY;
+                updateCanvasTransform();
+            }
+            isTicking = false;
+        });
+        isTicking = true;
     }
 });
 
 window.addEventListener('mouseup', () => {
-    if (flowState.activeNode) document.getElementById(flowState.activeNode.id).style.zIndex = '';
+    let shouldSave = false; // 🌟 顺手为后面的持久化埋下钩子
+
+    if (flowState.activeNode) {
+        document.getElementById(flowState.activeNode.id).style.zIndex = '';
+        shouldSave = true; // 节点被移动了，需要存档
+    }
+    if (flowState.isPanning) shouldSave = true; // 画布被平移了，需要存档
+
     flowState.activeNode = null;
     flowState.isPanning = false;
     viewport.style.cursor = 'grab';
@@ -330,6 +366,9 @@ window.addEventListener('mouseup', () => {
         flowState.drawingLink.active = false;
         renderLinks();
     }
+
+    // 如果发生了位移，静默保存状态
+    if (shouldSave && typeof saveFlowToDB === 'function') saveFlowToDB();
 });
 
 // 画布平移与缩放逻辑 (保持不变)
@@ -359,11 +398,13 @@ function updateCanvasTransform() {
     viewport.style.backgroundSize = `${20 * flowState.transform.scale}px ${20 * flowState.transform.scale}px`;
 }
 
-function initFlowEngine() {
+// 🌟 异步启动引擎，先读档再渲染
+window.initFlowEngine = async function() {
+    await loadFlowFromDB(); // 尝试读取上一次的进度
     renderNodes();
     setTimeout(renderLinks, 50); 
     updateCanvasTransform();
-}
+};
 // ==========================================
 // 🔪 生命与毁灭引擎 (断线、删除、右键菜单)
 // ==========================================
@@ -830,16 +871,39 @@ async function executeNode(nodeId) {
             if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result; 
         }
 
-        // 2. 🌟 靶向路由调用执行器 (彻底干掉 if-else)
+        // 2. 🌟 靶向路由调用执行器
         const executor = NodeExecutors[node.type];
-        if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器，请检查插件注册表！`);
+        if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
-        const finalResult = await executor(node, node.data || {}, upstreamInputs);
+        // 🌟 核心激活：读取节点的重试配置 (最大3次)
+        const maxRetries = (node.data && (node.data.autoRetry === '开启 (最多3次)' || node.data.autoRetry === true)) ? 3 : 0;
+        let attempt = 0;
+        let finalResult = null;
+
+        // 🛡️ 重试装甲循环
+        while (attempt <= maxRetries) {
+            try {
+                if (attempt > 0) {
+                    console.log(`   🔄 [重试机制] 正在发起第 ${attempt} 次重试...`);
+                    setNodeStatus(nodeId, 'running', { retryCount: attempt });
+                }
+                finalResult = await executor(node, node.data || {}, upstreamInputs);
+                break; // 成功则跳出重试循环
+            } catch (err) {
+                attempt++;
+                if (attempt > maxRetries) {
+                    throw err; // 次数用尽，彻底抛出异常走向死亡
+                }
+                console.warn(`   ⚠️ 节点运行失败，等待 3 秒后尝试复活... (${err.message})`);
+                await new Promise(r => setTimeout(r, 3000));
+            }
+        }
 
         // 3. 收尾流转与记账
         node.result = finalResult; 
-        const costTime = ((Date.now() - nodeStartTime) / 1000).toFixed(1);
+        saveFlowToDB(); // 🌟 节点出结果了，立刻存档！
         
+        const costTime = ((Date.now() - nodeStartTime) / 1000).toFixed(1);
         setNodeStatus(nodeId, 'success', { costTime: costTime });
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
@@ -907,8 +971,8 @@ function setNodeStatus(nodeId, status, meta = {}) {
             const sec = Math.floor((Date.now() - startTime) / 1000);
             const mm = String(Math.floor(sec / 60)).padStart(2, '0');
             const ss = String(sec % 60).padStart(2, '0');
-            statusBar.innerHTML = `⚙️ 引擎轰鸣中... <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>`;
-        }, 1000);
+            const retryStr = meta.retryCount ? ` <span style="color:#f59e0b">(重试 ${meta.retryCount})</span>` : '';
+            statusBar.innerHTML = `⚙️ 引擎轰鸣中...${retryStr} <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>`;
         
         el.dataset.timerId = timerId;
 
@@ -1059,3 +1123,15 @@ window.renderMaterialLibrary = async function() {
         grid.innerHTML = `<div style="color: #ef4444; font-size: 12px; grid-column: span 2;">数据库穿透异常</div>`;
     }
 };
+// 🌟 修复素材库无法关闭：全局侦听器
+document.addEventListener('mousedown', (e) => {
+    const drawer = document.getElementById('material-drawer');
+    // 如果抽屉是开着的，且鼠标点击的位置不在抽屉内部，也不在触发按钮上
+    if (drawer && drawer.classList.contains('open')) {
+        const isClickInside = drawer.contains(e.target);
+        const isClickToggleButton = e.target.closest('button[onclick="toggleMaterialDrawer()"]');
+        if (!isClickInside && !isClickToggleButton) {
+            drawer.classList.remove('open');
+        }
+    }
+});

@@ -858,7 +858,7 @@ async function executeNode(nodeId) {
 
             let isComplete = false;
             while (!isComplete) {
-                await new Promise(r => setTimeout(r, 6000)); 
+                await new Promise(r => setTimeout(r, 15000)); 
                 
                 const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, {
                     method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId })

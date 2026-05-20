@@ -87,85 +87,130 @@ function renderPreview(node) {
 
 function renderNodes() {
     if(!nodeBoard) return;
-    nodeBoard.innerHTML = flowState.nodes.map(node => {
-        let inputsHtml = '';
-        if (node.inputs && node.inputs.length > 0) {
-            inputsHtml = '<div class="node-inputs-container">';
-            node.inputs.forEach(inp => {
-                const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
-                
-                // 🌟 新增核心：处理条件渲染 (条件不满足则跳过绘制该表单项)
-                if (inp.condition) {
-                    const depVal = node.data && node.data[inp.condition.field] !== undefined ? node.data[inp.condition.field] : node.inputs.find(i => i.id === inp.condition.field).default;
-                    if (depVal !== inp.condition.value) return; 
-                }
 
-                inputsHtml += `<div class="node-input-group"><div class="node-input-label">${inp.label}</div>`;
-                if (inp.type === 'textarea') {
-                    inputsHtml += `<textarea class="node-input" rows="3" onmousedown="event.stopPropagation()" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)">${val}</textarea>`;
-                } else if (inp.type === 'select') {
-                    // 🌟 针对 select 修改：选择变更后，调用 renderNodes() 刷新 UI（这样可以立即滑出隐藏的输入框）
-                    inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); renderNodes();">
-                        ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                    </select>`;
-                } else if (inp.type === 'number') {
-                    // 🌟 新增支持：数字输入框
-                    inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${val}" onchange="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
-                } else if (inp.type === 'image_upload') {
-                    const hasImage = val && val.length > 100; 
-                    // 🌟 核心升级：加入拖拽事件拦截，鼠标拖入时边框高亮反馈
-                    inputsHtml += `
-                    <div style="display:flex; gap:8px; align-items:center; margin-top: 4px; padding: 2px; border: 1px dashed transparent; border-radius: 6px; transition: 0.2s;"
-                         ondragover="event.preventDefault(); this.style.borderColor='var(--accent)';" 
-                         ondragleave="this.style.borderColor='transparent';" 
-                         ondrop="handleNodeImageDrop(event, '${node.id}', '${inp.id}'); this.style.borderColor='transparent';">
-                        <label class="node-input" style="flex:1; text-align:center; cursor:pointer; background: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.3); color: #38bdf8; padding: 6px; transition: 0.2s; margin:0;" onmouseover="this.style.background='rgba(56,189,248,0.2)'" onmouseout="this.style.background='rgba(56,189,248,0.1)'">
-                            <input type="file" accept="image/*" style="display:none;" onchange="handleNodeImageUpload(event, '${node.id}', '${inp.id}')">
-                            <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">upload</span> ${hasImage ? '更换图片' : '点击 / 拖入图片'}
-                        </label>
-                        ${hasImage ? `<img src="${val}" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()" data-tip="已挂载本地内存">` : ''}
-                    </div>`;
-                }
-                inputsHtml += `</div>`;
-            });
-            inputsHtml += '</div>';
+    // 1. 🗑️ 垃圾回收：清理内存中已删除，但画布上残留的 DOM
+    const activeNodeIds = new Set(flowState.nodes.map(n => n.id));
+    Array.from(nodeBoard.children).forEach(child => {
+        if (!activeNodeIds.has(child.id)) child.remove();
+    });
+
+    // 2. 🏭 靶向挂载与更新
+    flowState.nodes.forEach(node => {
+        let nodeEl = document.getElementById(node.id);
+
+        // A. 如果是新生节点，进行完整的 DOM 构建 (生命周期内仅触发一次)
+        if (!nodeEl) {
+            nodeEl = document.createElement('div');
+            nodeEl.className = 'veo-node';
+            nodeEl.id = node.id;
+            
+            // 动态构建表单 (无视 condition，全量输出，隐藏交由 CSS 处理)
+            let inputsHtml = '';
+            if (node.inputs && node.inputs.length > 0) {
+                inputsHtml = '<div class="node-inputs-container">';
+                node.inputs.forEach(inp => {
+                    const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
+                    
+                    // 🌟 核心修改 1：注入唯一 ID，并移除原本的 condition 阻断逻辑
+                    inputsHtml += `<div class="node-input-group" id="group-${node.id}-${inp.id}"><div class="node-input-label">${inp.label}</div>`;
+                    
+                    if (inp.type === 'textarea') {
+                        inputsHtml += `<textarea class="node-input" rows="3" onmousedown="event.stopPropagation()" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)">${val}</textarea>`;
+                    } else if (inp.type === 'select') {
+                        // 🌟 核心修改 2：onchange 不再调用暴力的 renderNodes()，而是调用专属求值器
+                        inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); evaluateNodeConditions('${node.id}');">
+                            ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                        </select>`;
+                    } else if (inp.type === 'number') {
+                        inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${val}" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
+                    } else if (inp.type === 'image_upload') {
+                        const hasImage = val && val.length > 100; 
+                        inputsHtml += `
+                        <div id="img-upload-ui-${node.id}-${inp.id}" style="display:flex; gap:8px; align-items:center; margin-top: 4px; padding: 2px; border: 1px dashed transparent; border-radius: 6px; transition: 0.2s;"
+                             ondragover="event.preventDefault(); this.style.borderColor='var(--accent)';" 
+                             ondragleave="this.style.borderColor='transparent';" 
+                             ondrop="handleNodeImageDrop(event, '${node.id}', '${inp.id}'); this.style.borderColor='transparent';">
+                            <label class="node-input" style="flex:1; text-align:center; cursor:pointer; background: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.3); color: #38bdf8; padding: 6px; transition: 0.2s; margin:0;" onmouseover="this.style.background='rgba(56,189,248,0.2)'" onmouseout="this.style.background='rgba(56,189,248,0.1)'">
+                                <input type="file" accept="image/*" style="display:none;" onchange="handleNodeImageUpload(event, '${node.id}', '${inp.id}')">
+                                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">upload</span> <span class="img-upload-text">${hasImage ? '更换图片' : '点击 / 拖入图片'}</span>
+                            </label>
+                            ${hasImage ? `<img src="${val}" class="img-preview-thumb" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()" data-tip="已挂载本地内存">` : ''}
+                        </div>`;
+                    }
+                    inputsHtml += `</div>`;
+                });
+                inputsHtml += '</div>';
+            }
+
+            nodeEl.innerHTML = `
+                <div class="node-header" style="background: ${node.type === 'tool_image_gen' ? 'rgba(192,132,252,0.1)' : 'rgba(56,189,248,0.1)'};">
+                    ${node.title}
+                </div>
+                <div class="node-body">
+                    ${inputsHtml}
+                    ${(node.ports.in || []).map(p => `
+                        <div class="port-row">
+                            <div class="port port-in port-${p.type}" id="${node.id}-${p.id}" 
+                                 onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')" 
+                                 onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"
+                                 ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
+                            <span style="margin-left: 12px;">${p.label}</span>
+                        </div>
+                    `).join('')}
+                    ${(node.ports.out || []).map(p => `
+                        <div class="port-row" style="justify-content: flex-end;">
+                            <span style="margin-right: 12px;">${p.label}</span>
+                            <div class="port port-out port-${p.type}" id="${node.id}-${p.id}" 
+                                 onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
+                                 onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
+                                 ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
+                        </div>
+                    `).join('')}
+                    <div id="preview-${node.id}" style="margin-top:10px; border-radius:6px; overflow:hidden; background:rgba(0,0,0,0.3);">
+                        ${node.result ? renderPreview(node) : ''}
+                    </div>
+                </div>
+            `;
+            
+            // 绑定拖拽事件
+            nodeEl.onmousedown = (e) => startDragNode(e, node.id);
+            nodeEl.oncontextmenu = (e) => showNodeMenu(e, node.id);
+            nodeBoard.appendChild(nodeEl);
         }
 
-        return `
-        <div class="veo-node" id="${node.id}" style="transform: translate(${node.x}px, ${node.y}px);" 
-             onmousedown="startDragNode(event, '${node.id}')" oncontextmenu="showNodeMenu(event, '${node.id}')">
-            <div class="node-header" style="background: ${node.type === 'tool_image_gen' ? 'rgba(192,132,252,0.1)' : 'rgba(56,189,248,0.1)'};">
-                ${node.title}
-            </div>
-            <div class="node-body">
-                ${inputsHtml}
-                
-                ${(node.ports.in || []).map(p => `
-                    <div class="port-row">
-                        <div class="port port-in port-${p.type}" id="${node.id}-${p.id}" 
-                             onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')" 
-                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"
-                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
-                        <span style="margin-left: 12px;">${p.label}</span>
-                    </div>
-                `).join('')}
-                ${(node.ports.out || []).map(p => `
-                    <div class="port-row" style="justify-content: flex-end;">
-                        <span style="margin-right: 12px;">${p.label}</span>
-                        <div class="port port-out port-${p.type}" id="${node.id}-${p.id}" 
-                             onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
-                             onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
-                             ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
-                    </div>
-                `).join('')}
-                
-                <div id="preview-${node.id}" style="margin-top:10px; border-radius:6px; overflow:hidden; background:rgba(0,0,0,0.3);">
-                    ${node.result ? renderPreview(node) : ''}
-                </div>
-            </div>
-        </div>`;
-    }).join('');
+        // B. 极速更新坐标空间
+        nodeEl.style.transform = `translate(${node.x}px, ${node.y}px)`;
+        
+        // C. 触发表单显隐状态计算
+        evaluateNodeConditions(node.id);
+    });
 }
+// ==========================================
+// 🧠 节点动态表单求值器 (靶向更新，绝不重绘 DOM)
+// ==========================================
+window.evaluateNodeConditions = function(nodeId) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (!node || !node.inputs) return;
+    
+    node.inputs.forEach(inp => {
+        if (inp.condition) {
+            const groupEl = document.getElementById(`group-${node.id}-${inp.id}`);
+            if (!groupEl) return;
+            
+            // 获取依赖字段的当前值
+            const depVal = node.data[inp.condition.field] !== undefined 
+                ? node.data[inp.condition.field] 
+                : node.inputs.find(i => i.id === inp.condition.field).default;
+                
+            // 靶向控制显隐
+            if (depVal !== inp.condition.value) {
+                groupEl.style.display = 'none';
+            } else {
+                groupEl.style.display = 'flex';
+            }
+        }
+    });
+};
 // ==========================================
 // 🎨 SVG 局部靶向渲染引擎 (拒绝 innerHTML 全局重绘)
 // ==========================================
@@ -530,10 +575,27 @@ window.handleNodeImageDrop = async function(e, nodeId, inputId) {
         }
     }
 
-    // 3. 注入数据并刷新节点 UI
+    // 3. 注入数据并靶向刷新 UI
     if (srcToUse) {
         updateNodeData(nodeId, inputId, srcToUse);
-        renderNodes();
+        
+        // 🌟 靶向更新 DOM 缩略图，杜绝重绘
+        const uploadUI = document.getElementById(`img-upload-ui-${nodeId}-${inputId}`);
+        if (uploadUI) {
+            const textSpan = uploadUI.querySelector('.img-upload-text');
+            if (textSpan) textSpan.innerText = '更换图片';
+            
+            let thumbImg = uploadUI.querySelector('.img-preview-thumb');
+            if (!thumbImg) {
+                // 如果是第一次上传，创建 img 标签
+                thumbImg = document.createElement('img');
+                thumbImg.className = 'img-preview-thumb';
+                thumbImg.style.cssText = 'width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);';
+                thumbImg.onmousedown = (e) => e.stopPropagation();
+                uploadUI.appendChild(thumbImg);
+            }
+            thumbImg.src = srcToUse;
+        }
     }
 };
 // 3. 动态创建右键菜单 DOM

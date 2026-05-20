@@ -569,8 +569,9 @@ window.showNodeMenu = function(e, nodeId) {
 
 window.deleteNode = function(nodeId) {
     flowState.nodes = flowState.nodes.filter(n => n.id !== nodeId);
-    flowState.links = flowState.links.filter(l => l.source !== nodeId && l.target !== nodeId); // 级联删除相关的线
+    flowState.links = flowState.links.filter(l => l.source !== nodeId && l.target !== nodeId); 
     renderNodes(); renderLinks();
+    saveFlowToDB(); // 🌟 补丁：销毁节点后存档
 };
 
 // 5. 右键画布空白处 -> 唤出【添加节点菜单】
@@ -605,7 +606,8 @@ window.spawnNode = function(blueprintKey) {
     newNode.y = menuClickWorldPos.y;
     
     flowState.nodes.push(newNode);
-    renderNodes(); // 重新渲染画布
+    renderNodes(); 
+    saveFlowToDB(); // 🌟 补丁：生成新节点后存档
 };
 // ==========================================
 // ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
@@ -931,6 +933,8 @@ async function executeNode(nodeId) {
     } catch (error) {
         console.error(`   ❌ [崩溃拦截] ${node.title} 异常:`, error.message);
         setNodeStatus(nodeId, 'error');
+        // 🌟 修复：必须向外抛出错误，彻底阻断下游管线的幻想！
+        throw error; 
     }
 }
 // ==========================================

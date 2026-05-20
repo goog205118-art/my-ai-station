@@ -462,7 +462,7 @@ const NodeBlueprints = {
             { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
             { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
             { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
-            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (最多3次)'], default: '关闭' }
+            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (无限重试)'], default: '关闭' }
         ],
         data: {}
     }

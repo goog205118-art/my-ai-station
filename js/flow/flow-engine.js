@@ -154,13 +154,11 @@ function renderNodes() {
                 node.inputs.forEach(inp => {
                     const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
                     
-                    // 🌟 核心修改 1：注入唯一 ID，并移除原本的 condition 阻断逻辑
                     inputsHtml += `<div class="node-input-group" id="group-${node.id}-${inp.id}"><div class="node-input-label">${inp.label}</div>`;
                     
                     if (inp.type === 'textarea') {
                         inputsHtml += `<textarea class="node-input" rows="3" onmousedown="event.stopPropagation()" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)">${val}</textarea>`;
                     } else if (inp.type === 'select') {
-                        // 🌟 核心修改 2：onchange 不再调用暴力的 renderNodes()，而是调用专属求值器
                         inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); evaluateNodeConditions('${node.id}');">
                             ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
                         </select>`;
@@ -182,8 +180,8 @@ function renderNodes() {
                     }
                     inputsHtml += `</div>`;
                 });
-                inputsHtml += '</div>';
-            }
+                inputsHtml += '</div>'; 
+            } 
 
             nodeEl.innerHTML = `
                 <div class="node-header" style="background: ${node.type === 'tool_image_gen' ? 'rgba(192,132,252,0.1)' : 'rgba(56,189,248,0.1)'};">
@@ -215,7 +213,6 @@ function renderNodes() {
                 </div>
             `;
             
-            // 绑定拖拽事件
             nodeEl.onmousedown = (e) => startDragNode(e, node.id);
             nodeEl.oncontextmenu = (e) => showNodeMenu(e, node.id);
             nodeBoard.appendChild(nodeEl);

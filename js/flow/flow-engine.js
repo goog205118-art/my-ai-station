@@ -50,11 +50,14 @@ let flowState = {
 // 🎨 支持内联预览的渲染引擎
 // ==========================================
 function renderPreview(node) {
-    if (!node.result) return '';
-    if (node.type === 'tool_image_gen') {
-        return `<img src="${node.result}" style="width:100%; height:auto; display:block;" />`;
-    } else if (node.type === 'tool_video_gen') {
-        return `<video src="${node.result}" style="width:100%; height:auto; display:block;" autoplay loop muted controls></video>`;
+    // 🌟 拦截：必须是有实体 data 的标准载荷才渲染
+    if (!node.result || !node.result.data) return '';
+    
+    // 🌟 不再依赖节点类型判断，而是直接读取载荷自身的 type 属性
+    if (node.result.type === 'image') {
+        return `<img src="${node.result.data}" style="width:100%; height:auto; display:block; border-radius: 4px;" />`;
+    } else if (node.result.type === 'video') {
+        return `<video src="${node.result.data}" style="width:100%; height:auto; display:block; border-radius: 4px;" autoplay loop muted controls></video>`;
     }
     return '';
 }
@@ -692,6 +695,16 @@ async function prepareImagePayload(src) {
     return src; // 兜底原样返回
 }
 
+// 🌟 新增：统一载荷拆包器 (Unified Payload Resolver)
+function resolvePayloadData(input) {
+    if (!input) return undefined;
+    // 如果是上游节点传过来的标准结构体
+    if (typeof input === 'object' && input.data) return input.data;
+    // 如果是本地控件直传的 Base64 纯字符串
+    if (typeof input === 'string') return input;
+    return undefined;
+}
+
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -700,40 +713,11 @@ async function executeNode(nodeId) {
     const nodeStartTime = Date.now();
     console.log(`\n▶️ [启动节点] ${node.title}`);
 
-    try {
-        // 1. 索要上游弹药
-        let upstreamInputs = {};
-        const incomingLinks = flowState.links.filter(l => l.target === nodeId);
-        for (let link of incomingLinks) {
-            const sourceNode = flowState.nodes.find(n => n.id === link.source);
-            if (sourceNode && sourceNode.result) {
-                upstreamInputs[link.targetPort] = sourceNode.result; 
-            }
-        }
+// ... (此处省略中间的不变代码，直接找到 分支 A 的垫图提取位置) ...
 
-        let finalResult = null;
-        const nodeData = node.data || {};
-
-        // ----------------------------------------------------
-        // 🎨 分支 A：处理 GPT 生图节点
-        // ----------------------------------------------------
-        if (node.type === 'tool_image_gen') {
-            if (!nodeData.prompt || nodeData.prompt.trim() === '') {
-                throw new Error("节点缺少弹药！请先在卡片里填写『正向提示词』再运行。");
-            }
-
-            let finalPrompt = nodeData.prompt.trim();
-            let finalSize = nodeData.size || '1024x1024';
-
-            if (finalSize === '自定义 (AI嗅探)') {
-                finalSize = ""; 
-                const w = nodeData.customW || 9;
-                const h = nodeData.customH || 21;
-                finalPrompt += ` 画面比例${w}:${h}`;
-            }
-
-            // 🌟 核心：优先取本地上传的垫图，没有的话再取上游连线的垫图
-            const refImgSource = nodeData.local_ref || upstreamInputs.in_ref;
+            // 🌟 核心：套上拆包器！无论本地直传还是上游连线，统统解压成纯数据
+            const refImgSourceRaw = nodeData.local_ref || upstreamInputs.in_ref;
+            const refImgSource = resolvePayloadData(refImgSourceRaw);
 
             const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
             const payload = {
@@ -743,7 +727,6 @@ async function executeNode(nodeId) {
                 images: refImgSource ? [refImgSource] : []
             };
 
-            // 👇👇👇 这里是被误删的 API 请求代码和闭合大括号 👇👇👇
             console.log("   📦 发送生图请求:", payload);
             const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, {
                 method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
@@ -761,23 +744,31 @@ async function executeNode(nodeId) {
             
             const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
             
+            let resultDataStr = "";
             if (imgObj.url) {
-                finalResult = imgObj.url;
+                resultDataStr = imgObj.url;
             } else if (imgObj.b64_json) {
-                finalResult = "data:image/png;base64," + imgObj.b64_json;
+                resultDataStr = "data:image/png;base64," + imgObj.b64_json;
             } else {
                 throw new Error("API 成功返回，但未找到 url 或 b64_json 字段: " + rawText.substring(0, 50));
             }
-        } // 🌟🌟🌟 这里是关键缺失的大括号！🌟🌟🌟
+
+            // 🌟 终极组装：封箱为标准载荷结构 (Payload Protocol)
+            finalResult = {
+                type: 'image',
+                data: resultDataStr,
+                metadata: { source: 'gpt-image-2', size: finalSize }
+            };
+        }
         
         // ----------------------------------------------------
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
             // 🌟 核心合并逻辑：优先使用本地上传的图片 (nodeData.local_xxx)，若无，则回退使用连线传来的图片 (upstreamInputs.in_xxx)
-            const firstFrameRaw = nodeData.local_first_frame || upstreamInputs.in_first_frame;
-            const lastFrameRaw = nodeData.local_last_frame || upstreamInputs.in_last_frame;
-            const refRaw = nodeData.local_ref || upstreamInputs.in_ref;
+            const firstFrameRaw = resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame);
+            const lastFrameRaw = resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame);
+            const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
 
             const firstFrame = await prepareImagePayload(firstFrameRaw);
             const lastFrame = await prepareImagePayload(lastFrameRaw);
@@ -854,7 +845,12 @@ async function executeNode(nodeId) {
                 console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
                 
                 if (pollData.status === 'success') {
-                    finalResult = pollData.videoUrl;
+                    // 🌟 终极组装：将输出结果封箱为标准的视频载荷
+                    finalResult = {
+                        type: 'video',
+                        data: pollData.videoUrl,
+                        metadata: { source: targetModel, aspectRatio: nodeData.aspectRatio || "16:9" }
+                    };
                     isComplete = true;
                 } else if (pollData.status === 'failed') {
                     throw new Error(`生成失败: ${pollData.raw_status}`);

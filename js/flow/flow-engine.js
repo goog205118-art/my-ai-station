@@ -2,6 +2,19 @@
 // 🚀 Veo Flow 核心节点引擎 V2 (加入动态拉线状态机)
 // ==========================================
 
+// 🌟 自动注入：工作流专属的赛博朋克电流特效 CSS
+const flowStyleInj = document.createElement('style');
+flowStyleInj.innerHTML = `
+    @keyframes dataFlowAnim { to { stroke-dashoffset: -24; } }
+    .link-flowing {
+        stroke-dasharray: 8 8 !important;
+        animation: dataFlowAnim 0.4s linear infinite;
+        stroke-width: 4px !important;
+        filter: drop-shadow(0 0 8px currentColor);
+    }
+`;
+document.head.appendChild(flowStyleInj);
+
 const viewport = document.getElementById('flow-viewport');
 const canvas = document.getElementById('flow-canvas');
 const svgLayer = document.getElementById('svg-layer');
@@ -892,6 +905,21 @@ function setNodeStatus(nodeId, status, meta = {}) {
         clearInterval(parseInt(el.dataset.timerId));
         delete el.dataset.timerId;
     }
+
+    // 🌟 新增：动态数据流向穿梭特效 (Data Flow Animation)
+    // 找出所有连接到当前运行节点的【流入连线】，给它们通电！
+    const incomingLinks = flowState.links.filter(l => l.target === nodeId);
+    incomingLinks.forEach(link => {
+        const pathEl = document.getElementById('svgpath_' + link.id);
+        if (pathEl) {
+            if (status === 'running') {
+                pathEl.classList.add('link-flowing');
+            } else {
+                // 运行结束或失败，立即断电恢复平静
+                pathEl.classList.remove('link-flowing');
+            }
+        }
+    });
 
     // 3. 状态分支渲染
     if (status === 'running') {

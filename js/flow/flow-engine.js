@@ -645,6 +645,16 @@ window.spawnNode = function(blueprintType) {
     const blueprint = PluginManager.getSchema(blueprintType);
     if (!blueprint) return console.error(`❌ 找不到节点蓝图: ${blueprintType}`);
     const newNode = JSON.parse(JSON.stringify(blueprint)); // 深拷贝蓝图
+    
+    // 👇 被截断的下半部分代码已补全 👇
+    newNode.id = 'node_' + Date.now();
+    newNode.x = menuClickWorldPos.x;
+    newNode.y = menuClickWorldPos.y;
+    
+    flowState.nodes.push(newNode);
+    renderNodes(); // 重新渲染画布
+    if (typeof saveFlowToDB === 'function') saveFlowToDB(); // 🌟 生成新节点后存档
+};
 // ==========================================
 // ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
 // ==========================================

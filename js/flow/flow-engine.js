@@ -713,7 +713,38 @@ async function executeNode(nodeId) {
     const nodeStartTime = Date.now();
     console.log(`\n▶️ [启动节点] ${node.title}`);
 
-// ... (此处省略中间的不变代码，直接找到 分支 A 的垫图提取位置) ...
+    try {
+        // 1. 索要上游弹药
+        let upstreamInputs = {};
+        const incomingLinks = flowState.links.filter(l => l.target === nodeId);
+        for (let link of incomingLinks) {
+            const sourceNode = flowState.nodes.find(n => n.id === link.source);
+            if (sourceNode && sourceNode.result) {
+                upstreamInputs[link.targetPort] = sourceNode.result; 
+            }
+        }
+
+        let finalResult = null;
+        const nodeData = node.data || {};
+
+        // ----------------------------------------------------
+        // 🎨 分支 A：处理 GPT 生图节点
+        // ----------------------------------------------------
+        if (node.type === 'tool_image_gen') {
+            if (!nodeData.prompt || nodeData.prompt.trim() === '') {
+                throw new Error("节点缺少弹药！请先在卡片里填写『正向提示词』再运行。");
+            }
+
+            let finalPrompt = nodeData.prompt.trim();
+            let finalSize = nodeData.size || '1024x1024';
+
+            // 🌟 注入主引擎同款隐式拼接逻辑
+            if (finalSize === '自定义 (AI嗅探)') {
+                finalSize = ""; 
+                const w = nodeData.customW || 9;
+                const h = nodeData.customH || 21;
+                finalPrompt += ` 画面比例${w}:${h}`;
+            }
 
             // 🌟 核心：套上拆包器！无论本地直传还是上游连线，统统解压成纯数据
             const refImgSourceRaw = nodeData.local_ref || upstreamInputs.in_ref;
@@ -765,7 +796,7 @@ async function executeNode(nodeId) {
         // 🎞️ 分支 B：处理 Veo 视频节点
         // ----------------------------------------------------
         else if (node.type === 'tool_video_gen') {
-            // 🌟 核心合并逻辑：优先使用本地上传的图片 (nodeData.local_xxx)，若无，则回退使用连线传来的图片 (upstreamInputs.in_xxx)
+            // 🌟 核心升级：套上数据拆包器，剥开上游数据包的外衣
             const firstFrameRaw = resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame);
             const lastFrameRaw = resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame);
             const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
@@ -792,17 +823,15 @@ async function executeNode(nodeId) {
             }
 
             // 🌟 提取新增的高级参数，并转化为 API 需要的 Boolean 值
-            const doEnhance = nodeData.enhancePrompt !== '关闭 (原词)'; // 只要不是明确关闭，默认开启
+            const doEnhance = nodeData.enhancePrompt !== '关闭 (原词)'; 
             const doUpsample = nodeData.enableUpsample === '开启 (更慢)'; 
-
-            // (如果你要在下一阶段做重试逻辑，这里也可以把 nodeData.autoRetry 取出来保存到 node 状态里)
 
             const payload = {
                 model: targetModel,
                 prompt: nodeData.prompt || '',
                 aspectRatio: nodeData.aspectRatio || "16:9",
-                enhancePrompt: doEnhance,      // 🌟 发送真正的布尔值
-                enableUpsample: doUpsample,    // 🌟 发送真正的布尔值
+                enhancePrompt: doEnhance,      
+                enableUpsample: doUpsample,    
                 firstFrame: firstFrame || undefined,
                 lastFrame: lastFrame || undefined,
                 references: refImages.length > 0 ? refImages : undefined

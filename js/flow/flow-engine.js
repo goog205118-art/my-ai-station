@@ -828,7 +828,13 @@ const NodeExecutors = {
 
         let isComplete = false, finalVideoUrl = "";
         while (!isComplete) {
-            await new Promise(r => setTimeout(r, 15000)); // 🌟 15秒安全轮询
+            if (node._cancelToken) throw new Error("⛔ 手动中止"); // 🌟 轮询前检查
+            
+            // 🌟 架构黑科技：将 15 秒等待拆分成 15个 1秒，确保随时可以“秒级响应”用户的取消操作！
+            for (let i = 0; i < 15; i++) {
+                if (node._cancelToken) throw new Error("⛔ 手动中止");
+                await new Promise(r => setTimeout(r, 1000)); 
+            }
             
             const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId }) });
             const pollRawText = await pollRes.text();
@@ -875,13 +881,16 @@ async function executeNode(nodeId) {
         const executor = NodeExecutors[node.type];
         if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
-        // 🌟 核心激活：读取节点的重试配置 (最大3次)
-        const maxRetries = (node.data && (node.data.autoRetry === '开启 (最多3次)' || node.data.autoRetry === true)) ? 3 : 0;
+        // 🌟 核心激活：无限重试与中止信号
+        const isInfiniteRetry = (node.data && (node.data.autoRetry === '开启 (无限重试)' || node.data.autoRetry === true));
         let attempt = 0;
         let finalResult = null;
+        node._cancelToken = false; // 初始化本节点的中止信号
 
-        // 🛡️ 重试装甲循环
-        while (attempt <= maxRetries) {
+        // 🛡️ 无限重试装甲循环
+        while (true) {
+            if (node._cancelToken) throw new Error("⛔ 已手动中止");
+            
             try {
                 if (attempt > 0) {
                     console.log(`   🔄 [重试机制] 正在发起第 ${attempt} 次重试...`);
@@ -889,16 +898,25 @@ async function executeNode(nodeId) {
                 }
                 finalResult = await executor(node, node.data || {}, upstreamInputs);
                 break; // 成功则跳出重试循环
+                
             } catch (err) {
+                if (node._cancelToken) throw new Error("⛔ 已手动中止"); // 如果执行被强制中断，直接抛出，不参与重试
+                
                 attempt++;
-                if (attempt > maxRetries) {
-                    throw err; // 次数用尽，彻底抛出异常走向死亡
+                if (!isInfiniteRetry) {
+                    throw err; // 没开重试，直接抛出死亡
                 }
-                console.warn(`   ⚠️ 节点运行失败，等待 3 秒后尝试复活... (${err.message})`);
-                await new Promise(r => setTimeout(r, 3000));
+                console.warn(`   ⚠️ 节点运行失败，等待 5 秒后自动重试... (${err.message})`);
+                
+                // 5 秒冷却期，同样支持秒级中止响应
+                for(let i = 0; i < 5; i++) {
+                    if (node._cancelToken) throw new Error("⛔ 已手动中止");
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
         }
 
+        // 3. 收尾流转与记账
         // 3. 收尾流转与记账
         node.result = finalResult; 
         saveFlowToDB(); // 🌟 节点出结果了，立刻存档！
@@ -918,6 +936,16 @@ async function executeNode(nodeId) {
 // ==========================================
 // 💡 节点 UI 状态控制器 (极客读秒与视觉增强版)
 // ==========================================
+
+// 🌟 新增：全局中止指令发射器
+window.cancelNodeExecution = function(nodeId) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (node) {
+        node._cancelToken = true; // 发送神经元中止信号
+        console.log(`🛑 收到手动中止指令，正在切断流转: ${node.title}`);
+    }
+};
+
 function setNodeStatus(nodeId, status, meta = {}) {
     const el = document.getElementById(nodeId);
     if (!el) return;
@@ -961,20 +989,34 @@ function setNodeStatus(nodeId, status, meta = {}) {
         statusBar.style.border = '1px solid rgba(56, 189, 248, 0.3)';
         statusBar.style.opacity = '1';
         statusBar.style.bottom = '-30px'; 
+        statusBar.style.pointerEvents = 'auto'; // 🌟 必须开启，否则按钮点不到！
         
         const startTime = Date.now();
-        // 🌟 核心修复点：这里补齐了之前丢失的 }, 1000); 闭合括号！
-        const timerId = setInterval(() => {
+        
+        // 🌟 封装一个即刻执行的渲染函数，把中止按钮画上去
+        const renderStatusUI = () => {
             const sec = Math.floor((Date.now() - startTime) / 1000);
             const mm = String(Math.floor(sec / 60)).padStart(2, '0');
             const ss = String(sec % 60).padStart(2, '0');
             const retryStr = meta.retryCount ? ` <span style="color:#f59e0b">(重试 ${meta.retryCount})</span>` : '';
-            statusBar.innerHTML = `⚙️ 引擎轰鸣中...${retryStr} <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>`;
-        }, 1000); 
+            statusBar.innerHTML = `⚙️ 引擎轰鸣中...${retryStr} <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>
+            <button onclick="cancelNodeExecution('${nodeId}'); event.stopPropagation();" onmousedown="event.stopPropagation();" style="margin-left:8px; padding:2px 8px; font-size:11px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.5); border-radius:4px; cursor:pointer; pointer-events:auto; transition:0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.4)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">中止</button>`;
+        };
+        
+        renderStatusUI(); // 立即渲染一次，避免等待 1 秒才出按钮
+        const timerId = setInterval(renderStatusUI, 1000); 
         
         el.dataset.timerId = timerId;
 
     } else if (status === 'success') {
+        el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
+        el.style.borderColor = '#22c55e';
+        
+        statusBar.style.background = 'rgba(34, 197, 94, 0.15)';
+        statusBar.style.color = '#22c55e';
+        statusBar.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+        statusBar.style.opacity = '1';
+        statusBar.style.pointerEvents = 'none'; // 🌟 运行结束恢复穿透
         el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
         el.style.borderColor = '#22c55e';
         

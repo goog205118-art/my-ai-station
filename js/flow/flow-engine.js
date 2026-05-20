@@ -705,6 +705,114 @@ function resolvePayloadData(input) {
     return undefined;
 }
 
+// ==========================================
+// 🧩 节点执行器工厂 (Plugin Executors Registry)
+// 以后新增任何多模态节点 (Sora, TTS)，只需在这里注册逻辑，引擎无需改动！
+// ==========================================
+const NodeExecutors = {
+    // 🎨 [插件] GPT 生图执行器
+    'tool_image_gen': async (node, nodeData, upstreamInputs) => {
+        if (!nodeData.prompt || nodeData.prompt.trim() === '') throw new Error("缺少正向提示词！");
+
+        let finalPrompt = nodeData.prompt.trim();
+        let finalSize = nodeData.size || '1024x1024';
+
+        if (finalSize === '自定义 (AI嗅探)') {
+            finalSize = ""; 
+            finalPrompt += ` 画面比例${nodeData.customW || 9}:${nodeData.customH || 21}`;
+        }
+
+        const refImgSource = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
+        const payload = {
+            prompt: finalPrompt,
+            size: finalSize,
+            channel: (nodeData.channel && nodeData.channel.includes('2')) ? 'channel_2' : 'channel_1',
+            images: refImgSource ? [refImgSource] : []
+        };
+
+        console.log("   📦 发送生图请求:", payload);
+        const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
+        const rawText = await res.text();
+        
+        if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
+        if (!rawText) throw new Error("API 返回空数据。");
+        
+        let data;
+        try { data = JSON.parse(rawText); } catch (e) { throw new Error(`非合法 JSON`); }
+        
+        const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
+        let resultDataStr = imgObj.url || (imgObj.b64_json ? "data:image/png;base64," + imgObj.b64_json : null);
+        if (!resultDataStr) throw new Error("未找到 url 或 b64_json 字段");
+
+        // 封箱为标准协议载荷返回
+        return { type: 'image', data: resultDataStr, metadata: { source: 'gpt-image-2', size: finalSize } };
+    },
+
+    // 🎞️ [插件] Veo 视频生成执行器
+    'tool_video_gen': async (node, nodeData, upstreamInputs) => {
+        const firstFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame));
+        const lastFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame));
+        const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
+        const refImages = refRaw ? [await prepareImagePayload(refRaw)] : [];
+        
+        if (!firstFrame && refImages.length === 0) throw new Error("缺少首帧或通用垫图，Veo 拒绝执行！");
+
+        let targetModel = nodeData.model || "veo3.1";
+        if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
+            targetModel = targetModel === 'veo3.1' ? 'veo3.1-components' : 'veo3.1-components-4k';
+        }
+
+        const payload = {
+            model: targetModel,
+            prompt: nodeData.prompt || '',
+            aspectRatio: nodeData.aspectRatio || "16:9",
+            enhancePrompt: nodeData.enhancePrompt !== '关闭 (原词)',      
+            enableUpsample: nodeData.enableUpsample === '开启 (更慢)',    
+            firstFrame: firstFrame || undefined,
+            lastFrame: lastFrame || undefined,
+            references: refImages.length > 0 ? refImages : undefined
+        };
+
+        console.log("   📦 发送视频提交请求:", payload);
+        const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
+        const submitRawText = await submitRes.text();
+        
+        if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
+        
+        let submitData;
+        try { submitData = JSON.parse(submitRawText); } catch (e) { throw new Error("提交接口返回非 JSON 数据"); }
+        if (!submitData.taskId) throw new Error("提交失败，未获得 TaskID: " + submitRawText);
+        
+        console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
+
+        let isComplete = false, finalVideoUrl = "";
+        while (!isComplete) {
+            await new Promise(r => setTimeout(r, 15000)); // 🌟 15秒安全轮询
+            
+            const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId }) });
+            const pollRawText = await pollRes.text();
+            if (!pollRes.ok) throw new Error(`轮询异常: ${pollRawText}`);
+            
+            let pollData;
+            try { pollData = JSON.parse(pollRawText); } catch (e) { throw new Error("轮询返回非 JSON"); }
+
+            console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
+            if (pollData.status === 'success') {
+                finalVideoUrl = pollData.videoUrl;
+                isComplete = true;
+            } else if (pollData.status === 'failed') {
+                throw new Error(`生成失败: ${pollData.raw_status}`);
+            }
+        }
+
+        // 封箱为标准协议载荷返回
+        return { type: 'video', data: finalVideoUrl, metadata: { source: targetModel, aspectRatio: nodeData.aspectRatio || "16:9" } };
+    }
+};
+
+// ==========================================
+// 🚀 新版极简执行引擎核心 (仅负责路由与状态调度)
+// ==========================================
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -719,188 +827,23 @@ async function executeNode(nodeId) {
         const incomingLinks = flowState.links.filter(l => l.target === nodeId);
         for (let link of incomingLinks) {
             const sourceNode = flowState.nodes.find(n => n.id === link.source);
-            if (sourceNode && sourceNode.result) {
-                upstreamInputs[link.targetPort] = sourceNode.result; 
-            }
+            if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result; 
         }
 
-        let finalResult = null;
-        const nodeData = node.data || {};
+        // 2. 🌟 靶向路由调用执行器 (彻底干掉 if-else)
+        const executor = NodeExecutors[node.type];
+        if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器，请检查插件注册表！`);
 
-        // ----------------------------------------------------
-        // 🎨 分支 A：处理 GPT 生图节点
-        // ----------------------------------------------------
-        if (node.type === 'tool_image_gen') {
-            if (!nodeData.prompt || nodeData.prompt.trim() === '') {
-                throw new Error("节点缺少弹药！请先在卡片里填写『正向提示词』再运行。");
-            }
+        const finalResult = await executor(node, node.data || {}, upstreamInputs);
 
-            let finalPrompt = nodeData.prompt.trim();
-            let finalSize = nodeData.size || '1024x1024';
-
-            // 🌟 注入主引擎同款隐式拼接逻辑
-            if (finalSize === '自定义 (AI嗅探)') {
-                finalSize = ""; 
-                const w = nodeData.customW || 9;
-                const h = nodeData.customH || 21;
-                finalPrompt += ` 画面比例${w}:${h}`;
-            }
-
-            // 🌟 核心：套上拆包器！无论本地直传还是上游连线，统统解压成纯数据
-            const refImgSourceRaw = nodeData.local_ref || upstreamInputs.in_ref;
-            const refImgSource = resolvePayloadData(refImgSourceRaw);
-
-            const isChannel2 = nodeData.channel && nodeData.channel.includes('2');
-            const payload = {
-                prompt: finalPrompt,
-                size: finalSize,
-                channel: isChannel2 ? 'channel_2' : 'channel_1',
-                images: refImgSource ? [refImgSource] : []
-            };
-
-            console.log("   📦 发送生图请求:", payload);
-            const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, {
-                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
-            });
-            
-            const rawText = await res.text();
-            console.log("   📩 n8n 生图接口原始返回:", rawText);
-
-            if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
-            if (!rawText) throw new Error("n8n 返回了空数据。可能是云雾 API 报错导致 n8n 没有输出节点数据。");
-            
-            let data;
-            try { data = JSON.parse(rawText); } 
-            catch (e) { throw new Error(`n8n 返回的不是合法 JSON: ${rawText.substring(0, 40)}...`); }
-            
-            const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
-            
-            let resultDataStr = "";
-            if (imgObj.url) {
-                resultDataStr = imgObj.url;
-            } else if (imgObj.b64_json) {
-                resultDataStr = "data:image/png;base64," + imgObj.b64_json;
-            } else {
-                throw new Error("API 成功返回，但未找到 url 或 b64_json 字段: " + rawText.substring(0, 50));
-            }
-
-            // 🌟 终极组装：封箱为标准载荷结构 (Payload Protocol)
-            finalResult = {
-                type: 'image',
-                data: resultDataStr,
-                metadata: { source: 'gpt-image-2', size: finalSize }
-            };
-        }
-        
-        // ----------------------------------------------------
-        // 🎞️ 分支 B：处理 Veo 视频节点
-        // ----------------------------------------------------
-        else if (node.type === 'tool_video_gen') {
-            // 🌟 核心升级：套上数据拆包器，剥开上游数据包的外衣
-            const firstFrameRaw = resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame);
-            const lastFrameRaw = resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame);
-            const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
-
-            const firstFrame = await prepareImagePayload(firstFrameRaw);
-            const lastFrame = await prepareImagePayload(lastFrameRaw);
-            const refImages = [];
-            if (refRaw) {
-                refImages.push(await prepareImagePayload(refRaw));
-            }
-            
-            if (!firstFrame && refImages.length === 0) {
-                throw new Error("缺少首帧或通用垫图连线，Veo 拒绝执行！");
-            }
-
-            // 🌟 智能模型校验：提取下拉框模型，默认防呆为 veo3.1
-            let targetModel = nodeData.model || "veo3.1";
-            
-            // 🌟 核心智能纠错机制：
-            if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
-                if (targetModel === 'veo3.1') targetModel = 'veo3.1-components';
-                if (targetModel === 'veo3.1-4k') targetModel = 'veo3.1-components-4k';
-                console.log(`   💡 [智能纠错] 侦测到垫图连线，已将模型自动更正为: ${targetModel}`);
-            }
-
-            // 🌟 提取新增的高级参数，并转化为 API 需要的 Boolean 值
-            const doEnhance = nodeData.enhancePrompt !== '关闭 (原词)'; 
-            const doUpsample = nodeData.enableUpsample === '开启 (更慢)'; 
-
-            const payload = {
-                model: targetModel,
-                prompt: nodeData.prompt || '',
-                aspectRatio: nodeData.aspectRatio || "16:9",
-                enhancePrompt: doEnhance,      
-                enableUpsample: doUpsample,    
-                firstFrame: firstFrame || undefined,
-                lastFrame: lastFrame || undefined,
-                references: refImages.length > 0 ? refImages : undefined
-            };
-
-            console.log("   📦 发送视频提交请求:", payload);
-            const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, {
-                method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload)
-            });
-            
-            const submitRawText = await submitRes.text();
-            console.log("   📩 n8n 视频提交原始返回:", submitRawText);
-
-            if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
-            if (!submitRawText) throw new Error("n8n 视频提交返回了空数据。");
-            
-            let submitData;
-            try { submitData = JSON.parse(submitRawText); } 
-            catch (e) { throw new Error("提交接口返回非 JSON 数据"); }
-
-            if (!submitData.taskId) throw new Error("提交失败，未获得 TaskID: " + submitRawText);
-            
-            console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
-
-            let isComplete = false;
-            while (!isComplete) {
-                await new Promise(r => setTimeout(r, 15000)); 
-                
-                const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, {
-                    method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId })
-                });
-                
-                const pollRawText = await pollRes.text();
-                if (!pollRes.ok) throw new Error(`轮询 HTTP ${pollRes.status} 异常: ${pollRawText}`);
-                
-                let pollData;
-                try { pollData = JSON.parse(pollRawText); } 
-                catch (e) { throw new Error("轮询接口返回非 JSON 数据"); }
-
-                console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
-                
-                if (pollData.status === 'success') {
-                    // 🌟 终极组装：将输出结果封箱为标准的视频载荷
-                    finalResult = {
-                        type: 'video',
-                        data: pollData.videoUrl,
-                        metadata: { source: targetModel, aspectRatio: nodeData.aspectRatio || "16:9" }
-                    };
-                    isComplete = true;
-                } else if (pollData.status === 'failed') {
-                    throw new Error(`生成失败: ${pollData.raw_status}`);
-                }
-            }
-        }
-        else { finalResult = "OK"; }
-
-        // ==========================================
-        // 🌟 收尾流转
-        // ==========================================
+        // 3. 收尾流转与记账
         node.result = finalResult; 
-        
-        // 🌟 新增：计算真实耗时 (精确到小数点后一位)，并传给状态渲染器
         const costTime = ((Date.now() - nodeStartTime) / 1000).toFixed(1);
-        setNodeStatus(nodeId, 'success', { costTime: costTime });
         
+        setNodeStatus(nodeId, 'success', { costTime: costTime });
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
         console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
 
-        // 🌟 核心新增：工作流节点独立记账
         await recordNodeBilling(node);
 
     } catch (error) {

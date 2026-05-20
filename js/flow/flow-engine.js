@@ -812,9 +812,91 @@ window.spawnNode = function(blueprintType, spawnX, spawnY) {
     newNode.y = spawnY !== undefined ? spawnY : menuClickWorldPos.y;
     
     flowState.nodes.push(newNode);
-    renderNodes(); 
-    if (typeof saveFlowToDB === 'function') saveFlowToDB(); 
+    renderNodes(); // 🌟 补全：重新渲染画布
+    if (typeof saveFlowToDB === 'function') saveFlowToDB(); // 🌟 补全：数据本地化存档
 };
+
+// ==========================================
+// 🧰 左侧节点工具箱 (Node Palette UI 生成器)
+// ==========================================
+window.initNodePalette = function() {
+    // 避免重复挂载
+    let palette = document.getElementById('global-node-palette');
+    if (!palette) {
+        palette = document.createElement('div');
+        palette.className = 'node-palette';
+        palette.id = 'global-node-palette';
+        document.body.appendChild(palette);
+    }
+    
+    const schemas = PluginManager.getAllSchemas();
+    const groups = {};
+    schemas.forEach(s => {
+        const cat = s.category || '未分类';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(s);
+    });
+    
+    let html = '';
+    for (let cat in groups) {
+        html += `<div class="palette-group-title">${cat}</div>`;
+        groups[cat].forEach(s => {
+            html += `
+                <div class="palette-item" draggable="true" 
+                     ondragstart="event.dataTransfer.setData('veo-node-type', '${s.type}')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">drag_indicator</span>
+                    ${s.title}
+                </div>
+            `;
+        });
+    }
+    palette.innerHTML = html;
+
+    // 🌟 核心：注入无依赖的原生折叠把手按钮（带防重机制）
+    if (!document.querySelector('.palette-toggle-btn')) {
+        const toggleBtn = document.createElement('div');
+        toggleBtn.className = 'palette-toggle-btn';
+        toggleBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">chevron_left</span>';
+        toggleBtn.onclick = () => {
+            document.body.classList.toggle('palette-collapsed');
+        };
+        document.body.appendChild(toggleBtn);
+    }
+};
+
+// 🌟 异步启动引擎，先读档再渲染
+window.initFlowEngine = async function() {
+    initNodePalette();      // 👈 动态挂载左侧工具库
+    await loadFlowFromDB(); 
+    renderNodes();
+    setTimeout(renderLinks, 50); 
+    updateCanvasTransform();
+};
+
+// ==========================================
+// 🖱️ 画布拖拽监听 (响应来自侧边栏的拖放请求)
+// ==========================================
+viewport.addEventListener('dragover', (e) => {
+    // 嗅探：如果拖拽的是工具箱里的节点，则允许在此释放
+    if (e.dataTransfer.types.includes('veo-node-type')) {
+        e.preventDefault(); 
+        e.dataTransfer.dropEffect = 'copy';
+    }
+});
+
+viewport.addEventListener('drop', (e) => {
+    const nodeType = e.dataTransfer.getData('veo-node-type');
+    if (nodeType) {
+        e.preventDefault();
+        e.stopPropagation();
+        // 精准计算落在世界里的真实坐标
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / flowState.transform.scale;
+        const y = (e.clientY - rect.top) / flowState.transform.scale;
+        
+        spawnNode(nodeType, x, y); // 触发落子！
+    }
+});
 // ==========================================
 // ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
 // ==========================================

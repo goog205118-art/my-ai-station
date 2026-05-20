@@ -467,52 +467,35 @@ window.disconnectPort = function(e, nodeId, portId) {
 };
 
 // ==========================================
-// 🌟 升级版节点蓝图：完全对齐主引擎的所有高级参数
+// 🧩 统一插件化中枢 (Infinity Plugin Registry)
 // ==========================================
-const NodeBlueprints = {
-    'tool_image_gen': { 
-        type: 'tool_image_gen', title: '🎨 GPT 多模态生图', 
-        ports: { 
-            in: [{ id: 'in_ref', type: 'image', label: '风格垫图 (选填)' }],
-            out: [{ id: 'out_img', type: 'image', label: '输出图像' }] 
-        },
-        inputs: [
-            // 🌟 增加本地直传垫图
-            { id: 'local_ref', type: 'image_upload', label: '本地直传垫图 (选填)' },
-            { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，雪山背景，8k' },
-            { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024', '自定义 (AI嗅探)'], default: '1024x1024' },
-            { id: 'customW', type: 'number', label: '自定义宽度比例 (W)', default: 9, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
-            { id: 'customH', type: 'number', label: '自定义高度比例 (H)', default: 21, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
-            { id: 'channel', type: 'select', label: '生成通道', options: ['通道 1 (主干)', '通道 2 (备用)'], default: '通道 1 (主干)' }
-        ],
-        data: {} 
-    },
-    'tool_video_gen': { 
-        type: 'tool_video_gen', title: '🎞️ Veo 视频生成', 
-        ports: { 
-            in: [
-                { id: 'in_first_frame', type: 'image', label: '首帧参考图 (优先)' },
-                { id: 'in_last_frame', type: 'image', label: '尾帧参考图 (选填)' },
-                { id: 'in_ref', type: 'image', label: '通用垫图 (兜底)' }
-            ],
-            out: [{ id: 'out_video', type: 'video', label: '输出视频' }] 
-        },
-        inputs: [
-            // 🌟 增加本地直传首尾帧与垫图
-            { id: 'local_first_frame', type: 'image_upload', label: '直传首帧 (优先于连线)' },
-            { id: 'local_last_frame', type: 'image_upload', label: '直传尾帧 (选填)' },
-            { id: 'local_ref', type: 'image_upload', label: '直传通用垫图 (Cmp模型)' },
-            { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
-            { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
-            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
-            { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
-            { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
-            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (无限重试)'], default: '关闭' }
-        ],
-        data: {}
+class FlowPluginManager {
+    constructor() {
+        this.plugins = new Map();
     }
-};
 
+    /**
+     * 注册一个新的多模态节点插件
+     * @param {string} type 节点全局唯一标识
+     * @param {object} schema 节点的 UI 蓝图定义
+     * @param {function} executor 节点的核心执行逻辑 (需返回 {type, data, metadata})
+     */
+    register(type, schema, executor) {
+        if (this.plugins.has(type)) {
+            console.warn(`⚠️ 插件 [${type}] 已存在，正在被覆盖注册。`);
+        }
+        schema.type = type; // 强制注入类型标识
+        this.plugins.set(type, { schema, executor });
+        console.log(`🔌 [插件挂载] ${schema.title} (${type})`);
+    }
+
+    getSchema(type) { return this.plugins.get(type)?.schema; }
+    getExecutor(type) { return this.plugins.get(type)?.executor; }
+    getAllSchemas() { return Array.from(this.plugins.values()).map(p => p.schema); }
+}
+
+// 实例化全局插件管理器
+window.PluginManager = new FlowPluginManager();
 // 确保双向绑定引擎存在
 window.updateNodeData = function(nodeId, key, value) {
     const node = flowState.nodes.find(n => n.id === nodeId);
@@ -647,30 +630,21 @@ viewport.addEventListener('contextmenu', (e) => {
     menuClickWorldPos.y = (e.clientY - rect.top) / flowState.transform.scale;
 
     let html = `<div style="padding: 4px 8px; font-size: 11px; color: #666; border-bottom: 1px solid #333; margin-bottom: 4px;">添加节点</div>`;
-    for (let key in NodeBlueprints) {
+    PluginManager.getAllSchemas().forEach(schema => {
         html += `
             <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;" 
                  onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'"
-                 onclick="spawnNode('${key}')">
-                ${NodeBlueprints[key].title}
+                 onclick="spawnNode('${schema.type}')">
+                ${schema.title}
             </div>
         `;
-    }
-    ctxMenu.innerHTML = html;
-    ctxMenu.style.left = e.clientX + 'px'; ctxMenu.style.top = e.clientY + 'px'; ctxMenu.style.display = 'block';
-});
+    });
+    // ...
 
-window.spawnNode = function(blueprintKey) {
-    const blueprint = NodeBlueprints[blueprintKey];
+window.spawnNode = function(blueprintType) {
+    const blueprint = PluginManager.getSchema(blueprintType);
+    if (!blueprint) return console.error(`❌ 找不到节点蓝图: ${blueprintType}`);
     const newNode = JSON.parse(JSON.stringify(blueprint)); // 深拷贝蓝图
-    newNode.id = 'node_' + Date.now();
-    newNode.x = menuClickWorldPos.x;
-    newNode.y = menuClickWorldPos.y;
-    
-    flowState.nodes.push(newNode);
-    renderNodes(); 
-    saveFlowToDB(); // 🌟 补丁：生成新节点后存档
-};
 // ==========================================
 // ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
 // ==========================================
@@ -811,22 +785,37 @@ function resolvePayloadData(input) {
 }
 
 // ==========================================
-// 🧩 节点执行器工厂 (Plugin Executors Registry)
-// 以后新增任何多模态节点 (Sora, TTS)，只需在这里注册逻辑，引擎无需改动！
+// 📦 内置官方插件装载区
 // ==========================================
-const NodeExecutors = {
-    // 🎨 [插件] GPT 生图执行器
-    'tool_image_gen': async (node, nodeData, upstreamInputs) => {
-        if (!nodeData.prompt || nodeData.prompt.trim() === '') throw new Error("缺少正向提示词！");
 
+// 1. 注册：GPT 多模态生图
+PluginManager.register(
+    'tool_image_gen',
+    {
+        title: '🎨 GPT 多模态生图',
+        ports: {
+            in: [{ id: 'in_ref', type: 'image', label: '风格垫图 (选填)' }],
+            out: [{ id: 'out_img', type: 'image', label: '输出图像' }]
+        },
+        inputs: [
+            { id: 'local_ref', type: 'image_upload', label: '本地直传垫图 (选填)' },
+            { id: 'prompt', type: 'textarea', label: '正向提示词 (Prompt)', default: '一瓶放在岩石上的高级香水，雪山背景，8k' },
+            { id: 'size', type: 'select', label: '画幅尺寸', options: ['1024x1024', '1024x576', '576x1024', '自定义 (AI嗅探)'], default: '1024x1024' },
+            { id: 'customW', type: 'number', label: '自定义宽度比例 (W)', default: 9, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
+            { id: 'customH', type: 'number', label: '自定义高度比例 (H)', default: 21, condition: { field: 'size', value: '自定义 (AI嗅探)' } },
+            { id: 'channel', type: 'select', label: '生成通道', options: ['通道 1 (主干)', '通道 2 (备用)'], default: '通道 1 (主干)' }
+        ],
+        data: {}
+    },
+    async (node, nodeData, upstreamInputs) => {
+        // [保持原 tool_image_gen 的执行逻辑不变]
+        if (!nodeData.prompt || nodeData.prompt.trim() === '') throw new Error("缺少正向提示词！");
         let finalPrompt = nodeData.prompt.trim();
         let finalSize = nodeData.size || '1024x1024';
-
         if (finalSize === '自定义 (AI嗅探)') {
-            finalSize = ""; 
+            finalSize = "";
             finalPrompt += ` 画面比例${nodeData.customW || 9}:${nodeData.customH || 21}`;
         }
-
         const refImgSource = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
         const payload = {
             prompt: finalPrompt,
@@ -834,93 +823,89 @@ const NodeExecutors = {
             channel: (nodeData.channel && nodeData.channel.includes('2')) ? 'channel_2' : 'channel_1',
             images: refImgSource ? [refImgSource] : []
         };
-
         console.log("   📦 发送生图请求:", payload);
         const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
         const rawText = await res.text();
-        
         if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
         if (!rawText) throw new Error("API 返回空数据。");
-        
         let data;
         try { data = JSON.parse(rawText); } catch (e) { throw new Error(`非合法 JSON`); }
-        
         const imgObj = data.data && data.data[0] ? data.data[0] : (data[0] || data);
         let resultDataStr = imgObj.url || (imgObj.b64_json ? "data:image/png;base64," + imgObj.b64_json : null);
         if (!resultDataStr) throw new Error("未找到 url 或 b64_json 字段");
-
-        // 封箱为标准协议载荷返回
         return { type: 'image', data: resultDataStr, metadata: { source: 'gpt-image-2', size: finalSize } };
-    },
+    }
+);
 
-    // 🎞️ [插件] Veo 视频生成执行器
-    'tool_video_gen': async (node, nodeData, upstreamInputs) => {
+// 2. 注册：Veo 视频生成
+PluginManager.register(
+    'tool_video_gen',
+    {
+        title: '🎞️ Veo 视频生成',
+        ports: {
+            in: [
+                { id: 'in_first_frame', type: 'image', label: '首帧参考图 (优先)' },
+                { id: 'in_last_frame', type: 'image', label: '尾帧参考图 (选填)' },
+                { id: 'in_ref', type: 'image', label: '通用垫图 (兜底)' }
+            ],
+            out: [{ id: 'out_video', type: 'video', label: '输出视频' }]
+        },
+        inputs: [
+            { id: 'local_first_frame', type: 'image_upload', label: '直传首帧 (优先于连线)' },
+            { id: 'local_last_frame', type: 'image_upload', label: '直传尾帧 (选填)' },
+            { id: 'local_ref', type: 'image_upload', label: '直传通用垫图 (Cmp模型)' },
+            { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
+            { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
+            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
+            { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
+            { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
+            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (无限重试)'], default: '关闭' }
+        ],
+        data: {}
+    },
+    async (node, nodeData, upstreamInputs) => {
+        // [保持原 tool_video_gen 的执行逻辑不变]
         const firstFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame));
         const lastFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame));
         const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
         const refImages = refRaw ? [await prepareImagePayload(refRaw)] : [];
-        
         if (!firstFrame && refImages.length === 0) throw new Error("缺少首帧或通用垫图，Veo 拒绝执行！");
-
         let targetModel = nodeData.model || "veo3.1";
         if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
             targetModel = targetModel === 'veo3.1' ? 'veo3.1-components' : 'veo3.1-components-4k';
         }
-
         const payload = {
-            model: targetModel,
-            prompt: nodeData.prompt || '',
-            aspectRatio: nodeData.aspectRatio || "16:9",
-            enhancePrompt: nodeData.enhancePrompt !== '关闭 (原词)',      
-            enableUpsample: nodeData.enableUpsample === '开启 (更慢)',    
-            firstFrame: firstFrame || undefined,
-            lastFrame: lastFrame || undefined,
-            references: refImages.length > 0 ? refImages : undefined
+            model: targetModel, prompt: nodeData.prompt || '', aspectRatio: nodeData.aspectRatio || "16:9",
+            enhancePrompt: nodeData.enhancePrompt !== '关闭 (原词)', enableUpsample: nodeData.enableUpsample === '开启 (更慢)',
+            firstFrame: firstFrame || undefined, lastFrame: lastFrame || undefined, references: refImages.length > 0 ? refImages : undefined
         };
-
         console.log("   📦 发送视频提交请求:", payload);
         const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
         const submitRawText = await submitRes.text();
-        
         if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
-        
         let submitData;
         try { submitData = JSON.parse(submitRawText); } catch (e) { throw new Error("提交接口返回非 JSON 数据"); }
         if (!submitData.taskId) throw new Error("提交失败，未获得 TaskID: " + submitRawText);
-        
         console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
 
         let isComplete = false, finalVideoUrl = "";
         while (!isComplete) {
-            if (node._cancelToken) throw new Error("⛔ 手动中止"); // 🌟 轮询前检查
-            
-            // 🌟 架构黑科技：将 15 秒等待拆分成 15个 1秒，确保随时可以“秒级响应”用户的取消操作！
+            if (node._cancelToken) throw new Error("⛔ 手动中止");
             for (let i = 0; i < 15; i++) {
                 if (node._cancelToken) throw new Error("⛔ 手动中止");
-                await new Promise(r => setTimeout(r, 1000)); 
+                await new Promise(r => setTimeout(r, 1000));
             }
-            
             const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId }) });
             const pollRawText = await pollRes.text();
             if (!pollRes.ok) throw new Error(`轮询异常: ${pollRawText}`);
-            
             let pollData;
             try { pollData = JSON.parse(pollRawText); } catch (e) { throw new Error("轮询返回非 JSON"); }
-
-            console.log(`   🔄 进度: ${pollData.progress} | 状态: ${pollData.status}`);
-            if (pollData.status === 'success') {
-                finalVideoUrl = pollData.videoUrl;
-                isComplete = true;
-            } else if (pollData.status === 'failed') {
-                throw new Error(`生成失败: ${pollData.raw_status}`);
-            }
+            if (pollData.status === 'success') { finalVideoUrl = pollData.videoUrl; isComplete = true; } 
+            else if (pollData.status === 'failed') { throw new Error(`生成失败: ${pollData.raw_status}`); }
         }
-
-        // 封箱为标准协议载荷返回
         return { type: 'video', data: finalVideoUrl, metadata: { source: targetModel, aspectRatio: nodeData.aspectRatio || "16:9" } };
     }
-};
-
+);
 // ==========================================
 // 🚀 新版极简执行引擎核心 (仅负责路由与状态调度)
 // ==========================================
@@ -941,8 +926,8 @@ async function executeNode(nodeId) {
             if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result; 
         }
 
-        // 2. 🌟 靶向路由调用执行器
-        const executor = NodeExecutors[node.type];
+        // 2. 🌟 靶向路由调用执行器 (直接从 PluginManager 获取)
+        const executor = PluginManager.getExecutor(node.type);
         if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
         // 🌟 核心激活：无限重试与中止信号

@@ -13,12 +13,13 @@ flowStyleInj.innerHTML = `
         filter: drop-shadow(0 0 8px currentColor);
     }
     
-    /* 👇 新增：左侧节点工具站样式 */
+    /* 👇 新增：左侧节点工具站样式（高平滑度升级版） */
     .node-palette {
         position: absolute; left: 0; top: 50px; width: 220px; height: calc(100vh - 50px);
         background: #111113; border-right: 1px solid rgba(255,255,255,0.05);
         z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
         padding: 12px; box-sizing: border-box; box-shadow: 5px 0 20px rgba(0,0,0,0.5);
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .palette-group-title { font-size: 11px; color: #666; font-weight: 600; margin: 16px 0 8px 8px; letter-spacing: 1px; }
     .palette-item {
@@ -28,8 +29,25 @@ flowStyleInj.innerHTML = `
     }
     .palette-item:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.15); transform: translateX(2px); }
     .palette-item:active { cursor: grabbing; }
-    .flow-viewport { left: 220px !important; width: calc(100vw - 220px) !important; } /* 画布向右退让 */
-    .port-text { border-color: #fbbf24 !important; color: #fbbf24 !important; } /* 文本引脚呈现橙黄色 */
+    
+    /* 🌟 核心：画布视口加入平滑过渡过渡轨 */
+    .flow-viewport { left: 220px !important; width: calc(100vw - 220px) !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); } 
+    .port-text { border-color: #fbbf24 !important; color: #fbbf24 !important; } 
+
+    /* 🌟 核心：收缩状态类联动机制 */
+    .palette-collapsed .node-palette { transform: translateX(-220px); }
+    .palette-collapsed .flow-viewport { left: 0 !important; width: 100vw !important; }
+    
+    .palette-toggle-btn {
+        position: absolute; top: 62px; left: 232px; z-index: 102;
+        background: #111113; border: 1px solid rgba(255,255,255,0.08);
+        color: #888; border-radius: 6px; width: 24px; height: 24px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .palette-toggle-btn:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+    .palette-collapsed .palette-toggle-btn { left: 12px; transform: rotate(180deg); }
 `;
 document.head.appendChild(flowStyleInj);
 
@@ -125,7 +143,14 @@ function renderNodes() {
             // 动态构建表单 (无视 condition，全量输出，隐藏交由 CSS 处理)
             let inputsHtml = '';
             if (node.inputs && node.inputs.length > 0) {
-                inputsHtml = '<div class="node-inputs-container">';
+                const isCollapsed = node._inputsCollapsed || false;
+                inputsHtml = `
+                    <div class="node-inputs-toggle-bar" onclick="toggleNodeInputs('${node.id}')" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 8px; background: rgba(255,255,255,0.02); border-radius:4px; margin-bottom:8px; cursor:pointer; font-size:11px; color:#666; transition: 0.2s;" onmouseover="this.style.color='#aaa'; this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.color='#666'; this.style.background='rgba(255,255,255,0.02)'">
+                        <span style="display:flex; align-items:center; gap:4px;"><span class="material-symbols-outlined" style="font-size:13px;">tune</span> 节点参数配置</span>
+                        <span class="material-symbols-outlined arrow-icon" style="font-size:14px; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); transform: ${isCollapsed ? 'rotate(-90deg)' : 'none'}">expand_more</span>
+                    </div>
+                    <div class="node-inputs-container" id="inputs-container-${node.id}" style="display: ${isCollapsed ? 'none' : 'block'};">`;
+                    
                 node.inputs.forEach(inp => {
                     const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
                     
@@ -228,6 +253,34 @@ window.evaluateNodeConditions = function(nodeId) {
             }
         }
     });
+};
+// ==========================================
+// ⚡ 节点内参数表单靶向无损收纳引擎 (不触碰内容/绝不重绘)
+// ==========================================
+window.toggleNodeInputs = function(nodeId) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    // 1. 翻转内存持久化状态
+    node._inputsCollapsed = !node._inputsCollapsed;
+    
+    // 2. 靶向获取 DOM 节点
+    const container = document.getElementById(`inputs-container-${nodeId}`);
+    if (container) {
+        const isCollapsed = node._inputsCollapsed;
+        
+        // 3. 仅控制渲染样式，规避重写风险
+        container.style.display = isCollapsed ? 'none' : 'block';
+        
+        // 4. 旋转箭头
+        const arrow = container.previousElementSibling?.querySelector('.arrow-icon');
+        if (arrow) {
+            arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'none';
+        }
+    }
+    
+    // 5. 联动触发持久化存档
+    if (typeof saveFlowToDB === 'function') saveFlowToDB();
 };
 // ==========================================
 // 🎨 SVG 局部靶向渲染引擎 (拒绝 innerHTML 全局重绘)
@@ -468,6 +521,7 @@ function updateCanvasTransform() {
 window.initNodePalette = function() {
     const palette = document.createElement('div');
     palette.className = 'node-palette';
+    palette.id = 'global-node-palette';
     
     const schemas = PluginManager.getAllSchemas();
     const groups = {};
@@ -476,6 +530,32 @@ window.initNodePalette = function() {
         if (!groups[cat]) groups[cat] = [];
         groups[cat].push(s);
     });
+    
+    let html = '';
+    for (let cat in groups) {
+        html += `<div class="palette-group-title">${cat}</div>`;
+        groups[cat].forEach(s => {
+            html += `
+                <div class="palette-item" draggable="true" 
+                     ondragstart="event.dataTransfer.setData('veo-node-type', '${s.type}')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">drag_indicator</span>
+                    ${s.title}
+                </div>
+            `;
+        });
+    }
+    palette.innerHTML = html;
+    document.body.appendChild(palette);
+
+    // 🌟 核心：注入无依赖的原生折叠把手按钮
+    const toggleBtn = document.createElement('div');
+    toggleBtn.className = 'palette-toggle-btn';
+    toggleBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">chevron_left</span>';
+    toggleBtn.onclick = () => {
+        document.body.classList.toggle('palette-collapsed');
+    };
+    document.body.appendChild(toggleBtn);
+};
     
     let html = '';
     for (let cat in groups) {
@@ -945,7 +1025,7 @@ PluginManager.register('tool_image_gen',
     }
 );
 
-// 4. 注册：Veo 视频生成 (🌟 新增 in_prompt 端口)
+// 4. 注册：Veo 视频生成 (🌟 升级款：支持 3 张通用垫图阵列)
 PluginManager.register('tool_video_gen',
     {
         title: '🎞️ Veo 视频生成', category: 'AI 生成',
@@ -953,7 +1033,9 @@ PluginManager.register('tool_video_gen',
             in: [
                 { id: 'in_first_frame', type: 'image', label: '首帧参考图 (优先)' },
                 { id: 'in_last_frame', type: 'image', label: '尾帧参考图 (选填)' },
-                { id: 'in_ref', type: 'image', label: '通用垫图 (兜底)' },
+                { id: 'in_ref1', type: 'image', label: '通用垫图 1' },
+                { id: 'in_ref2', type: 'image', label: '通用垫图 2' },
+                { id: 'in_ref3', type: 'image', label: '通用垫图 3' },
                 { id: 'in_prompt', type: 'text', label: '外挂提示词 (优先)' }
             ],
             out: [{ id: 'out_video', type: 'video', label: '输出视频' }]
@@ -961,7 +1043,9 @@ PluginManager.register('tool_video_gen',
         inputs: [
             { id: 'local_first_frame', type: 'image_upload', label: '直传首帧 (优先于连线)' },
             { id: 'local_last_frame', type: 'image_upload', label: '直传尾帧 (选填)' },
-            { id: 'local_ref', type: 'image_upload', label: '直传通用垫图 (Cmp模型)' },
+            { id: 'local_ref1', type: 'image_upload', label: '直传垫图 1' },
+            { id: 'local_ref2', type: 'image_upload', label: '直传垫图 2' },
+            { id: 'local_ref3', type: 'image_upload', label: '直传垫图 3' },
             { id: 'prompt', type: 'textarea', label: '保底运镜动作描述', default: '' },
             { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
             { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
@@ -974,14 +1058,21 @@ PluginManager.register('tool_video_gen',
     async (node, nodeData, upstreamInputs) => {
         const firstFrame = await prepareImagePayload(resolvePayloadData(upstreamInputs.in_first_frame) || resolvePayloadData(nodeData.local_first_frame));
         const lastFrame = await prepareImagePayload(resolvePayloadData(upstreamInputs.in_last_frame) || resolvePayloadData(nodeData.local_last_frame));
-        const refRaw = resolvePayloadData(upstreamInputs.in_ref) || resolvePayloadData(nodeData.local_ref);
-        const refImages = refRaw ? [await prepareImagePayload(refRaw)] : [];
+        
+        // 🌟 核心改进：聚合处理 3 张通用连线或直传垫图
+        const refImages = [];
+        for (let i = 1; i <= 3; i++) {
+            const refRaw = resolvePayloadData(upstreamInputs[`in_ref${i}`]) || resolvePayloadData(nodeData[`local_ref${i}`]);
+            if (refRaw) {
+                refImages.push(await prepareImagePayload(refRaw));
+            }
+        }
+        
         if (!firstFrame && refImages.length === 0) throw new Error("缺少首帧或通用垫图，Veo 拒绝执行！");
         
         let targetModel = nodeData.model || "veo3.1";
         if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) { targetModel = targetModel === 'veo3.1' ? 'veo3.1-components' : 'veo3.1-components-4k'; }
         
-        // 🌟 优先读取连线的文本
         const finalPrompt = resolvePayloadData(upstreamInputs.in_prompt) || nodeData.prompt || '';
 
         const payload = {

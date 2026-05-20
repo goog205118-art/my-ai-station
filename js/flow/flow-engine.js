@@ -923,7 +923,7 @@ function setNodeStatus(nodeId, status, meta = {}) {
     if (!el) return;
     el.style.transition = 'all 0.3s ease';
 
-    // 1. 动态注入/获取节点的专属状态栏 (绝不污染原有的内部结构)
+    // 1. 动态注入/获取节点的专属状态栏
     let statusBar = el.querySelector('.node-status-bar');
     if (!statusBar) {
         statusBar = document.createElement('div');
@@ -932,14 +932,13 @@ function setNodeStatus(nodeId, status, meta = {}) {
         el.appendChild(statusBar);
     }
 
-    // 2. 垃圾回收：清理上一轮的计时器 (防止内存泄漏和跳秒)
+    // 2. 垃圾回收：清理上一轮的计时器
     if (el.dataset.timerId) {
         clearInterval(parseInt(el.dataset.timerId));
         delete el.dataset.timerId;
     }
 
-    // 🌟 新增：动态数据流向穿梭特效 (Data Flow Animation)
-    // 找出所有连接到当前运行节点的【流入连线】，给它们通电！
+    // 🌟 动态数据流向穿梭特效
     const incomingLinks = flowState.links.filter(l => l.target === nodeId);
     incomingLinks.forEach(link => {
         const pathEl = document.getElementById('svgpath_' + link.id);
@@ -947,7 +946,6 @@ function setNodeStatus(nodeId, status, meta = {}) {
             if (status === 'running') {
                 pathEl.classList.add('link-flowing');
             } else {
-                // 运行结束或失败，立即断电恢复平静
                 pathEl.classList.remove('link-flowing');
             }
         }
@@ -955,7 +953,6 @@ function setNodeStatus(nodeId, status, meta = {}) {
 
     // 3. 状态分支渲染
     if (status === 'running') {
-        // 蓝光呼吸效果
         el.style.boxShadow = '0 0 30px 5px rgba(56, 189, 248, 0.4)';
         el.style.borderColor = '#38bdf8';
         
@@ -963,16 +960,17 @@ function setNodeStatus(nodeId, status, meta = {}) {
         statusBar.style.color = '#38bdf8';
         statusBar.style.border = '1px solid rgba(56, 189, 248, 0.3)';
         statusBar.style.opacity = '1';
-        statusBar.style.bottom = '-30px'; // 稍微向下滑出
+        statusBar.style.bottom = '-30px'; 
         
         const startTime = Date.now();
-        // 挂载专属秒表，DOM 级每秒局部重绘，丝滑无感
+        // 🌟 核心修复点：这里补齐了之前丢失的 }, 1000); 闭合括号！
         const timerId = setInterval(() => {
             const sec = Math.floor((Date.now() - startTime) / 1000);
             const mm = String(Math.floor(sec / 60)).padStart(2, '0');
             const ss = String(sec % 60).padStart(2, '0');
             const retryStr = meta.retryCount ? ` <span style="color:#f59e0b">(重试 ${meta.retryCount})</span>` : '';
             statusBar.innerHTML = `⚙️ 引擎轰鸣中...${retryStr} <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>`;
+        }, 1000); 
         
         el.dataset.timerId = timerId;
 
@@ -988,7 +986,6 @@ function setNodeStatus(nodeId, status, meta = {}) {
         const costTime = meta.costTime || 0;
         statusBar.innerHTML = `✅ 跑通完毕 ⏱️ <span style="font-weight:bold;">${costTime}s</span>`;
         
-        // 成功后，展示 4 秒钟让用户看清楚耗时，然后隐去
         setTimeout(() => { statusBar.style.opacity = '0'; statusBar.style.bottom = '-24px'; }, 4000);
 
     } else if (status === 'error') {

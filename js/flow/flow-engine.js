@@ -1843,3 +1843,16 @@ document.addEventListener('mousedown', (e) => {
         if (!isClickInside && !isClickToggleButton) drawer.classList.remove('open');
     }
 });
+// ==========================================
+// 🚀 终极系统启动器强制覆写 (解决重复声明问题)
+// ==========================================
+window.initFlowEngine = async function() {
+    initNodePalette();      
+    initFlowToolbar();      
+    initMinimapUI();        
+    window.AutocompleteController.init(); // 🌟 灵魂注入：强制初始化补全 UI 容器！
+    await loadFlowFromDB(); 
+    renderNodes();
+    setTimeout(() => { renderLinks(); renderMinimap(); }, 50); 
+    updateCanvasTransform();
+};

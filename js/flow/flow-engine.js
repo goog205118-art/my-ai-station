@@ -1272,8 +1272,18 @@ PluginManager.register('tool_image_gen',
         data: {}
     },
     async (node, nodeData, upstreamInputs) => {
-        let finalPrompt = resolvePayloadData(upstreamInputs.in_prompt) || nodeData.prompt || '';
-        if (finalPrompt.trim() === '') throw new Error("缺少正向提示词！");
+        let finalPrompt = nodeData.prompt || '';
+        let wirePrompt = resolvePayloadData(upstreamInputs.in_prompt);
+        
+        // 智能融合：如果外部传了词，但插值引擎没能把它拼进最终词里（用户没写{{in_prompt}}），我们自动追加
+        if (wirePrompt && typeof wirePrompt === 'string' && !finalPrompt.includes(wirePrompt)) {
+            finalPrompt = wirePrompt + (finalPrompt === '一瓶放在岩石上的高级香水，雪山背景，8k' ? '' : '，' + finalPrompt);
+        }
+        
+        // 抹除残留的未匹配模板占位符
+        finalPrompt = finalPrompt.replace(/\{\{\s*[a-zA-Z0-9_.]+\s*\}\}/g, '').trim();
+        if (finalPrompt === '') throw new Error("缺少正向提示词！");
+        
         let finalSize = nodeData.size || '1024x1024';
         if (finalSize === '自定义 (AI嗅探)') { finalSize = ""; finalPrompt += ` 画面比例${nodeData.customW || 9}:${nodeData.customH || 21}`; }
         const refImgSource = resolvePayloadData(upstreamInputs.in_ref) || resolvePayloadData(nodeData.local_ref);
@@ -1335,7 +1345,13 @@ PluginManager.register('tool_video_gen',
         let targetModel = nodeData.model || "veo3.1";
         if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) { targetModel = targetModel === 'veo3.1' ? 'veo3.1-components' : 'veo3.1-components-4k'; }
         
-        const finalPrompt = resolvePayloadData(upstreamInputs.in_prompt) || nodeData.prompt || '';
+        // 🌟 智能融合视频提示词
+        let finalPrompt = nodeData.prompt || '';
+        let wirePrompt = resolvePayloadData(upstreamInputs.in_prompt);
+        if (wirePrompt && typeof wirePrompt === 'string' && !finalPrompt.includes(wirePrompt)) {
+            finalPrompt = wirePrompt + (finalPrompt ? '，' + finalPrompt : '');
+        }
+        finalPrompt = finalPrompt.replace(/\{\{\s*[a-zA-Z0-9_.]+\s*\}\}/g, '').trim();
 
         const payload = {
             model: targetModel, prompt: finalPrompt, aspectRatio: nodeData.aspectRatio || "16:9",
@@ -1367,6 +1383,44 @@ PluginManager.register('tool_video_gen',
 );
 
 // ==========================================
+// 🧬 表达式插值编译引擎 (Expression Interpolator)
+// ==========================================
+window.compileExpressionTemplate = function(nodeData, upstreamInputs, flowNodes) {
+    // 深度克隆，绝对不污染原画布保存的静态数据
+    const compiled = JSON.parse(JSON.stringify(nodeData));
+    const regex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
+    
+    const traverseAndCompile = (obj) => {
+        for (let key in obj) {
+            if (typeof obj[key] === 'string') {
+                obj[key] = obj[key].replace(regex, (match, varName) => {
+                    const v = varName.trim();
+                    // 1. 优先匹配上游连线的引脚数据 (例如: {{in_prompt}})
+                    if (upstreamInputs[v]) {
+                        return typeof upstreamInputs[v].data === 'string' 
+                               ? upstreamInputs[v].data 
+                               : (typeof upstreamInputs[v] === 'string' ? upstreamInputs[v] : match);
+                    }
+                    // 2. 跨空间匹配全局节点数据 (例如: {{node_123.prompt}})
+                    if (v.includes('.')) {
+                        const [nid, nfield] = v.split('.');
+                        const targetNode = flowNodes.find(n => n.id === nid);
+                        if (targetNode && targetNode.data && targetNode.data[nfield] !== undefined) {
+                            return targetNode.data[nfield];
+                        }
+                    }
+                    return match; // 无匹配则保留原样
+                });
+            } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                traverseAndCompile(obj[key]);
+            }
+        }
+    };
+    traverseAndCompile(compiled);
+    return compiled;
+};
+
+// ==========================================
 // 🚀 执行调度与状态 UI
 // ==========================================
 async function executeNode(nodeId) {
@@ -1387,7 +1441,10 @@ async function executeNode(nodeId) {
         const executor = PluginManager.getExecutor(node.type);
         if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
-        const isInfiniteRetry = (node.data && (node.data.autoRetry === '开启 (无限重试)' || node.data.autoRetry === true));
+        // 🌟 核心：在此处插入编译管线！把含有 {{}} 的表单数据替换为真实变量！
+        const compiledData = compileExpressionTemplate(node.data || {}, upstreamInputs, flowState.nodes);
+
+        const isInfiniteRetry = (compiledData.autoRetry === '开启 (无限重试)' || compiledData.autoRetry === true);
         let attempt = 0;
         let finalResult = null;
         node._cancelToken = false; 
@@ -1396,7 +1453,8 @@ async function executeNode(nodeId) {
             if (node._cancelToken) throw new Error("⛔ 已手动中止");
             try {
                 if (attempt > 0) setNodeStatus(nodeId, 'running', { retryCount: attempt });
-                finalResult = await executor(node, node.data || {}, upstreamInputs);
+                // ⚠️ 传入 compiledData，执行器拿到的已经是替换好的纯文本了！
+                finalResult = await executor(node, compiledData, upstreamInputs);
                 break; 
             } catch (err) {
                 if (node._cancelToken) throw new Error("⛔ 已手动中止"); 

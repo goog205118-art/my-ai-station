@@ -225,8 +225,8 @@ function renderNodes() {
                     if (inp.type === 'textarea') {
                         inputsHtml += `<textarea class="node-input" rows="3" 
                             onmousedown="event.stopPropagation()" 
-                            oninput="updateNodeData('${node.id}', '${inp.id}', this.value); AutocompleteController.listen(event, '${node.id}');"
-                            onkeydown="AutocompleteController.handleKeyDown(event);">${val}</textarea>`;
+                            oninput="updateNodeData('${node.id}', '${inp.id}', this.value); window.AutocompleteController.listen(event, '${node.id}');"
+                            onkeydown="window.AutocompleteController.handleKeyDown(event);">${val}</textarea>`;
                     } else if (inp.type === 'select') {
                         inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); evaluateNodeConditions('${node.id}');">
                             ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
@@ -988,9 +988,10 @@ function initFlowToolbar() {
 
 window.initFlowEngine = async function() {
     initNodePalette();      
-    initFlowToolbar();      // 👈 注入顶部控制台
-    AutocompleteController.init();
-    await loadFlowFromDB(); 
+    initFlowToolbar();      
+    initMinimapUI();        
+    window.AutocompleteController.init(); // 🌟 必须带有 window. 前缀
+    await loadFlowFromDB();
     renderNodes();
     setTimeout(renderLinks, 50); 
     updateCanvasTransform();
@@ -1429,18 +1430,15 @@ window.AutocompleteController = {
         this.dropdownEl.className = 'flow-autocomplete-dropdown';
         document.body.appendChild(this.dropdownEl);
 
-        // 全局点击空白处或画布滚动时隐形
         window.addEventListener('click', () => this.hide());
         viewport.addEventListener('wheel', () => this.hide());
     },
 
-    // 探测文本域输入
     listen(e, nodeId) {
         const input = e.target;
         const val = input.value;
         const cursorPos = input.selectionStart;
         
-        // 往前嗅探两个字符是否为 {{
         const textBeforeCursor = val.slice(0, cursorPos);
         const triggerIndex = textBeforeCursor.lastIndexOf('{{');
 
@@ -1450,41 +1448,27 @@ window.AutocompleteController = {
             this.buildCandidates();
             this.show();
         } else {
-            // 如果删掉了或离开了，隐形
             if (!textBeforeCursor.includes('{{')) this.hide();
         }
     },
 
-    // 构建智能化引用候选池 (完美打通本地与跨节点空间)
     buildCandidates() {
         this.candidates = [];
         const currNode = flowState.nodes.find(n => n.id === this.currentNodeId);
         if (!currNode) return;
 
-        // 1. 挂载本地引脚变量 (当前节点的输入引脚)
         if (currNode.ports && currNode.ports.in) {
             currNode.ports.in.forEach(p => {
-                this.candidates.push({
-                    label: `当前连线: ${p.label}`,
-                    code: p.id,
-                    type: 'local'
-                });
+                this.candidates.push({ label: `当前连线: ${p.label}`, code: p.id, type: 'local' });
             });
         }
 
-        // 2. ⚡ 跨空间注入：扫描画布上所有【其他节点】的用户输入资产！
         flowState.nodes.forEach(node => {
-            if (node.id === this.currentNodeId) return; // 排除自身
-            
-            // 扫描文本或选择框参数
+            if (node.id === this.currentNodeId) return;
             if (node.inputs) {
                 node.inputs.forEach(inp => {
                     if (['textarea', 'select', 'number'].includes(inp.type)) {
-                        this.candidates.push({
-                            label: `${node.title} ➔ ${inp.label}`,
-                            code: `${node.id}.${inp.id}`,
-                            type: 'cross'
-                        });
+                        this.candidates.push({ label: `${node.title} ➔ ${inp.label}`, code: `${node.id}.${inp.id}`, type: 'cross' });
                     }
                 });
             }
@@ -1499,10 +1483,9 @@ window.AutocompleteController = {
             this.dropdownEl.innerHTML = `<div style="padding:8px; text-align:center; color:#555; font-size:11px;">无可用工作流变量</div>`;
             return;
         }
-
         this.dropdownEl.innerHTML = this.candidates.map((c, i) => `
             <div class="autocomplete-item ${i === this.activeIndex ? 'is-active' : ''}" 
-                 onmousedown="AutocompleteController.inject('${c.code}'); event.stopPropagation();">
+                 onmousedown="window.AutocompleteController.inject('${c.code}'); event.stopPropagation();">
                 <span>${c.label}</span>
                 <span class="autocomplete-tag ${c.type === 'local' ? 'tag-local' : 'tag-cross'}">${c.type === 'local' ? '引脚' : '跨节点'}</span>
             </div>
@@ -1512,8 +1495,6 @@ window.AutocompleteController = {
     show() {
         if (!this.activeInput) return;
         const rect = this.activeInput.getBoundingClientRect();
-        
-        // 智能靶向定位：将提示框精准贴合悬浮在输入框正下方
         this.dropdownEl.style.left = rect.left + 'px';
         this.dropdownEl.style.top = (rect.bottom + window.scrollY + 4) + 'px';
         this.dropdownEl.style.display = 'block';
@@ -1523,7 +1504,6 @@ window.AutocompleteController = {
         if (this.dropdownEl) this.dropdownEl.style.display = 'none';
     },
 
-    // 监听高频键盘核心，实现极客盲打体验
     handleKeyDown(e) {
         if (this.dropdownEl.style.display !== 'block') return;
 
@@ -1556,7 +1536,6 @@ window.AutocompleteController = {
         if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
     },
 
-    // 智能逆向注入：把被选中的代码塞回去，并自动补充完整
     inject(code) {
         const input = this.activeInput;
         if (!input) return;
@@ -1569,15 +1548,10 @@ window.AutocompleteController = {
         if (triggerIndex !== -1) {
             const before = val.slice(0, triggerIndex);
             const after = val.slice(cursorPos);
-            
-            // 核心补全动作：把 {{ 替换成包含完整引用变量的闭合体 }}
             input.value = before + `{{${code}}}` + after;
             
-            // 恢复并矫正光标到新拼接词的最末端
             const newCursorPos = triggerIndex + code.length + 4;
             input.setSelectionRange(newCursorPos, newCursorPos);
-            
-            // 触发原生数据同步同步
             input.dispatchEvent(new Event('input'));
         }
         this.hide();

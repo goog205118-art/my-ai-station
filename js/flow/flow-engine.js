@@ -461,23 +461,81 @@ window.finishDrawLink = function(e, targetNodeId, targetPortId, targetPortType, 
 };
 
 let isTicking = false;
+
+// 画布点按控制器 (打通平移与 Shift 区域框选双模态)
+viewport.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 && e.button !== 1) return;
+
+    // 🌟 核心：如果按住了 Shift 键或者点的空白处，开启批量框选模式
+    if (e.button === 0 && e.shiftKey) {
+        e.preventDefault();
+        flowState.selectionBox.active = true;
+        flowState.selectionBox.startX = e.clientX;
+        flowState.selectionBox.startY = e.clientY;
+        
+        dragSelectBox.style.left = e.clientX + 'px';
+        dragSelectBox.style.top = e.clientY + 'px';
+        dragSelectBox.style.width = '0px';
+        dragSelectBox.style.height = '0px';
+        dragSelectBox.style.display = 'block';
+        return;
+    }
+
+    // 正常画布空白点击清空选择
+    if (e.button === 0 && e.target === viewport) {
+        clearNodeSelections();
+    }
+
+    if (e.button === 1 || (e.button === 0 && e.target === viewport)) {
+        flowState.isPanning = true; flowState.startX = e.clientX; flowState.startY = e.clientY;
+        viewport.style.cursor = 'grabbing';
+    }
+});
+
 window.addEventListener('mousemove', (e) => {
     if (!isTicking) {
         requestAnimationFrame(() => {
+            // 模式 1：动态拉连线
             if (flowState.drawingLink.active) {
                 const cRect = canvas.getBoundingClientRect();
                 flowState.drawingLink.currentX = (e.clientX - cRect.left) / flowState.transform.scale;
                 flowState.drawingLink.currentY = (e.clientY - cRect.top) / flowState.transform.scale;
                 renderLinks();
             }
+            // 模式 2：高级框选矩形绘制
+            else if (flowState.selectionBox.active) {
+                const box = flowState.selectionBox;
+                const left = Math.min(box.startX, e.clientX);
+                const top = Math.min(box.startY, e.clientY);
+                const width = Math.abs(box.startX - e.clientX);
+                const height = Math.abs(box.startY - e.clientY);
+                
+                dragSelectBox.style.left = left + 'px';
+                dragSelectBox.style.top = top + 'px';
+                dragSelectBox.style.width = width + 'px';
+                dragSelectBox.style.height = height + 'px';
+            }
+            // 模式 3：工业级多节点协同平移 (矩阵协同位移核心)
             else if (flowState.activeNode) {
                 const dx = (e.clientX - flowState.startX) / flowState.transform.scale;
                 const dy = (e.clientY - flowState.startY) / flowState.transform.scale;
-                flowState.activeNode.x += dx; flowState.activeNode.y += dy;
+                
+                // 遍历选中矩阵中的所有节点，齐步走！
+                flowState.selectedNodeIds.forEach(id => {
+                    const targetNode = flowState.nodes.find(n => n.id === id);
+                    if (targetNode) {
+                        targetNode.x += dx;
+                        targetNode.y += dy;
+                        const el = document.getElementById(id);
+                        if (el) el.style.transform = `translate(${targetNode.x}px, ${targetNode.y}px)`;
+                    }
+                });
+                
                 flowState.startX = e.clientX; flowState.startY = e.clientY;
-                document.getElementById(flowState.activeNode.id).style.transform = `translate(${flowState.activeNode.x}px, ${flowState.activeNode.y}px)`;
                 renderLinks(); 
+                if (typeof renderMinimap === 'function') renderMinimap(); // 联动更新小地图
             }
+            // 模式 4：画布全局平移
             else if (flowState.isPanning) {
                 flowState.transform.x += (e.clientX - flowState.startX);
                 flowState.transform.y += (e.clientY - flowState.startY);
@@ -490,28 +548,58 @@ window.addEventListener('mousemove', (e) => {
     }
 });
 
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (e) => {
     let shouldSave = false;
+
+    // 🌟 处理框选碰撞体积检测 (AABB 相交检测算法)
+    if (flowState.selectionBox.active) {
+        flowState.selectionBox.active = false;
+        dragSelectBox.style.display = 'none';
+
+        const sRect = dragSelectBox.getBoundingClientRect();
+        
+        // 如果只是轻点了一下，不触发框选
+        if (sRect.width > 4 && sRect.height > 4) {
+            if (!e.shiftKey) flowState.selectedNodeIds.clear();
+
+            flowState.nodes.forEach(node => {
+                const nodeEl = document.getElementById(node.id);
+                if (nodeEl) {
+                    const nRect = nodeEl.getBoundingClientRect();
+                    // 核心算法：判定两个 client 视口矩形是否发生重叠相交
+                    const isIntersect = !(nRect.left > sRect.right || 
+                                          nRect.right < sRect.left || 
+                                          nRect.top > sRect.bottom || 
+                                          nRect.bottom < sRect.top);
+                    if (isIntersect) {
+                        flowState.selectedNodeIds.add(node.id);
+                    }
+                }
+            });
+            updateSelectionStyles();
+        }
+    }
+
     if (flowState.activeNode) {
-        document.getElementById(flowState.activeNode.id).style.zIndex = '';
-        shouldSave = true;
+        flowState.selectedNodeIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.zIndex = '';
+        });
+        shouldSave = true; 
     }
     if (flowState.isPanning) shouldSave = true;
+
     flowState.activeNode = null;
     flowState.isPanning = false;
     viewport.style.cursor = 'grab';
+    
     if (flowState.drawingLink.active) {
         flowState.drawingLink.active = false;
         renderLinks();
     }
-    if (shouldSave && typeof saveFlowToDB === 'function') saveFlowToDB();
-});
 
-viewport.addEventListener('mousedown', (e) => {
-    if (e.button === 1 || (e.button === 0 && e.target === viewport)) {
-        flowState.isPanning = true; flowState.startX = e.clientX; flowState.startY = e.clientY;
-        viewport.style.cursor = 'grabbing';
-    }
+    if (shouldSave && typeof saveFlowToDB === 'function') saveFlowToDB();
+    if (typeof renderMinimap === 'function') renderMinimap(); // 联动更新小地图
 });
 
 viewport.addEventListener('wheel', (e) => {

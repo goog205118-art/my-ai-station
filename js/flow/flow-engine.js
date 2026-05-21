@@ -1441,27 +1441,64 @@ window.AutocompleteController = {
         
         const textBeforeCursor = val.slice(0, cursorPos);
         const triggerIndex = textBeforeCursor.lastIndexOf('{{');
+        const closeIndex = textBeforeCursor.lastIndexOf('}}');
 
-        if (triggerIndex !== -1 && triggerIndex === textBeforeCursor.length - 2) {
+        // 🚀 核心修复 1：只要光标在 {{ 之后，且处于未闭合的作用域内，就维持 UI 并捕获关键字
+        if (triggerIndex !== -1 && triggerIndex > closeIndex) {
             this.activeInput = input;
             this.currentNodeId = nodeId;
-            this.buildCandidates();
-            this.show();
+            
+            // 提取用户已输入的搜索词 (例如输入 {{in_p，则提取 "in_p")
+            const keyword = textBeforeCursor.slice(triggerIndex + 2).trim().toLowerCase();
+            
+            this.buildCandidates(keyword);
+            if (this.candidates.length > 0) {
+                this.show();
+            } else {
+                this.hide();
+            }
         } else {
-            if (!textBeforeCursor.includes('{{')) this.hide();
+            this.hide();
         }
     },
 
-    buildCandidates() {
+    buildCandidates(keyword = '') {
         this.candidates = [];
         const currNode = flowState.nodes.find(n => n.id === this.currentNodeId);
         if (!currNode) return;
 
+        let pool = [];
+
         if (currNode.ports && currNode.ports.in) {
             currNode.ports.in.forEach(p => {
-                this.candidates.push({ label: `当前连线: ${p.label}`, code: p.id, type: 'local' });
+                pool.push({ label: `当前连线: ${p.label}`, code: p.id, type: 'local' });
             });
         }
+
+        flowState.nodes.forEach(node => {
+            if (node.id === this.currentNodeId) return;
+            if (node.inputs) {
+                node.inputs.forEach(inp => {
+                    if (['textarea', 'select', 'number'].includes(inp.type)) {
+                        pool.push({ label: `${node.title} ➔ ${inp.label}`, code: `${node.id}.${inp.id}`, type: 'cross' });
+                    }
+                });
+            }
+        });
+
+        // 🚀 核心修复 2：加入高性能的内存过滤机制
+        if (keyword) {
+            this.candidates = pool.filter(c => 
+                c.label.toLowerCase().includes(keyword) || 
+                c.code.toLowerCase().includes(keyword)
+            );
+        } else {
+            this.candidates = pool;
+        }
+
+        this.activeIndex = 0;
+        this.render();
+    },
 
         flowState.nodes.forEach(node => {
             if (node.id === this.currentNodeId) return;
@@ -1547,12 +1584,21 @@ window.AutocompleteController = {
 
         if (triggerIndex !== -1) {
             const before = val.slice(0, triggerIndex);
-            const after = val.slice(cursorPos);
-            input.value = before + `{{${code}}}` + after;
             
-            const newCursorPos = triggerIndex + code.length + 4;
+            // 🚀 核心修复 3：智能嗅探并吞噬光标后可能存在的旧变量名和右闭合括号
+            let textAfterCursor = val.slice(cursorPos);
+            const endMatch = textAfterCursor.match(/^[^}]*\}\}/);
+            if (endMatch) {
+                textAfterCursor = textAfterCursor.slice(endMatch[0].length);
+            }
+
+            input.value = before + `{{${code}}}` + textAfterCursor;
+            
+            const newCursorPos = before.length + code.length + 4;
             input.setSelectionRange(newCursorPos, newCursorPos);
-            input.dispatchEvent(new Event('input'));
+            
+            // 强制触发原生 input 事件，确保底层的 updateNodeData 状态机同步
+            input.dispatchEvent(new Event('input', { bubbles: true }));
         }
         this.hide();
         input.focus();

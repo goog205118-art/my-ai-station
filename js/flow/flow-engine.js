@@ -990,7 +990,7 @@ window.initFlowEngine = async function() {
     initNodePalette();      
     initFlowToolbar();      
     initMinimapUI();        // 👈 注入右下角导航小地图
-    window.AutocompleteController.init(); // 🚀 核心修复：找回丢失的补全引擎初始化！
+    window.AutocompleteController.init(); // 🚀 核心修复：在这里注入灵魂，它才是真正生效的那个！
     await loadFlowFromDB(); 
     renderNodes();
     setTimeout(() => { renderLinks(); renderMinimap(); }, 50); 

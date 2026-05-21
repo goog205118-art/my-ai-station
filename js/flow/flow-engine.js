@@ -1017,6 +1017,43 @@ window.initMinimapUI = function() {
     
     container.appendChild(viewportBox);
     document.body.appendChild(container);
+
+    // 🌟 核心：注入小地图点击与拖拽全景传送引擎
+    let isDraggingMap = false;
+
+    const panToMapPos = (e) => {
+        if (!flowState.minimap || flowState.minimap.scale === 0) return;
+        const rect = container.getBoundingClientRect();
+        const mapX = e.clientX - rect.left;
+        const mapY = e.clientY - rect.top;
+
+        // 核心数学：从小地图坐标 (2D 屏幕投影) 逆推回真实无限宇宙 (World Bounds)
+        const worldX = (mapX / flowState.minimap.scale) + flowState.minimap.minX;
+        const worldY = (mapY / flowState.minimap.scale) + flowState.minimap.minY;
+
+        // 将当前主摄像机的中心点，对准这个真实宇宙坐标
+        const vpRect = viewport.getBoundingClientRect();
+        flowState.transform.x = (vpRect.width / 2) - worldX * flowState.transform.scale;
+        flowState.transform.y = (vpRect.height / 2) - worldY * flowState.transform.scale;
+
+        updateCanvasTransform(); // 触发主视图更新，其内部会自动联动 renderMinimap()
+    };
+
+    container.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation(); // 阻止事件冒泡导致主画布平移
+        isDraggingMap = true;
+        panToMapPos(e);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDraggingMap) panToMapPos(e);
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDraggingMap = false;
+    });
+
     renderMinimap();
 };
 
@@ -1050,6 +1087,9 @@ window.renderMinimap = function() {
     // 2. 计算映射缩放比例
     const scaleX = 180 / mapW; const scaleY = 120 / mapH;
     const mapScale = Math.min(scaleX, scaleY);
+    
+    // 🚨 修复：将大地图世界的极值与比例存入内存，供鼠标传送引擎逆推使用
+    flowState.minimap = { minX, minY, scale: mapScale };
 
     // 3. 绘制节点缩影方块
     flowState.nodes.forEach(n => {
@@ -1057,14 +1097,13 @@ window.renderMinimap = function() {
         nodeMin.className = 'flow-minimap-node';
         nodeMin.style.left = ((n.x - minX) * mapScale) + 'px';
         nodeMin.style.top = ((n.y - minY) * mapScale) + 'px';
-        nodeMin.style.width = (240 * mapScale) + 'px'; // 节点标准宽度约 240px
-        nodeMin.style.height = (120 * mapScale) + 'px'; // 估算高度
+        nodeMin.style.width = (240 * mapScale) + 'px'; 
+        nodeMin.style.height = (120 * mapScale) + 'px'; 
         container.appendChild(nodeMin);
     });
 
     // 4. 靶向映射当前主浏览器窗口的视野红框 (Viewport Camera Box)
     const vRect = viewport.getBoundingClientRect();
-    // 计算当前视角左上角和右下角在世界里的真实坐标
     const curWorldX1 = -flowState.transform.x / flowState.transform.scale;
     const curWorldY1 = -flowState.transform.y / flowState.transform.scale;
     const curWorldW = vRect.width / flowState.transform.scale;

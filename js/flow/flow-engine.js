@@ -1500,21 +1500,6 @@ window.AutocompleteController = {
         this.render();
     },
 
-        flowState.nodes.forEach(node => {
-            if (node.id === this.currentNodeId) return;
-            if (node.inputs) {
-                node.inputs.forEach(inp => {
-                    if (['textarea', 'select', 'number'].includes(inp.type)) {
-                        this.candidates.push({ label: `${node.title} ➔ ${inp.label}`, code: `${node.id}.${inp.id}`, type: 'cross' });
-                    }
-                });
-            }
-        });
-
-        this.activeIndex = 0;
-        this.render();
-    },
-
     render() {
         if (this.candidates.length === 0) {
             this.dropdownEl.innerHTML = `<div style="padding:8px; text-align:center; color:#555; font-size:11px;">无可用工作流变量</div>`;

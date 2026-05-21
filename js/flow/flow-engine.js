@@ -1415,7 +1415,7 @@ PluginManager.register('tool_video_gen',
 // ==========================================
 // 🔮 智能感知补全中枢 (Autocomplete Engine)
 // ==========================================
-const AutocompleteController = {
+window.AutocompleteController = {
     activeInput: null,
     currentNodeId: null,
     dropdownEl: null,

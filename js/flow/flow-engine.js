@@ -34,6 +34,19 @@ flowStyleInj.innerHTML = `
     .flow-viewport { left: 220px !important; width: calc(100vw - 220px) !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); } 
     .port-text { border-color: #fbbf24 !important; color: #fbbf24 !important; } 
 
+    /* 👇 新增：右上方工作流序列化控制台 */
+    .flow-top-toolbar {
+        position: absolute; top: 12px; right: 24px; z-index: 100;
+        display: flex; gap: 8px; background: rgba(25, 25, 30, 0.85); backdrop-filter: blur(10px);
+        padding: 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    .flow-tool-btn {
+        background: transparent; border: 1px solid transparent; color: #aaa; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+        display: flex; align-items: center; gap: 6px; font-size: 12px; transition: 0.2s;
+    }
+    .flow-tool-btn:hover { background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.1); transform: translateY(-1px); }
+    .flow-tool-btn.danger:hover { background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+
     /* 🌟 核心：收缩状态类联动机制 */
     .palette-collapsed .node-palette { transform: translateX(-220px); }
     .palette-collapsed .flow-viewport { left: 0 !important; width: 100vw !important; }
@@ -461,6 +474,100 @@ window.disconnectPort = function(e, nodeId, portId) {
 };
 
 // ==========================================
+// 📦 工作流拓扑序列化引擎 (Import / Export)
+// ==========================================
+
+// 1. 导出：脱水打包 (Dehydration)
+window.exportFlowToJSON = function() {
+    if (flowState.nodes.length === 0) return alert("画布是空的，没有可导出的数据！");
+
+    const exportData = {
+        version: '1.0.0',
+        timestamp: Date.now(),
+        // 核心过滤：剔除 result, _cancelToken, dom相关状态，只留核心骨架
+        nodes: flowState.nodes.map(n => ({
+            id: n.id, type: n.type, x: n.x, y: n.y, data: n.data || {}
+        })),
+        links: flowState.links.map(l => ({
+            id: l.id, source: l.source, sourcePort: l.sourcePort, target: l.target, targetPort: l.targetPort, type: l.type
+        })),
+        transform: flowState.transform
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `veo_workflow_${Date.now()}.json`);
+    dlAnchorElem.click();
+    dlAnchorElem.remove();
+};
+
+// 2. 导入：注水复活 (Hydration)
+window.importFlowFromJSON = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            if (!importedData.nodes || !importedData.links) throw new Error("无效的工作流文件格式");
+
+            // ⚠️ 危险警告确认
+            if (flowState.nodes.length > 0) {
+                if (!confirm("导入工作流将覆盖当前画布的所有内容，是否继续？")) return;
+            }
+
+            // 🌟 核心注水：根据 type 重新从 PluginManager 获取完整蓝图，组装新节点
+            const reconstructedNodes = [];
+            importedData.nodes.forEach(savedNode => {
+                const blueprint = PluginManager.getSchema(savedNode.type);
+                if (!blueprint) {
+                    console.warn(`⚠️ 无法识别的节点类型 [${savedNode.type}]，已跳过兼容。`);
+                    return; 
+                }
+                const newNode = JSON.parse(JSON.stringify(blueprint)); // 拿回引脚和 UI 结构
+                newNode.id = savedNode.id;
+                newNode.x = savedNode.x;
+                newNode.y = savedNode.y;
+                newNode.data = savedNode.data || {}; 
+                reconstructedNodes.push(newNode);
+            });
+
+            // 暴力接管状态机
+            flowState.nodes = reconstructedNodes;
+            flowState.links = importedData.links;
+            if (importedData.transform) flowState.transform = importedData.transform;
+
+            // 触发渲染轰炸与重写存档
+            renderNodes();
+            setTimeout(renderLinks, 50);
+            updateCanvasTransform();
+            if (typeof saveFlowToDB === 'function') saveFlowToDB();
+            
+            console.log("✅ 工作流导入成功！", importedData);
+
+        } catch(err) {
+            alert("❌ 导入失败: " + err.message);
+        }
+        event.target.value = ''; // 重置 file input，确保下次依然能触发 change
+    };
+    reader.readAsText(file);
+};
+
+// 3. 抹除画布
+window.clearFlowCanvas = function() {
+    if (flowState.nodes.length === 0) return;
+    if (confirm("🚨 警告：这将彻底清空画布上的所有节点与连线，且无法撤销！是否继续？")) {
+        flowState.nodes = [];
+        flowState.links = [];
+        renderNodes();
+        renderLinks();
+        if (typeof saveFlowToDB === 'function') saveFlowToDB();
+    }
+};
+
+// ==========================================
 // 🧩 统一插件化中枢
 // ==========================================
 class FlowPluginManager {
@@ -652,8 +759,42 @@ window.initNodePalette = function() {
     }
 };
 
+// 初始化顶部控制台
+function initFlowToolbar() {
+    if (document.getElementById('flow-top-toolbar')) return;
+    
+    // 隐藏的上传器
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.id = 'flow-import-input';
+    fileInput.style.display = 'none';
+    fileInput.onchange = window.importFlowFromJSON;
+    document.body.appendChild(fileInput);
+
+    // 玻璃态面板
+    const toolbar = document.createElement('div');
+    toolbar.id = 'flow-top-toolbar';
+    toolbar.className = 'flow-top-toolbar';
+    toolbar.innerHTML = `
+        <button class="flow-tool-btn" onclick="document.getElementById('flow-import-input').click()">
+            <span class="material-symbols-outlined" style="font-size: 16px;">file_open</span> 导入
+        </button>
+        <button class="flow-tool-btn" onclick="exportFlowToJSON()">
+            <span class="material-symbols-outlined" style="font-size: 16px;">download</span> 导出
+        </button>
+        <div style="width: 1px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+        <button class="flow-tool-btn danger" onclick="clearFlowCanvas()">
+            <span class="material-symbols-outlined" style="font-size: 16px;">delete_sweep</span> 清空
+        </button>
+    `;
+    // 挂载到画布层上方
+    viewport.appendChild(toolbar);
+}
+
 window.initFlowEngine = async function() {
     initNodePalette();      
+    initFlowToolbar();      // 👈 注入顶部控制台
     await loadFlowFromDB(); 
     renderNodes();
     setTimeout(renderLinks, 50); 

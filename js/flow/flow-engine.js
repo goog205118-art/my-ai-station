@@ -34,9 +34,9 @@ flowStyleInj.innerHTML = `
     .flow-viewport { left: 220px !important; width: calc(100vw - 220px) !important; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); } 
     .port-text { border-color: #fbbf24 !important; color: #fbbf24 !important; } 
 
-    /* 👇 新增：右上方工作流序列化控制台 */
+    /* 👇 新增：全局画布序列化控制台 (居中防遮挡) */
     .flow-top-toolbar {
-        position: absolute; top: 12px; right: 24px; z-index: 100;
+        position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100;
         display: flex; gap: 8px; background: rgba(25, 25, 30, 0.85); backdrop-filter: blur(10px);
         padding: 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }

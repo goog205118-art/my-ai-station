@@ -61,6 +61,31 @@ flowStyleInj.innerHTML = `
     }
     .palette-toggle-btn:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
     .palette-collapsed .palette-toggle-btn { left: 12px; transform: rotate(180deg); }
+
+    /* 👇 新增：Shift 全局多选与框选样式 */
+    .veo-node.is-selected {
+        border-color: #a78bfa !important; /* 选中时边框呈现高级紫 */
+        box-shadow: 0 0 25px 2px rgba(167, 139, 250, 0.35) !important;
+    }
+    .flow-selection-box {
+        position: absolute; border: 1px dashed #a78bfa; background: rgba(167, 139, 250, 0.08);
+        pointer-events: none; z-index: 1000; display: none; border-radius: 2px;
+    }
+
+    /* 👇 新增：右下角全景导航小地图 (Minimap) */
+    .flow-minimap-container {
+        position: absolute; right: 24px; bottom: 24px; width: 180px; height: 120px;
+        background: rgba(15, 15, 19, 0.85); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; z-index: 101;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.6); overflow: hidden; pointer-events: none;
+    }
+    .flow-minimap-viewport {
+        position: absolute; border: 1px solid rgba(167, 139, 250, 0.4);
+        background: rgba(167, 139, 250, 0.03); pointer-events: none;
+    }
+    .flow-minimap-node {
+        position: absolute; background: rgba(255,255,255,0.15); border-radius: 1px;
+    }
 `;
 document.head.appendChild(flowStyleInj);
 
@@ -73,15 +98,24 @@ const nodeBoard = document.getElementById('node-board');
 canvas.style.width = '1px'; canvas.style.height = '1px'; canvas.style.overflow = 'visible';
 svgLayer.style.width = '1px'; svgLayer.style.height = '1px'; svgLayer.style.overflow = 'visible';
 
-// 1. 全局状态机 
+// 1. 全局状态机 (扩容高级多选、批量框选、协同控制核心)
 let flowState = {
     transform: { x: 0, y: 0, scale: 1 },
     isPanning: false, startX: 0, startY: 0,
     activeNode: null,
     drawingLink: { active: false, sourceNode: null, sourcePort: null, type: null, startX: 0, startY: 0, currentX: 0, currentY: 0 },
     nodes: [], 
-    links: []
+    links: [],
+    // 🌟 新增高级交互状态
+    selectedNodeIds: new Set(), 
+    selectionBox: { active: false, startX: 0, startY: 0 }
 };
+
+// 动态挂载原生框选框 DOM 到页面
+const dragSelectBox = document.createElement('div');
+dragSelectBox.className = 'flow-selection-box';
+dragSelectBox.id = 'flow-selection-box';
+document.body.appendChild(dragSelectBox);
 
 // ==========================================
 // 💾 工作流本地持久化引擎 (IndexedDB)
@@ -346,11 +380,50 @@ function renderLinks() {
 function startDragNode(e, nodeId) {
     const tag = e.target.tagName;
     if (e.button !== 0 || e.target.classList.contains('port') || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return; 
+    
     e.stopPropagation();
+    
+    // 🌟 智能多选点触联动：如果没按 Shift 且点击了一个未选中的节点，清空之前的所有选择
+    if (!e.shiftKey && !flowState.selectedNodeIds.has(nodeId)) {
+        clearNodeSelections();
+    }
+    
+    // 将当前拖拽的节点强行纳入选中阵列
+    flowState.selectedNodeIds.add(nodeId);
+    updateSelectionStyles();
+
     flowState.activeNode = flowState.nodes.find(n => n.id === nodeId);
     flowState.startX = e.clientX; flowState.startY = e.clientY;
-    document.getElementById(nodeId).style.zIndex = 100;
+    
+    // 批量抬升选中节点的层级
+    flowState.selectedNodeIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.zIndex = 100;
+    });
 }
+
+// 辅助函数：清除高亮
+window.clearNodeSelections = function() {
+    flowState.selectedNodeIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('is-selected');
+    });
+    flowState.selectedNodeIds.clear();
+};
+
+// 辅助函数：靶向渲染高亮样式
+window.updateSelectionStyles = function() {
+    flowState.nodes.forEach(n => {
+        const el = document.getElementById(n.id);
+        if (el) {
+            if (flowState.selectedNodeIds.has(n.id)) {
+                el.classList.add('is-selected');
+            } else {
+                el.classList.remove('is-selected');
+            }
+        }
+    });
+};
 
 window.startDrawLink = function(e, nodeId, portId, portType, ioType) {
     if (ioType !== 'out') return;
@@ -798,6 +871,130 @@ window.initFlowEngine = async function() {
     await loadFlowFromDB(); 
     renderNodes();
     setTimeout(renderLinks, 50); 
+    updateCanvasTransform();
+};
+
+// ==========================================
+// ⌨️ 全局键盘快捷键中心 (支持批量一键销毁)
+// ==========================================
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 拦截机制：如果用户当前正在输入框或文本域中改参数，绝不误杀节点！
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+        if (flowState.selectedNodeIds.size > 0) {
+            if (confirm(`🚨 确认要批量删除选中的 ${flowState.selectedNodeIds.size} 个节点及其所有连线吗？`)) {
+                const idsToDelete = new Set(flowState.selectedNodeIds);
+                
+                // 1. 内存全量清洗
+                flowState.nodes = flowState.nodes.filter(n => !idsToDelete.has(n.id));
+                flowState.links = flowState.links.filter(l => !idsToDelete.has(l.source) && !idsToDelete.has(l.target));
+                
+                // 2. 清空选择集
+                flowState.selectedNodeIds.clear();
+                
+                // 3. UI靶向重绘
+                renderNodes();
+                renderLinks();
+                
+                // 4. 同步持久化本地金库
+                if (typeof saveFlowToDB === 'function') saveFlowToDB();
+                if (typeof renderMinimap === 'function') renderMinimap();
+                console.log(`🧹 [键盘微操作系统] 已成功清空选中的节点群落。`);
+            }
+        }
+    }
+});
+
+// ==========================================
+// 🗺️ 高性能 rAF 导航小地图 (Minimap 引擎)
+// ==========================================
+window.initMinimapUI = function() {
+    if (document.getElementById('flow-minimap-container')) return;
+
+    const container = document.createElement('div');
+    container.id = 'flow-minimap-container';
+    container.className = 'flow-minimap-container';
+    
+    const viewportBox = document.createElement('div');
+    viewportBox.id = 'flow-minimap-viewport';
+    viewportBox.className = 'flow-minimap-viewport';
+    
+    container.appendChild(viewportBox);
+    document.body.appendChild(container);
+    renderMinimap();
+};
+
+window.renderMinimap = function() {
+    const container = document.getElementById('flow-minimap-container');
+    const vpBox = document.getElementById('flow-minimap-viewport');
+    if (!container || !vpBox) return;
+
+    // 清理老节点的微方块
+    container.querySelectorAll('.flow-minimap-node').forEach(n => n.remove());
+
+    if (flowState.nodes.length === 0) {
+        vpBox.style.display = 'none';
+        return;
+    }
+    vpBox.style.display = 'block';
+
+    // 1. 动态嗅探画布上所有节点组成的超大边界矩形 (Bounding Box)
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    flowState.nodes.forEach(n => {
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.y > maxY) maxY = n.y;
+    });
+
+    // 加上安全外边距
+    minX -= 300; maxX += 500; minY -= 300; maxY += 400;
+    const mapW = maxX - minX; const mapH = maxY - minY;
+
+    // 2. 计算映射缩放比例
+    const scaleX = 180 / mapW; const scaleY = 120 / mapH;
+    const mapScale = Math.min(scaleX, scaleY);
+
+    // 3. 绘制节点缩影方块
+    flowState.nodes.forEach(n => {
+        const nodeMin = document.createElement('div');
+        nodeMin.className = 'flow-minimap-node';
+        nodeMin.style.left = ((n.x - minX) * mapScale) + 'px';
+        nodeMin.style.top = ((n.y - minY) * mapScale) + 'px';
+        nodeMin.style.width = (240 * mapScale) + 'px'; // 节点标准宽度约 240px
+        nodeMin.style.height = (120 * mapScale) + 'px'; // 估算高度
+        container.appendChild(nodeMin);
+    });
+
+    // 4. 靶向映射当前主浏览器窗口的视野红框 (Viewport Camera Box)
+    const vRect = viewport.getBoundingClientRect();
+    // 计算当前视角左上角和右下角在世界里的真实坐标
+    const curWorldX1 = -flowState.transform.x / flowState.transform.scale;
+    const curWorldY1 = -flowState.transform.y / flowState.transform.scale;
+    const curWorldW = vRect.width / flowState.transform.scale;
+    const curWorldH = vRect.height / flowState.transform.scale;
+
+    vpBox.style.left = Math.max(0, (curWorldX1 - minX) * mapScale) + 'px';
+    vpBox.style.top = Math.max(0, (curWorldY1 - minY) * mapScale) + 'px';
+    vpBox.style.width = Math.min(180, curWorldW * mapScale) + 'px';
+    vpBox.style.height = Math.min(120, curWorldH * mapScale) + 'px';
+};
+
+// 🌟 扩展原先的启动函数，并重置 updateCanvasTransform 联动
+const originalUpdateCanvasTransform = window.updateCanvasTransform;
+window.updateCanvasTransform = function() {
+    if (typeof originalUpdateCanvasTransform === 'function') originalUpdateCanvasTransform();
+    renderMinimap(); // 缩放平移画布时无损重绘视野框
+};
+
+window.initFlowEngine = async function() {
+    initNodePalette();      
+    initFlowToolbar();      
+    initMinimapUI();        // 👈 注入右下角导航小地图
+    await loadFlowFromDB(); 
+    renderNodes();
+    setTimeout(() => { renderLinks(); renderMinimap(); }, 50); 
     updateCanvasTransform();
 };
 

@@ -60,7 +60,7 @@ const nodeBoard = document.getElementById('node-board');
 canvas.style.width = '1px'; canvas.style.height = '1px'; canvas.style.overflow = 'visible';
 svgLayer.style.width = '1px'; svgLayer.style.height = '1px'; svgLayer.style.overflow = 'visible';
 
-// 1. 全局状态机 (🔴 清空了所有硬编码假数据)
+// 1. 全局状态机 
 let flowState = {
     transform: { x: 0, y: 0, scale: 1 },
     isPanning: false, startX: 0, startY: 0,
@@ -109,10 +109,7 @@ async function loadFlowFromDB() {
 // 🎨 支持内联预览的渲染引擎
 // ==========================================
 function renderPreview(node) {
-    // 🌟 拦截：必须是有实体 data 的标准载荷才渲染
     if (!node.result || !node.result.data) return '';
-    
-    // 🌟 不再依赖节点类型判断，而是直接读取载荷自身的 type 属性
     if (node.result.type === 'image') {
         return `<img src="${node.result.data}" style="width:100%; height:auto; display:block; border-radius: 4px;" />`;
     } else if (node.result.type === 'video') {
@@ -124,7 +121,7 @@ function renderPreview(node) {
 function renderNodes() {
     if(!nodeBoard) return;
 
-    // 1. 🗑️ 垃圾回收：清理内存中已删除，但画布上残留的 DOM
+    // 1. 🗑️ 垃圾回收
     const activeNodeIds = new Set(flowState.nodes.map(n => n.id));
     Array.from(nodeBoard.children).forEach(child => {
         if (!activeNodeIds.has(child.id)) child.remove();
@@ -134,13 +131,11 @@ function renderNodes() {
     flowState.nodes.forEach(node => {
         let nodeEl = document.getElementById(node.id);
 
-        // A. 如果是新生节点，进行完整的 DOM 构建 (生命周期内仅触发一次)
         if (!nodeEl) {
             nodeEl = document.createElement('div');
             nodeEl.className = 'veo-node';
             nodeEl.id = node.id;
             
-            // 动态构建表单 (无视 condition，全量输出，隐藏交由 CSS 处理)
             let inputsHtml = '';
             if (node.inputs && node.inputs.length > 0) {
                 const isCollapsed = node._inputsCollapsed || false;
@@ -153,7 +148,6 @@ function renderNodes() {
                     
                 node.inputs.forEach(inp => {
                     const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
-                    
                     inputsHtml += `<div class="node-input-group" id="group-${node.id}-${inp.id}"><div class="node-input-label">${inp.label}</div>`;
                     
                     if (inp.type === 'textarea') {
@@ -218,15 +212,13 @@ function renderNodes() {
             nodeBoard.appendChild(nodeEl);
         }
 
-        // B. 极速更新坐标空间
         nodeEl.style.transform = `translate(${node.x}px, ${node.y}px)`;
-        
-        // C. 触发表单显隐状态计算
         evaluateNodeConditions(node.id);
     });
 }
+
 // ==========================================
-// 🧠 节点动态表单求值器 (靶向更新，绝不重绘 DOM)
+// 🧠 节点动态表单求值器
 // ==========================================
 window.evaluateNodeConditions = function(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
@@ -236,13 +228,9 @@ window.evaluateNodeConditions = function(nodeId) {
         if (inp.condition) {
             const groupEl = document.getElementById(`group-${node.id}-${inp.id}`);
             if (!groupEl) return;
-            
-            // 获取依赖字段的当前值
             const depVal = node.data[inp.condition.field] !== undefined 
                 ? node.data[inp.condition.field] 
                 : node.inputs.find(i => i.id === inp.condition.field).default;
-                
-            // 靶向控制显隐
             if (depVal !== inp.condition.value) {
                 groupEl.style.display = 'none';
             } else {
@@ -251,42 +239,31 @@ window.evaluateNodeConditions = function(nodeId) {
         }
     });
 };
+
 // ==========================================
-// ⚡ 节点内参数表单靶向无损收纳引擎 (不触碰内容/绝不重绘)
+// ⚡ 节点内参数表单无损收纳引擎
 // ==========================================
 window.toggleNodeInputs = function(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
-    
-    // 1. 翻转内存持久化状态
     node._inputsCollapsed = !node._inputsCollapsed;
-    
-    // 2. 靶向获取 DOM 节点
     const container = document.getElementById(`inputs-container-${nodeId}`);
     if (container) {
         const isCollapsed = node._inputsCollapsed;
-        
-        // 3. 仅控制渲染样式，规避重写风险
         container.style.display = isCollapsed ? 'none' : 'block';
-        
-        // 4. 旋转箭头
         const arrow = container.previousElementSibling?.querySelector('.arrow-icon');
-        if (arrow) {
-            arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'none';
-        }
+        if (arrow) arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'none';
     }
-    
-    // 5. 联动触发持久化存档
     if (typeof saveFlowToDB === 'function') saveFlowToDB();
 };
+
 // ==========================================
-// 🎨 SVG 局部靶向渲染引擎 (拒绝 innerHTML 全局重绘)
+// 🎨 SVG 局部靶向渲染引擎
 // ==========================================
 function renderLinks() {
     if (!svgLayer) return;
     const canvasRect = canvas.getBoundingClientRect();
     
-    // 1. 渲染已固化的连线
     flowState.links.forEach(link => {
         const sourcePortEl = document.getElementById(`${link.source}-${link.sourcePort}`);
         const targetPortEl = document.getElementById(`${link.target}-${link.targetPort}`);
@@ -294,24 +271,17 @@ function renderLinks() {
         if (sourcePortEl && targetPortEl) {
             const sRect = sourcePortEl.getBoundingClientRect();
             const tRect = targetPortEl.getBoundingClientRect();
-            
-            // 计算基于当前画布缩放的坐标
             const x1 = (sRect.left + sRect.width/2 - canvasRect.left) / flowState.transform.scale;
             const y1 = (sRect.top + sRect.height/2 - canvasRect.top) / flowState.transform.scale;
             const x2 = (tRect.left + tRect.width/2 - canvasRect.left) / flowState.transform.scale;
             const y2 = (tRect.top + tRect.height/2 - canvasRect.top) / flowState.transform.scale;
-            
-            // 贝塞尔曲线控制点偏移量
             const offset = Math.max(Math.abs(x2 - x1) / 2, 60);
             const pathData = `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
             
-            // 🌟 核心：精准复用已存在的 DOM，只改路径
             let pathEl = document.getElementById('svgpath_' + link.id);
             if (!pathEl) {
-                // 如果是新线，创建并挂载 (必须用 createElementNS 创建 SVG 元素)
                 pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 pathEl.id = 'svgpath_' + link.id;
-                // (第一处) 适配文本的橙色
                 pathEl.setAttribute('stroke', link.type === 'image' ? '#c084fc' : (link.type === 'text' ? '#fbbf24' : '#38bdf8'));
                 pathEl.setAttribute('stroke-width', '3');
                 pathEl.setAttribute('fill', 'none');
@@ -319,25 +289,17 @@ function renderLinks() {
                 pathEl.setAttribute('stroke-linecap', 'round');
                 svgLayer.appendChild(pathEl);
             }
-            
-            // 只有坐标发生变化时，才触发属性写入，极致压榨性能
-            if (pathEl.getAttribute('d') !== pathData) {
-                pathEl.setAttribute('d', pathData);
-            }
+            if (pathEl.getAttribute('d') !== pathData) pathEl.setAttribute('d', pathData);
         }
     });
 
-    // 🌟 核心：垃圾回收 (Garbage Collection)
-    // 找出画布上所有的固化线 DOM，如果它在内存 (flowState.links) 里不存在了，就删掉它
     const existingPaths = Array.from(svgLayer.querySelectorAll('path[id^="svgpath_link_"]'));
     const validLinkIds = new Set(flowState.links.map(l => 'svgpath_' + l.id));
     existingPaths.forEach(p => {
         if (!validLinkIds.has(p.id)) p.remove();
     });
 
-    // 2. 渲染动态拉线 (鼠标正在拖出的那条虚线)
     let drawingPath = document.getElementById('svgpath_drawing_temp');
-    
     if (flowState.drawingLink.active) {
         const x1 = flowState.drawingLink.startX;
         const y1 = flowState.drawingLink.startY;
@@ -357,12 +319,10 @@ function renderLinks() {
             svgLayer.appendChild(drawingPath);
         }
         
-        // (第二处) 动态适配引脚的颜色 (图像紫 / 文本橙 / 视频蓝)
         drawingPath.setAttribute('stroke', flowState.drawingLink.type === 'image' ? '#c084fc' : (flowState.drawingLink.type === 'text' ? '#fbbf24' : '#38bdf8'));
         drawingPath.setAttribute('d', pathData);
         drawingPath.style.display = 'block';
     } else if (drawingPath) {
-        // 松开鼠标后，不销毁 DOM，只是隐藏它，下次拉线直接复用
         drawingPath.style.display = 'none';
     }
 }
@@ -370,27 +330,21 @@ function renderLinks() {
 // ==========================================
 // 🖱️ 交互引擎 (拖拉拽核心)
 // ==========================================
-
 function startDragNode(e, nodeId) {
     const tag = e.target.tagName;
-    // 🌟 核心拦截：如果是右键、或者是引脚、或者是表单元素，绝对不要触发节点拖拽！
     if (e.button !== 0 || e.target.classList.contains('port') || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') return; 
-    
     e.stopPropagation();
     flowState.activeNode = flowState.nodes.find(n => n.id === nodeId);
     flowState.startX = e.clientX; flowState.startY = e.clientY;
     document.getElementById(nodeId).style.zIndex = 100;
 }
 
-// 🌟 开始拉线
 window.startDrawLink = function(e, nodeId, portId, portType, ioType) {
-    if (ioType !== 'out') return; // 目前只允许从 output 往 input 拉线
+    if (ioType !== 'out') return;
     e.stopPropagation();
-    
     const portEl = e.target;
     const pRect = portEl.getBoundingClientRect();
     const cRect = canvas.getBoundingClientRect();
-    
     flowState.drawingLink = {
         active: true, sourceNode: nodeId, sourcePort: portId, type: portType,
         startX: (pRect.left + pRect.width/2 - cRect.left) / flowState.transform.scale,
@@ -400,16 +354,11 @@ window.startDrawLink = function(e, nodeId, portId, portType, ioType) {
     };
 };
 
-// 🌟 结束拉线 (吸附判断)
 window.finishDrawLink = function(e, targetNodeId, targetPortId, targetPortType, ioType) {
     e.stopPropagation();
     if (!flowState.drawingLink.active) return;
-    
     const { sourceNode, sourcePort, type } = flowState.drawingLink;
-    
-    // 逻辑校验：不能连自己，必须 Out连In，且类型(颜色)必须匹配
     if (sourceNode !== targetNodeId && ioType === 'in' && type === targetPortType) {
-        // 防止重复连线
         const exists = flowState.links.find(l => l.source === sourceNode && l.sourcePort === sourcePort && l.target === targetNodeId && l.targetPort === targetPortId);
         if (!exists) {
             flowState.links.push({
@@ -421,26 +370,20 @@ window.finishDrawLink = function(e, targetNodeId, targetPortId, targetPortType, 
             console.log(`🔗 连线成功: ${sourceNode} -> ${targetNodeId}`);
         }
     }
-    
     flowState.drawingLink.active = false;
     renderLinks();
 };
 
-
-// 🌟 核心提效：注入 rAF 渲染锁
 let isTicking = false;
-
 window.addEventListener('mousemove', (e) => {
     if (!isTicking) {
         requestAnimationFrame(() => {
-            // 处理拉线动画
             if (flowState.drawingLink.active) {
                 const cRect = canvas.getBoundingClientRect();
                 flowState.drawingLink.currentX = (e.clientX - cRect.left) / flowState.transform.scale;
                 flowState.drawingLink.currentY = (e.clientY - cRect.top) / flowState.transform.scale;
                 renderLinks();
             }
-            // 处理节点拖拽
             else if (flowState.activeNode) {
                 const dx = (e.clientX - flowState.startX) / flowState.transform.scale;
                 const dy = (e.clientY - flowState.startY) / flowState.transform.scale;
@@ -449,7 +392,6 @@ window.addEventListener('mousemove', (e) => {
                 document.getElementById(flowState.activeNode.id).style.transform = `translate(${flowState.activeNode.x}px, ${flowState.activeNode.y}px)`;
                 renderLinks(); 
             }
-            // 处理画布平移
             else if (flowState.isPanning) {
                 flowState.transform.x += (e.clientX - flowState.startX);
                 flowState.transform.y += (e.clientY - flowState.startY);
@@ -463,29 +405,22 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', () => {
-    let shouldSave = false; // 🌟 顺手为后面的持久化埋下钩子
-
+    let shouldSave = false;
     if (flowState.activeNode) {
         document.getElementById(flowState.activeNode.id).style.zIndex = '';
-        shouldSave = true; // 节点被移动了，需要存档
+        shouldSave = true;
     }
-    if (flowState.isPanning) shouldSave = true; // 画布被平移了，需要存档
-
+    if (flowState.isPanning) shouldSave = true;
     flowState.activeNode = null;
     flowState.isPanning = false;
     viewport.style.cursor = 'grab';
-    
-    // 如果拉线松开在空白处，取消拉线
     if (flowState.drawingLink.active) {
         flowState.drawingLink.active = false;
         renderLinks();
     }
-
-    // 如果发生了位移，静默保存状态
     if (shouldSave && typeof saveFlowToDB === 'function') saveFlowToDB();
 });
 
-// 画布平移与缩放逻辑 (保持不变)
 viewport.addEventListener('mousedown', (e) => {
     if (e.button === 1 || (e.button === 0 && e.target === viewport)) {
         flowState.isPanning = true; flowState.startX = e.clientX; flowState.startY = e.clientY;
@@ -513,107 +448,11 @@ function updateCanvasTransform() {
 }
 
 // ==========================================
-// 🧰 左侧节点工具箱 (Node Palette UI 生成器)
+// 🔪 断线与节点操作
 // ==========================================
-window.initNodePalette = function() {
-    const palette = document.createElement('div');
-    palette.className = 'node-palette';
-    palette.id = 'global-node-palette';
-    
-    const schemas = PluginManager.getAllSchemas();
-    const groups = {};
-    schemas.forEach(s => {
-        const cat = s.category || '未分类';
-        if (!groups[cat]) groups[cat] = [];
-        groups[cat].push(s);
-    });
-    
-    let html = '';
-    for (let cat in groups) {
-        html += `<div class="palette-group-title">${cat}</div>`;
-        groups[cat].forEach(s => {
-            html += `
-                <div class="palette-item" draggable="true" 
-                     ondragstart="event.dataTransfer.setData('veo-node-type', '${s.type}')">
-                    <span class="material-symbols-outlined" style="font-size:16px;">drag_indicator</span>
-                    ${s.title}
-                </div>
-            `;
-        });
-    }
-    palette.innerHTML = html;
-    document.body.appendChild(palette);
-
-    // 🌟 核心：注入无依赖的原生折叠把手按钮
-    const toggleBtn = document.createElement('div');
-    toggleBtn.className = 'palette-toggle-btn';
-    toggleBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">chevron_left</span>';
-    toggleBtn.onclick = () => {
-        document.body.classList.toggle('palette-collapsed');
-    };
-    document.body.appendChild(toggleBtn);
-};
-    
-    let html = '';
-    for (let cat in groups) {
-        html += `<div class="palette-group-title">${cat}</div>`;
-        groups[cat].forEach(s => {
-            html += `
-                <div class="palette-item" draggable="true" 
-                     ondragstart="event.dataTransfer.setData('veo-node-type', '${s.type}')">
-                    <span class="material-symbols-outlined" style="font-size:16px;">drag_indicator</span>
-                    ${s.title}
-                </div>
-            `;
-        });
-    }
-    palette.innerHTML = html;
-    document.body.appendChild(palette);
-};
-
-// 🌟 异步启动引擎，先读档再渲染
-window.initFlowEngine = async function() {
-    initNodePalette();      // 👈 动态挂载左侧工具库
-    await loadFlowFromDB(); 
-    renderNodes();
-    setTimeout(renderLinks, 50); 
-    updateCanvasTransform();
-};
-
-// ==========================================
-// 🖱️ 画布拖拽监听 (响应来自侧边栏的拖放请求)
-// ==========================================
-viewport.addEventListener('dragover', (e) => {
-    // 嗅探：如果拖拽的是工具箱里的节点，则允许在此释放
-    if (e.dataTransfer.types.includes('veo-node-type')) {
-        e.preventDefault(); 
-        e.dataTransfer.dropEffect = 'copy';
-    }
-});
-
-viewport.addEventListener('drop', (e) => {
-    const nodeType = e.dataTransfer.getData('veo-node-type');
-    if (nodeType) {
-        e.preventDefault();
-        e.stopPropagation();
-        // 精准计算落在世界里的真实坐标
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / flowState.transform.scale;
-        const y = (e.clientY - rect.top) / flowState.transform.scale;
-        
-        spawnNode(nodeType, x, y); // 触发落子！
-    }
-});
-
-// ==========================================
-// 🔪 生命与毁灭引擎 (断线、删除、右键菜单)
-// ==========================================
-
-// 1. 双击引脚断线逻辑
 window.disconnectPort = function(e, nodeId, portId) {
     e.stopPropagation();
     const initialLen = flowState.links.length;
-    // 过滤掉所有起点或终点是当前引脚的连线
     flowState.links = flowState.links.filter(l => !(
         (l.source === nodeId && l.sourcePort === portId) ||
         (l.target === nodeId && l.targetPort === portId)
@@ -622,36 +461,23 @@ window.disconnectPort = function(e, nodeId, portId) {
 };
 
 // ==========================================
-// 🧩 统一插件化中枢 (Infinity Plugin Registry)
+// 🧩 统一插件化中枢
 // ==========================================
 class FlowPluginManager {
-    constructor() {
-        this.plugins = new Map();
-    }
-
-    /**
-     * 注册一个新的多模态节点插件
-     * @param {string} type 节点全局唯一标识
-     * @param {object} schema 节点的 UI 蓝图定义
-     * @param {function} executor 节点的核心执行逻辑 (需返回 {type, data, metadata})
-     */
+    constructor() { this.plugins = new Map(); }
     register(type, schema, executor) {
-        if (this.plugins.has(type)) {
-            console.warn(`⚠️ 插件 [${type}] 已存在，正在被覆盖注册。`);
-        }
-        schema.type = type; // 强制注入类型标识
+        if (this.plugins.has(type)) console.warn(`⚠️ 插件 [${type}] 已存在，正在被覆盖注册。`);
+        schema.type = type; 
         this.plugins.set(type, { schema, executor });
         console.log(`🔌 [插件挂载] ${schema.title} (${type})`);
     }
-
     getSchema(type) { return this.plugins.get(type)?.schema; }
     getExecutor(type) { return this.plugins.get(type)?.executor; }
     getAllSchemas() { return Array.from(this.plugins.values()).map(p => p.schema); }
 }
 
-// 实例化全局插件管理器
 window.PluginManager = new FlowPluginManager();
-// 确保双向绑定引擎存在
+
 window.updateNodeData = function(nodeId, key, value) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (node) {
@@ -660,47 +486,33 @@ window.updateNodeData = function(nodeId, key, value) {
     }
 };
 
-// 🌟 新增：拦截节点内部的图片上传，利用 FileReader 极速转为 Base64 内存流
 window.handleNodeImageUpload = function(e, nodeId, inputId) {
     const file = e.target.files[0];
     if (!file) return;
-    
     const reader = new FileReader();
     reader.onloadend = () => {
-        // 数据写入全局状态机
         updateNodeData(nodeId, inputId, reader.result);
-        // 靶向刷新 UI，立刻展示图片缩略图
         renderNodes(); 
     };
-    // 读取为 Data URL (Base64)
     reader.readAsDataURL(file);
-    
-    // 清空 input value，确保同一张图片重复上传能触发 onchange
     e.target.value = '';
 };
 
-// 👇👇👇 直接在这里追加万能拖拽解析器 👇👇👇
 window.handleNodeImageDrop = async function(e, nodeId, inputId) {
-    e.preventDefault();
-    e.stopPropagation();
-
+    e.preventDefault(); e.stopPropagation();
     let srcToUse = null;
-
-    // 1. 尝试解析从侧边栏【全局素材库】拖过来的 JSON 内存指针
     try {
         const jsonStr = e.dataTransfer.getData('application/json');
         if (jsonStr) {
             const meta = JSON.parse(jsonStr);
-            // 调用 db.js 里的全局函数，直接从 IndexedDB 提取跨页面素材
             const t = await getTaskDB(meta.taskId); 
             if (t && t.src) {
                 console.log("🌟 [跨维传输] 成功捕获全局素材库图片！");
-                srcToUse = await blobToBase64(t.src); // 将 Blob 转为内存流供节点消费
+                srcToUse = await blobToBase64(t.src); 
             }
         }
     } catch(err) {}
 
-    // 2. 兜底方案：如果不是跨页面素材，则尝试解析电脑桌面拖进来的物理文件
     if (!srcToUse && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
         if (file) {
@@ -713,19 +525,14 @@ window.handleNodeImageDrop = async function(e, nodeId, inputId) {
         }
     }
 
-    // 3. 注入数据并靶向刷新 UI
     if (srcToUse) {
         updateNodeData(nodeId, inputId, srcToUse);
-        
-        // 🌟 靶向更新 DOM 缩略图，杜绝重绘
         const uploadUI = document.getElementById(`img-upload-ui-${nodeId}-${inputId}`);
         if (uploadUI) {
             const textSpan = uploadUI.querySelector('.img-upload-text');
             if (textSpan) textSpan.innerText = '更换图片';
-            
             let thumbImg = uploadUI.querySelector('.img-preview-thumb');
             if (!thumbImg) {
-                // 如果是第一次上传，创建 img 标签
                 thumbImg = document.createElement('img');
                 thumbImg.className = 'img-preview-thumb';
                 thumbImg.style.cssText = 'width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);';
@@ -736,24 +543,18 @@ window.handleNodeImageDrop = async function(e, nodeId, inputId) {
         }
     }
 };
-// 3. 动态创建右键菜单 DOM
+
 const ctxMenu = document.createElement('div');
 ctxMenu.id = 'veo-context-menu';
-ctxMenu.style.cssText = `
-    position: absolute; display: none; z-index: 1000; background: rgba(25, 25, 30, 0.95);
-    backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.8); padding: 6px; min-width: 160px; color: #fff; font-size: 13px;
-`;
+ctxMenu.style.cssText = `position: absolute; display: none; z-index: 1000; background: rgba(25, 25, 30, 0.95); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); padding: 6px; min-width: 160px; color: #fff; font-size: 13px;`;
 document.body.appendChild(ctxMenu);
 
-// 全局隐藏菜单
 window.addEventListener('click', () => ctxMenu.style.display = 'none');
-viewport.addEventListener('mousedown', () => ctxMenu.style.display = 'none'); // 画布拖拽时也隐藏
+viewport.addEventListener('mousedown', () => ctxMenu.style.display = 'none'); 
 
 let menuTargetNodeId = null; 
 let menuClickWorldPos = { x: 0, y: 0 };
 
-// 4. 右键节点 -> 唤出【删除菜单】
 window.showNodeMenu = function(e, nodeId) {
     e.preventDefault(); e.stopPropagation();
     menuTargetNodeId = nodeId;
@@ -771,15 +572,12 @@ window.deleteNode = function(nodeId) {
     flowState.nodes = flowState.nodes.filter(n => n.id !== nodeId);
     flowState.links = flowState.links.filter(l => l.source !== nodeId && l.target !== nodeId); 
     renderNodes(); renderLinks();
-    saveFlowToDB(); // 🌟 补丁：销毁节点后存档
+    saveFlowToDB(); 
 };
 
-// 5. 右键画布空白处 -> 唤出【添加节点菜单】
 viewport.addEventListener('contextmenu', (e) => {
-    if (e.target !== viewport && e.target !== svgLayer) return; // 确保点的是空白处
+    if (e.target !== viewport && e.target !== svgLayer) return;
     e.preventDefault(); e.stopPropagation();
-    
-    // 记录鼠标在真实画布世界里的坐标
     const rect = canvas.getBoundingClientRect();
     menuClickWorldPos.x = (e.clientX - rect.left) / flowState.transform.scale;
     menuClickWorldPos.y = (e.clientY - rect.top) / flowState.transform.scale;
@@ -801,23 +599,19 @@ viewport.addEventListener('contextmenu', (e) => {
 window.spawnNode = function(blueprintType, spawnX, spawnY) {
     const blueprint = PluginManager.getSchema(blueprintType);
     if (!blueprint) return console.error(`❌ 找不到节点蓝图: ${blueprintType}`);
-    const newNode = JSON.parse(JSON.stringify(blueprint)); // 深拷贝蓝图
-    
+    const newNode = JSON.parse(JSON.stringify(blueprint)); 
     newNode.id = 'node_' + Date.now();
-    // 🌟 优先使用传入的坐标（拖拽落点），没有则使用右键菜单点击的坐标
     newNode.x = spawnX !== undefined ? spawnX : menuClickWorldPos.x;
     newNode.y = spawnY !== undefined ? spawnY : menuClickWorldPos.y;
-    
     flowState.nodes.push(newNode);
-    renderNodes(); // 🌟 补全：重新渲染画布
-    if (typeof saveFlowToDB === 'function') saveFlowToDB(); // 🌟 补全：数据本地化存档
+    renderNodes(); 
+    if (typeof saveFlowToDB === 'function') saveFlowToDB(); 
 };
 
 // ==========================================
-// 🧰 左侧节点工具箱 (Node Palette UI 生成器)
+// 🧰 左侧节点工具箱 (纯净去重版)
 // ==========================================
 window.initNodePalette = function() {
-    // 避免重复挂载
     let palette = document.getElementById('global-node-palette');
     if (!palette) {
         palette = document.createElement('div');
@@ -849,32 +643,24 @@ window.initNodePalette = function() {
     }
     palette.innerHTML = html;
 
-    // 🌟 核心：注入无依赖的原生折叠把手按钮（带防重机制）
     if (!document.querySelector('.palette-toggle-btn')) {
         const toggleBtn = document.createElement('div');
         toggleBtn.className = 'palette-toggle-btn';
         toggleBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">chevron_left</span>';
-        toggleBtn.onclick = () => {
-            document.body.classList.toggle('palette-collapsed');
-        };
+        toggleBtn.onclick = () => document.body.classList.toggle('palette-collapsed');
         document.body.appendChild(toggleBtn);
     }
 };
 
-// 🌟 异步启动引擎，先读档再渲染
 window.initFlowEngine = async function() {
-    initNodePalette();      // 👈 动态挂载左侧工具库
+    initNodePalette();      
     await loadFlowFromDB(); 
     renderNodes();
     setTimeout(renderLinks, 50); 
     updateCanvasTransform();
 };
 
-// ==========================================
-// 🖱️ 画布拖拽监听 (响应来自侧边栏的拖放请求)
-// ==========================================
 viewport.addEventListener('dragover', (e) => {
-    // 嗅探：如果拖拽的是工具箱里的节点，则允许在此释放
     if (e.dataTransfer.types.includes('veo-node-type')) {
         e.preventDefault(); 
         e.dataTransfer.dropEffect = 'copy';
@@ -884,99 +670,56 @@ viewport.addEventListener('dragover', (e) => {
 viewport.addEventListener('drop', (e) => {
     const nodeType = e.dataTransfer.getData('veo-node-type');
     if (nodeType) {
-        e.preventDefault();
-        e.stopPropagation();
-        // 精准计算落在世界里的真实坐标
+        e.preventDefault(); e.stopPropagation();
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) / flowState.transform.scale;
         const y = (e.clientY - rect.top) / flowState.transform.scale;
-        
-        spawnNode(nodeType, x, y); // 触发落子！
+        spawnNode(nodeType, x, y);
     }
 });
-// ==========================================
-// ⚙️ Phase 6: DAG 拓扑执行引擎 (工业级重构版)
-// ==========================================
 
+// ==========================================
+// ⚙️ Phase 6: DAG 拓扑执行引擎
+// ==========================================
 window.runFlow = async function() {
     console.log("🚀 [执行引擎] 启动工业级 DAG 拓扑扫描...");
-
-    // 1. 构建依赖关系图谱
-    const nodeDeps = {};      // 记录每个节点依赖的【上游节点列表】
-    const nodePromises = {};  // 记录每个节点的【执行 Promise】，用于下游等待
+    const nodeDeps = {};      
+    const nodePromises = {};  
     
-    // 初始化所有节点的依赖表
-    flowState.nodes.forEach(n => {
-        nodeDeps[n.id] = new Set();
-    });
-
-    // 根据连线填充依赖关系
+    flowState.nodes.forEach(n => nodeDeps[n.id] = new Set());
     flowState.links.forEach(link => {
-        if (nodeDeps[link.target]) {
-            nodeDeps[link.target].add(link.source);
-        }
+        if (nodeDeps[link.target]) nodeDeps[link.target].add(link.source);
     });
 
-    // 2. 检查循环引用 (简单的拓扑排序死锁检测)
-    let executionPlan = [];
     let readyQueue = flowState.nodes.filter(n => nodeDeps[n.id].size === 0).map(n => n.id);
-    
-    if (readyQueue.length === 0) {
-        return alert("⚠️ 错误：未找到起点节点，或者工作流中存在死循环连线！");
-    }
+    if (readyQueue.length === 0) return alert("⚠️ 错误：未找到起点节点，或者工作流中存在死循环连线！");
 
-    // 3. 核心升级：基于 Promise 链的智能并发执行
-    // 这次我们不手动 `setTimeout` 递归了，而是让系统自行判断依赖是否满足
-    console.log(`[执行引擎] 探测到 ${readyQueue.length} 个起源节点，构建执行管线...`);
-
-    // 重置所有节点的状态和结果
     flowState.nodes.forEach(n => {
-        n.result = null; // 清空上次跑的缓存
+        n.result = null; 
         setNodeStatus(n.id, 'idle');
     });
 
-    // 封装一个包装函数：等待上游，再执行自己
     const scheduleNode = async (nodeId) => {
-        // 如果这个节点的 Promise 已经创建了，说明已经在管线里了，直接返回
         if (nodePromises[nodeId]) return nodePromises[nodeId];
-
         const deps = Array.from(nodeDeps[nodeId]);
-        
-        // 【核心等待机制】：必须等待所有上游节点的 Promise 执行完毕！
         const upstreamPromises = deps.map(depId => scheduleNode(depId));
         
-        // 创建自己的执行 Promise
         nodePromises[nodeId] = (async () => {
-            // 等待所有上游兄弟干完活
-            if (upstreamPromises.length > 0) {
-                console.log(`   ⏳ [管线调度] 节点 ${nodeId} 正在等待上游就绪...`);
-                await Promise.all(upstreamPromises);
-            }
-            // 上游全跑完了，开始跑自己
+            if (upstreamPromises.length > 0) await Promise.all(upstreamPromises);
             await executeNode(nodeId);
         })();
-
         return nodePromises[nodeId];
     };
 
-    // 4. 触发全图执行
     try {
-        // 找出所有节点，把它们全塞进调度管线里去
         const allExecutions = flowState.nodes.map(n => scheduleNode(n.id));
-        
-        // 等待整个图执行完毕
         await Promise.all(allExecutions);
         console.log("✅ [执行引擎] 工作流全链路并发执行完毕！");
-        
     } catch (err) {
         console.error("❌ [执行引擎] 链路崩溃:", err);
         alert("执行流异常中断，请查看控制台日志。");
     }
 };
-
-// ==========================================
-// 🔌 真实 API 对接与异步轮询引擎 (终极防弹版)
-// ==========================================
 
 const BASE_N8N_URL = 'https://api.wallyai.top/webhook'; 
 const API_HEADERS = { 
@@ -984,28 +727,12 @@ const API_HEADERS = {
     'wally123': sessionStorage.getItem('veo_admin_pwd') || '2026veo' 
 };
 
-// ==========================================
-// 🛡️ 工业级图片载荷处理器 (彻底告别三方代理)
-// ==========================================
 async function prepareImagePayload(src) {
     if (!src) return undefined;
-
-    // 1. 已经是 Base64 编码，直接放行
     if (src.startsWith('data:image')) return src;
-
-    // 2. 如果是纯网络 URL (http/https)，直接丢给后端！
-    // 💡 架构核心：CORS 只是浏览器的限制，服务端的 n8n 和 API 厂商没有跨域限制！
-    // 让 Veo 模型的服务器自己去拉取这个 URL，速度最快，数据最安全。
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-        console.log("   🌐 探测到公网 URL，直接透传交由大模型服务端拉取:", src);
-        return src;
-    }
-
-    // 3. 只有本地 Blob 内存文件 (blob:http://...)，服务端无法访问，才必须在前端转成 Base64
+    if (src.startsWith('http://') || src.startsWith('https://')) return src;
     if (src.startsWith('blob:')) {
-        console.log("   📦 探测到本地 Blob 文件，正在安全序列化为 Base64...");
         try {
-            // 本地读取 Blob 不存在跨域问题
             const res = await fetch(src);
             const blob = await res.blob();
             return await new Promise((resolve, reject) => {
@@ -1019,25 +746,19 @@ async function prepareImagePayload(src) {
             return undefined;
         }
     }
-
-    return src; // 兜底原样返回
+    return src;
 }
 
-// 🌟 新增：统一载荷拆包器 (Unified Payload Resolver)
 function resolvePayloadData(input) {
     if (!input) return undefined;
-    // 如果是上游节点传过来的标准结构体
     if (typeof input === 'object' && input.data) return input.data;
-    // 如果是本地控件直传的 Base64 纯字符串
     if (typeof input === 'string') return input;
     return undefined;
 }
 
 // ==========================================
-// 📦 内置官方插件装载区 (全栈升级版)
+// 📦 官方插件装载区
 // ==========================================
-
-// 1. 基础模块：文本节点
 PluginManager.register('base_text',
     {
         title: 'T 文本输入', category: '模块',
@@ -1048,7 +769,6 @@ PluginManager.register('base_text',
     async (node, nodeData) => ({ type: 'text', data: nodeData.content || '', metadata: {} })
 );
 
-// 2. 基础模块：图片节点
 PluginManager.register('base_image',
     {
         title: '🖼️ 图片输入', category: '模块',
@@ -1062,7 +782,6 @@ PluginManager.register('base_image',
     }
 );
 
-// 3. 注册：GPT 多模态生图 (🌟 新增 in_prompt 端口)
 PluginManager.register('tool_image_gen',
     {
         title: '🎨 GPT 多模态生图', category: 'AI 生成',
@@ -1081,17 +800,13 @@ PluginManager.register('tool_image_gen',
         data: {}
     },
     async (node, nodeData, upstreamInputs) => {
-        // 🌟 优先读取连线的文本！
         let finalPrompt = resolvePayloadData(upstreamInputs.in_prompt) || nodeData.prompt || '';
         if (finalPrompt.trim() === '') throw new Error("缺少正向提示词！");
-        
         let finalSize = nodeData.size || '1024x1024';
         if (finalSize === '自定义 (AI嗅探)') { finalSize = ""; finalPrompt += ` 画面比例${nodeData.customW || 9}:${nodeData.customH || 21}`; }
-        
         const refImgSource = resolvePayloadData(upstreamInputs.in_ref) || resolvePayloadData(nodeData.local_ref);
         const payload = { prompt: finalPrompt.trim(), size: finalSize, channel: (nodeData.channel && nodeData.channel.includes('2')) ? 'channel_2' : 'channel_1', images: refImgSource ? [refImgSource] : [] };
         
-        console.log("   📦 发送生图请求:", payload);
         const res = await fetch(`${BASE_N8N_URL}/proxy-image-gen`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
         const rawText = await res.text();
         if (!res.ok) throw new Error(`HTTP ${res.status} 异常: ${rawText}`);
@@ -1104,7 +819,6 @@ PluginManager.register('tool_image_gen',
     }
 );
 
-// 4. 注册：Veo 视频生成 (🌟 升级款：支持 3 张通用垫图阵列)
 PluginManager.register('tool_video_gen',
     {
         title: '🎞️ Veo 视频生成', category: 'AI 生成',
@@ -1138,13 +852,10 @@ PluginManager.register('tool_video_gen',
         const firstFrame = await prepareImagePayload(resolvePayloadData(upstreamInputs.in_first_frame) || resolvePayloadData(nodeData.local_first_frame));
         const lastFrame = await prepareImagePayload(resolvePayloadData(upstreamInputs.in_last_frame) || resolvePayloadData(nodeData.local_last_frame));
         
-        // 🌟 核心改进：聚合处理 3 张通用连线或直传垫图
         const refImages = [];
         for (let i = 1; i <= 3; i++) {
             const refRaw = resolvePayloadData(upstreamInputs[`in_ref${i}`]) || resolvePayloadData(nodeData[`local_ref${i}`]);
-            if (refRaw) {
-                refImages.push(await prepareImagePayload(refRaw));
-            }
+            if (refRaw) refImages.push(await prepareImagePayload(refRaw));
         }
         
         if (!firstFrame && refImages.length === 0) throw new Error("缺少首帧或通用垫图，Veo 拒绝执行！");
@@ -1160,14 +871,12 @@ PluginManager.register('tool_video_gen',
             firstFrame: firstFrame || undefined, lastFrame: lastFrame || undefined, references: refImages.length > 0 ? refImages : undefined
         };
         
-        console.log("   📦 发送视频提交请求:", payload);
         const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
         const submitRawText = await submitRes.text();
         if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
         
         let submitData; try { submitData = JSON.parse(submitRawText); } catch (e) { throw new Error("接口返回非 JSON"); }
         if (!submitData.taskId) throw new Error("未获得 TaskID: " + submitRawText);
-        console.log(`   ⏳ 视频已提交 (ID: ${submitData.taskId})，启动轮询...`);
 
         let isComplete = false, finalVideoUrl = "";
         while (!isComplete) {
@@ -1185,77 +894,8 @@ PluginManager.register('tool_video_gen',
     }
 );
 
-// 2. 注册：Veo 视频生成
-PluginManager.register(
-    'tool_video_gen',
-    {
-        title: '🎞️ Veo 视频生成',
-        ports: {
-            in: [
-                { id: 'in_first_frame', type: 'image', label: '首帧参考图 (优先)' },
-                { id: 'in_last_frame', type: 'image', label: '尾帧参考图 (选填)' },
-                { id: 'in_ref', type: 'image', label: '通用垫图 (兜底)' }
-            ],
-            out: [{ id: 'out_video', type: 'video', label: '输出视频' }]
-        },
-        inputs: [
-            { id: 'local_first_frame', type: 'image_upload', label: '直传首帧 (优先于连线)' },
-            { id: 'local_last_frame', type: 'image_upload', label: '直传尾帧 (选填)' },
-            { id: 'local_ref', type: 'image_upload', label: '直传通用垫图 (Cmp模型)' },
-            { id: 'prompt', type: 'textarea', label: '运镜与动作描述 (选填)', default: '' },
-            { id: 'model', type: 'select', label: '生成模型', options: ['veo3.1', 'veo3.1-4k', 'veo3.1-components', 'veo3.1-components-4k'], default: 'veo3.1' },
-            { id: 'aspectRatio', type: 'select', label: '画幅比例', options: ['16:9', '9:16', '1:1'], default: '16:9' },
-            { id: 'enhancePrompt', type: 'select', label: 'AI 扩写提示词', options: ['开启 (推荐)', '关闭 (原词)'], default: '开启 (推荐)' },
-            { id: 'enableUpsample', type: 'select', label: '画质超分增强', options: ['关闭 (标准)', '开启 (更慢)'], default: '关闭 (标准)' },
-            { id: 'autoRetry', type: 'select', label: '失败挂机重试', options: ['关闭', '开启 (无限重试)'], default: '关闭' }
-        ],
-        data: {}
-    },
-    async (node, nodeData, upstreamInputs) => {
-        // [保持原 tool_video_gen 的执行逻辑不变]
-        const firstFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_first_frame || upstreamInputs.in_first_frame));
-        const lastFrame = await prepareImagePayload(resolvePayloadData(nodeData.local_last_frame || upstreamInputs.in_last_frame));
-        const refRaw = resolvePayloadData(nodeData.local_ref || upstreamInputs.in_ref);
-        const refImages = refRaw ? [await prepareImagePayload(refRaw)] : [];
-        if (!firstFrame && refImages.length === 0) throw new Error("缺少首帧或通用垫图，Veo 拒绝执行！");
-        let targetModel = nodeData.model || "veo3.1";
-        if (!firstFrame && refImages.length > 0 && !targetModel.includes('components')) {
-            targetModel = targetModel === 'veo3.1' ? 'veo3.1-components' : 'veo3.1-components-4k';
-        }
-        const payload = {
-            model: targetModel, prompt: nodeData.prompt || '', aspectRatio: nodeData.aspectRatio || "16:9",
-            enhancePrompt: nodeData.enhancePrompt !== '关闭 (原词)', enableUpsample: nodeData.enableUpsample === '开启 (更慢)',
-            firstFrame: firstFrame || undefined, lastFrame: lastFrame || undefined, references: refImages.length > 0 ? refImages : undefined
-        };
-        console.log("   📦 发送视频提交请求:", payload);
-        const submitRes = await fetch(`${BASE_N8N_URL}/proxy-submit`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify(payload) });
-        const submitRawText = await submitRes.text();
-        if (!submitRes.ok) throw new Error(`HTTP ${submitRes.status} 异常: ${submitRawText}`);
-        let submitData;
-        try { submitData = JSON.parse(submitRawText); } catch (e) { throw new Error("提交接口返回非 JSON 数据"); }
-        if (!submitData.taskId) throw new Error("提交失败，未获得 TaskID: " + submitRawText);
-        console.log(`   ⏳ 视频已提交云端 (ID: ${submitData.taskId})，启动异步轮询...`);
-
-        let isComplete = false, finalVideoUrl = "";
-        while (!isComplete) {
-            if (node._cancelToken) throw new Error("⛔ 手动中止");
-            for (let i = 0; i < 15; i++) {
-                if (node._cancelToken) throw new Error("⛔ 手动中止");
-                await new Promise(r => setTimeout(r, 1000));
-            }
-            const pollRes = await fetch(`${BASE_N8N_URL}/proxy-poll`, { method: 'POST', headers: API_HEADERS, body: JSON.stringify({ taskId: submitData.taskId }) });
-            const pollRawText = await pollRes.text();
-            if (!pollRes.ok) throw new Error(`轮询异常: ${pollRawText}`);
-            let pollData;
-            try { pollData = JSON.parse(pollRawText); } catch (e) { throw new Error("轮询返回非 JSON"); }
-            if (pollData.status === 'success') { finalVideoUrl = pollData.videoUrl; isComplete = true; } 
-            else if (pollData.status === 'failed') { throw new Error(`生成失败: ${pollData.raw_status}`); }
-        }
-        return { type: 'video', data: finalVideoUrl, metadata: { source: targetModel, aspectRatio: nodeData.aspectRatio || "16:9" } };
-    }
-);
 // ==========================================
-// 🚀 新版极简执行引擎核心 (仅负责路由与状态调度)
+// 🚀 执行调度与状态 UI
 // ==========================================
 async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
@@ -1263,10 +903,8 @@ async function executeNode(nodeId) {
 
     setNodeStatus(nodeId, 'running');
     const nodeStartTime = Date.now();
-    console.log(`\n▶️ [启动节点] ${node.title}`);
-
+    
     try {
-        // 1. 索要上游弹药
         let upstreamInputs = {};
         const incomingLinks = flowState.links.filter(l => l.target === nodeId);
         for (let link of incomingLinks) {
@@ -1274,38 +912,24 @@ async function executeNode(nodeId) {
             if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result; 
         }
 
-        // 2. 🌟 靶向路由调用执行器 (直接从 PluginManager 获取)
         const executor = PluginManager.getExecutor(node.type);
         if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
-        // 🌟 核心激活：无限重试与中止信号
         const isInfiniteRetry = (node.data && (node.data.autoRetry === '开启 (无限重试)' || node.data.autoRetry === true));
         let attempt = 0;
         let finalResult = null;
-        node._cancelToken = false; // 初始化本节点的中止信号
+        node._cancelToken = false; 
 
-        // 🛡️ 无限重试装甲循环
         while (true) {
             if (node._cancelToken) throw new Error("⛔ 已手动中止");
-            
             try {
-                if (attempt > 0) {
-                    console.log(`   🔄 [重试机制] 正在发起第 ${attempt} 次重试...`);
-                    setNodeStatus(nodeId, 'running', { retryCount: attempt });
-                }
+                if (attempt > 0) setNodeStatus(nodeId, 'running', { retryCount: attempt });
                 finalResult = await executor(node, node.data || {}, upstreamInputs);
-                break; // 成功则跳出重试循环
-                
+                break; 
             } catch (err) {
-                if (node._cancelToken) throw new Error("⛔ 已手动中止"); // 如果执行被强制中断，直接抛出，不参与重试
-                
+                if (node._cancelToken) throw new Error("⛔ 已手动中止"); 
                 attempt++;
-                if (!isInfiniteRetry) {
-                    throw err; // 没开重试，直接抛出死亡
-                }
-                console.warn(`   ⚠️ 节点运行失败，等待 5 秒后自动重试... (${err.message})`);
-                
-                // 5 秒冷却期，同样支持秒级中止响应
+                if (!isInfiniteRetry) throw err; 
                 for(let i = 0; i < 5; i++) {
                     if (node._cancelToken) throw new Error("⛔ 已手动中止");
                     await new Promise(r => setTimeout(r, 1000));
@@ -1313,36 +937,23 @@ async function executeNode(nodeId) {
             }
         }
 
-        // 3. 收尾流转与记账
-        // 3. 收尾流转与记账
         node.result = finalResult; 
-        saveFlowToDB(); // 🌟 节点出结果了，立刻存档！
+        saveFlowToDB(); 
         
         const costTime = ((Date.now() - nodeStartTime) / 1000).toFixed(1);
         setNodeStatus(nodeId, 'success', { costTime: costTime });
         document.getElementById(`preview-${nodeId}`).innerHTML = renderPreview(node);
-        console.log(`   ✅ [节点产出] ${node.title} 成功 ->`, finalResult);
-
         await recordNodeBilling(node);
 
     } catch (error) {
-        console.error(`   ❌ [崩溃拦截] ${node.title} 异常:`, error.message);
         setNodeStatus(nodeId, 'error');
-        // 🌟 修复：必须向外抛出错误，彻底阻断下游管线的幻想！
         throw error; 
     }
 }
-// ==========================================
-// 💡 节点 UI 状态控制器 (极客读秒与视觉增强版)
-// ==========================================
 
-// 🌟 新增：全局中止指令发射器
 window.cancelNodeExecution = function(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
-    if (node) {
-        node._cancelToken = true; // 发送神经元中止信号
-        console.log(`🛑 收到手动中止指令，正在切断流转: ${node.title}`);
-    }
+    if (node) node._cancelToken = true; 
 };
 
 function setNodeStatus(nodeId, status, meta = {}) {
@@ -1350,7 +961,6 @@ function setNodeStatus(nodeId, status, meta = {}) {
     if (!el) return;
     el.style.transition = 'all 0.3s ease';
 
-    // 1. 动态注入/获取节点的专属状态栏
     let statusBar = el.querySelector('.node-status-bar');
     if (!statusBar) {
         statusBar = document.createElement('div');
@@ -1359,103 +969,76 @@ function setNodeStatus(nodeId, status, meta = {}) {
         el.appendChild(statusBar);
     }
 
-    // 2. 垃圾回收：清理上一轮的计时器
     if (el.dataset.timerId) {
         clearInterval(parseInt(el.dataset.timerId));
         delete el.dataset.timerId;
     }
 
-    // 🌟 动态数据流向穿梭特效
     const incomingLinks = flowState.links.filter(l => l.target === nodeId);
     incomingLinks.forEach(link => {
         const pathEl = document.getElementById('svgpath_' + link.id);
         if (pathEl) {
-            if (status === 'running') {
-                pathEl.classList.add('link-flowing');
-            } else {
-                pathEl.classList.remove('link-flowing');
-            }
+            if (status === 'running') pathEl.classList.add('link-flowing');
+            else pathEl.classList.remove('link-flowing');
         }
     });
 
-    // 3. 状态分支渲染
     if (status === 'running') {
         el.style.boxShadow = '0 0 30px 5px rgba(56, 189, 248, 0.4)';
         el.style.borderColor = '#38bdf8';
-        
         statusBar.style.background = 'rgba(56, 189, 248, 0.15)';
         statusBar.style.color = '#38bdf8';
         statusBar.style.border = '1px solid rgba(56, 189, 248, 0.3)';
         statusBar.style.opacity = '1';
         statusBar.style.bottom = '-30px'; 
-        statusBar.style.pointerEvents = 'auto'; // 🌟 必须开启，否则按钮点不到！
+        statusBar.style.pointerEvents = 'auto'; 
         
         const startTime = Date.now();
-        
-        // 🌟 封装一个即刻执行的渲染函数，把中止按钮画上去
         const renderStatusUI = () => {
             const sec = Math.floor((Date.now() - startTime) / 1000);
             const mm = String(Math.floor(sec / 60)).padStart(2, '0');
             const ss = String(sec % 60).padStart(2, '0');
             const retryStr = meta.retryCount ? ` <span style="color:#f59e0b">(重试 ${meta.retryCount})</span>` : '';
             statusBar.innerHTML = `⚙️ 引擎轰鸣中...${retryStr} <span style="font-weight:bold; font-size:12px; margin-left:4px;">${mm}:${ss}</span>
-            <button onclick="cancelNodeExecution('${nodeId}'); event.stopPropagation();" onmousedown="event.stopPropagation();" style="margin-left:8px; padding:2px 8px; font-size:11px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.5); border-radius:4px; cursor:pointer; pointer-events:auto; transition:0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.4)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">中止</button>`;
+            <button onclick="cancelNodeExecution('${nodeId}'); event.stopPropagation();" onmousedown="event.stopPropagation();" style="margin-left:8px; padding:2px 8px; font-size:11px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.5); border-radius:4px; cursor:pointer; pointer-events:auto; transition:0.2s;">中止</button>`;
         };
-        
-        renderStatusUI(); // 立即渲染一次，避免等待 1 秒才出按钮
+        renderStatusUI(); 
         const timerId = setInterval(renderStatusUI, 1000); 
-        
         el.dataset.timerId = timerId;
 
     } else if (status === 'success') {
         el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
         el.style.borderColor = '#22c55e';
-        
         statusBar.style.background = 'rgba(34, 197, 94, 0.15)';
         statusBar.style.color = '#22c55e';
         statusBar.style.border = '1px solid rgba(34, 197, 94, 0.3)';
         statusBar.style.opacity = '1';
-        statusBar.style.pointerEvents = 'none'; // 🌟 运行结束恢复穿透
-        el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
-        el.style.borderColor = '#22c55e';
-        
-        statusBar.style.background = 'rgba(34, 197, 94, 0.15)';
-        statusBar.style.color = '#22c55e';
-        statusBar.style.border = '1px solid rgba(34, 197, 94, 0.3)';
-        statusBar.style.opacity = '1';
-        
+        statusBar.style.pointerEvents = 'none'; 
         const costTime = meta.costTime || 0;
         statusBar.innerHTML = `✅ 跑通完毕 ⏱️ <span style="font-weight:bold;">${costTime}s</span>`;
-        
         setTimeout(() => { statusBar.style.opacity = '0'; statusBar.style.bottom = '-24px'; }, 4000);
 
     } else if (status === 'error') {
         el.style.boxShadow = '0 0 30px 5px rgba(239, 68, 68, 0.3)';
         el.style.borderColor = '#ef4444';
-        
         statusBar.style.background = 'rgba(239, 68, 68, 0.15)';
         statusBar.style.color = '#ef4444';
         statusBar.style.border = '1px solid rgba(239, 68, 68, 0.3)';
         statusBar.style.opacity = '1';
         statusBar.innerHTML = `❌ 链路崩溃`;
-        
     } else {
-        // Idle (空闲状态)
         el.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
         el.style.borderColor = 'rgba(255,255,255,0.1)';
         statusBar.style.opacity = '0';
     }
 }
+
 // ==========================================
-// 💰 独立记账结算器 (双引擎账单互通核心)
+// 💰 独立记账与虫洞引擎
 // ==========================================
 async function recordNodeBilling(node) {
     if (!node || !node.data) return;
-    
-    let cost = 0;
-    let detailStr = '';
-
-    // 1. 严格按照 index.html 的官方费率计算
+    let cost = 0; let detailStr = '';
     if (node.type === 'tool_image_gen') {
         const isChannel2 = node.data.channel && node.data.channel.includes('2');
         cost = isChannel2 ? 0.06 : 0.084;
@@ -1467,84 +1050,44 @@ async function recordNodeBilling(node) {
         detailStr = `Pro工作流：Veo 视频生成 (${is4K ? '4K高画质' : '标准画质'})`;
     }
 
-    // 2. 写入 IndexedDB (跨页面共享的数据金库)
     if (cost > 0) {
-        const record = {
-            id: 'bill_flow_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
-            timestamp: Date.now(),
-            amount: cost,
-            detail: detailStr,
-            nodeId: node.id
-        };
-
+        const record = { id: 'bill_flow_' + Date.now() + '_' + Math.random().toString(36).substr(2,5), timestamp: Date.now(), amount: cost, detail: detailStr, nodeId: node.id };
         return new Promise((resolve) => {
             try {
-                // 这里的 db 来自你的 db.js 全局变量
                 const tx = db.transaction('billing', 'readwrite');
                 tx.objectStore('billing').put(record);
-                
                 tx.oncomplete = () => {
-                    console.log(`💸 [记账中心] 节点 ${node.id} 结算完成: -￥${cost} (${detailStr})`);
-                    
-                    // 🌟 触发 UI 刷新机制：如果主引擎有全局刷新函数，直接调用
-                    // (兼容处理：如果 flow.html 和 index.html 是独立页面，可以使用事件派发)
-                    if (typeof window.updateTotalBalance === 'function') {
-                        window.updateTotalBalance(); 
-                    } else if (typeof sysBus !== 'undefined') {
-                        sysBus.emit('SYSTEM:BILLING_UPDATED', record);
-                    }
+                    if (typeof window.updateTotalBalance === 'function') window.updateTotalBalance(); 
+                    else if (typeof sysBus !== 'undefined') sysBus.emit('SYSTEM:BILLING_UPDATED', record);
                     resolve();
                 };
-                
-                tx.onerror = () => {
-                    console.warn("⚠️ [记账中心] 写入被拒绝或失败");
-                    resolve(); // 失败不阻塞业务流
-                };
-            } catch (error) {
-                console.warn("⚠️ [记账中心] 数据库事务异常 (可能 DB 未完全就绪):", error);
-                resolve();
-            }
+                tx.onerror = () => resolve();
+            } catch (error) { resolve(); }
         });
     }
 }
-// ==========================================
-// 🗂️ 虫洞引擎：全局素材库桥接 (跨越 IndexedDB)
-// ==========================================
 
 window.toggleMaterialDrawer = function() {
     const drawer = document.getElementById('material-drawer');
     if (drawer) {
         drawer.classList.toggle('open');
-        // 展开时自动刷新 DB 数据
-        if (drawer.classList.contains('open')) {
-            renderMaterialLibrary();
-        }
+        if (drawer.classList.contains('open')) renderMaterialLibrary();
     }
 };
 
 window.renderMaterialLibrary = async function() {
     const grid = document.getElementById('material-grid');
     if (!grid) return;
-    
     try {
-        // 1. 调用底层的 db.js 全量查询
         const tasks = await getAllTasksDB(); 
-        
-        // 2. 筛选出主页面里所有的 "本地图" 类型素材
         const materials = tasks.filter(t => t.type === 'local_image');
-        
         if (materials.length === 0) { 
             grid.innerHTML = `<div style="grid-column: span 2; text-align: center; padding: 40px 0; color: #555; font-size: 12px;">主画布仓库空空如也，请先去主页传图</div>`; 
             return; 
         }
-
         let html = '';
         materials.forEach(m => {
-            // 3. 借用 db.js 的专属协议极速挂载 Blob 内存流
             const url = getBlobUrl(m.id, m.src);
-            
-            // 🌟 核心破局：我们在这里给拖拽的数据包塞入一段 JSON 凭证
-            // 这恰好能被我们在上一步写的 handleNodeImageDrop "万能解析器" 完美拦截接管！
             html += `
                 <div class="material-item" draggable="true" 
                      ondragstart="event.dataTransfer.setData('application/json', JSON.stringify({taskId: '${m.id}', type: 'local'}))">
@@ -1552,24 +1095,17 @@ window.renderMaterialLibrary = async function() {
                 </div>
             `;
         });
-        
         grid.innerHTML = html;
-        console.log(`🌌 [虫洞引擎] 成功从 IndexedDB 映射 ${materials.length} 张素材`);
-        
     } catch (err) {
-        console.error("❌ 读取全局素材库失败 (请确保 db.js 已就绪):", err);
         grid.innerHTML = `<div style="color: #ef4444; font-size: 12px; grid-column: span 2;">数据库穿透异常</div>`;
     }
 };
-// 🌟 修复素材库无法关闭：全局侦听器
+
 document.addEventListener('mousedown', (e) => {
     const drawer = document.getElementById('material-drawer');
-    // 如果抽屉是开着的，且鼠标点击的位置不在抽屉内部，也不在触发按钮上
     if (drawer && drawer.classList.contains('open')) {
         const isClickInside = drawer.contains(e.target);
         const isClickToggleButton = e.target.closest('button[onclick="toggleMaterialDrawer()"]');
-        if (!isClickInside && !isClickToggleButton) {
-            drawer.classList.remove('open');
-        }
+        if (!isClickInside && !isClickToggleButton) drawer.classList.remove('open');
     }
 });

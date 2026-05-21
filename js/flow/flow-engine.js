@@ -77,7 +77,8 @@ flowStyleInj.innerHTML = `
         position: absolute; right: 24px; bottom: 24px; width: 180px; height: 120px;
         background: rgba(15, 15, 19, 0.85); backdrop-filter: blur(12px);
         border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; z-index: 101;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.6); overflow: hidden; pointer-events: none;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.6); overflow: hidden; 
+        pointer-events: auto; cursor: crosshair; /* 🚨 修复：允许点击与交互穿透 */
     }
     .flow-minimap-viewport {
         position: absolute; border: 1px solid rgba(167, 139, 250, 0.4);
@@ -108,7 +109,8 @@ let flowState = {
     links: [],
     // 🌟 新增高级交互状态
     selectedNodeIds: new Set(), 
-    selectionBox: { active: false, startX: 0, startY: 0 }
+    selectionBox: { active: false, startX: 0, startY: 0 },
+    minimap: { minX: 0, minY: 0, scale: 1 } // 🚨 新增：小地图逆向映射锚点
 };
 
 // 动态挂载原生框选框 DOM 到页面
@@ -302,6 +304,7 @@ window.toggleNodeInputs = function(nodeId) {
         if (arrow) arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'none';
     }
     if (typeof saveFlowToDB === 'function') saveFlowToDB();
+    if (typeof renderMinimap === 'function') renderMinimap();
 };
 
 // ==========================================
@@ -553,14 +556,17 @@ window.addEventListener('mouseup', (e) => {
 
     // 🌟 处理框选碰撞体积检测 (AABB 相交检测算法)
     if (flowState.selectionBox.active) {
+        
+        // 🚨 修复：必须先获取相交体积！一旦 display:none，元素的宽高就会变成 0，导致永远选不上！
+        const sRect = dragSelectBox.getBoundingClientRect();
+        
         flowState.selectionBox.active = false;
         dragSelectBox.style.display = 'none';
-
-        const sRect = dragSelectBox.getBoundingClientRect();
         
         // 如果只是轻点了一下，不触发框选
         if (sRect.width > 4 && sRect.height > 4) {
-            if (!e.shiftKey) flowState.selectedNodeIds.clear();
+            // 开始新的框选时，自动清空旧的选中集
+            flowState.selectedNodeIds.clear();
 
             flowState.nodes.forEach(node => {
                 const nodeEl = document.getElementById(node.id);
@@ -873,7 +879,8 @@ window.spawnNode = function(blueprintType, spawnX, spawnY) {
     newNode.y = spawnY !== undefined ? spawnY : menuClickWorldPos.y;
     flowState.nodes.push(newNode);
     renderNodes(); 
-    if (typeof saveFlowToDB === 'function') saveFlowToDB(); 
+    if (typeof saveFlowToDB === 'function') saveFlowToDB();
+    if (typeof renderMinimap === 'function') renderMinimap();
 };
 
 // ==========================================

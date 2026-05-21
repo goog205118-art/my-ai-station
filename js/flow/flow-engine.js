@@ -989,11 +989,11 @@ function initFlowToolbar() {
 window.initFlowEngine = async function() {
     initNodePalette();      
     initFlowToolbar();      
-    initMinimapUI();        
-    window.AutocompleteController.init(); // 🌟 必须带有 window. 前缀
-    await loadFlowFromDB();
+    initMinimapUI();        // 👈 注入右下角导航小地图
+    window.AutocompleteController.init(); // 🚀 核心修复：找回丢失的补全引擎初始化！
+    await loadFlowFromDB(); 
     renderNodes();
-    setTimeout(renderLinks, 50); 
+    setTimeout(() => { renderLinks(); renderMinimap(); }, 50); 
     updateCanvasTransform();
 };
 

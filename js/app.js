@@ -513,6 +513,49 @@ async function blobsToBase64Sequential(blobs, options = {}) {
     return out;
 }
 
+function buildImgGenImagePayloadFields(imagesBase64, maskBase64 = null) {
+    const images = Array.isArray(imagesBase64) ? imagesBase64.filter(Boolean).slice(0, 5) : [];
+    const baseImage = images[0] || null;
+    const referenceImages = images.slice(1, 5);
+    const fields = {
+        images,
+        inputImages: images,
+        imageInputs: images,
+        input_images: images,
+        image: baseImage,
+        inputImage: baseImage,
+        baseImage,
+        base_image: baseImage,
+        initImage: baseImage,
+        init_image: baseImage,
+        sourceImage: baseImage,
+        source_image: baseImage,
+        referenceImages,
+        reference_images: referenceImages,
+        references: referenceImages,
+        refImages: referenceImages,
+        ref_images: referenceImages,
+        mask: maskBase64 || null,
+        maskImage: maskBase64 || null,
+        mask_image: maskBase64 || null
+    };
+    images.forEach((img, index) => {
+        const imageNo = index + 1;
+        fields[`image${imageNo}`] = img;
+        fields[`image_${imageNo}`] = img;
+        fields[`inputImage${imageNo}`] = img;
+        fields[`input_image_${imageNo}`] = img;
+        if (index > 0) {
+            const refNo = index;
+            fields[`referenceImage${refNo}`] = img;
+            fields[`reference_image_${refNo}`] = img;
+            fields[`refImage${refNo}`] = img;
+            fields[`ref_image_${refNo}`] = img;
+        }
+    });
+    return fields;
+}
+
 async function buildBlobSignature(blob) {
     if (!blob) return '';
     if (typeof blob === 'string') return `str_${blob.length}_${blob.slice(-120)}`;
@@ -3761,8 +3804,13 @@ function renderImgGenPendingItem(item, task) {
     const proStages = ['正在连接 GPT-Image 2...', '正在渲染画面细节...', '正在进行超分处理...', '正在封装输出图像...'];
     const trialStages = ['正在连接试用通道...', '正在生成主体构图...', '正在处理参考图...', '正在回传预览结果...'];
     const stages = task.state.version === 'pro' ? proStages : trialStages;
+    const itemId = item && item.id ? item.id : '';
+    const startedAt = toFiniteNumber(item && item.createdAt, Date.now());
     return `
         <div class="img-gen-preview-item img-gen-preview-pending">
+            <button class="img-gen-preview-delete" type="button" onclick="removeImgGenPreviewItem(event, '${task.id}', '${itemId}')" data-tip="删除这条生成中记录">
+                <span class="material-symbols-outlined">close</span>
+            </button>
             <div class="img-gen-preview-skeleton">
                 <div class="img-gen-skeleton-sheen"></div>
                 <div class="img-gen-skeleton-orb"></div>
@@ -3770,6 +3818,10 @@ function renderImgGenPendingItem(item, task) {
             <div class="img-gen-preview-pending-inner">
                 <svg class="spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"></circle></svg>
                 <div class="img-gen-preview-placeholder-title">生成中...</div>
+                <div class="img-gen-preview-timer">
+                    <span class="material-symbols-outlined">timer</span>
+                    <span class="veo-dynamic-timer" data-start-time="${startedAt}">00:00</span>
+                </div>
                 <div class="img-gen-preview-stage-lines">
                     ${stages.map((stage) => `<span>${stage}</span>`).join('')}
                 </div>
@@ -4710,6 +4762,14 @@ function getImgGenPendingCount(task) {
     return task.state.previewHistory.filter((item) => item && item.status === 'pending').length;
 }
 
+async function isImgGenPreviewItemStillPending(taskId, itemId) {
+    if (!taskId || !itemId) return true;
+    const liveTask = getTaskShadow(taskId) || await getTaskDB(taskId);
+    if (!liveTask || liveTask.type !== 'tool_image_gen') return false;
+    ensureImgGenState(liveTask);
+    return liveTask.state.previewHistory.some((item) => item && item.id === itemId && item.status === 'pending');
+}
+
 function recalcImgGenTaskStatus(task) {
     if (!task || task.type !== 'tool_image_gen') return;
     normalizeImgGenPreviewHistory(task);
@@ -4753,6 +4813,7 @@ function pushImgGenPendingItem(task) {
 function markImgGenPreviewSuccess(task, itemId, imageBlobOrUrl, costTimeSec = null, meta = null) {
     normalizeImgGenPreviewHistory(task);
     const item = task.state.previewHistory.find((entry) => entry && entry.id === itemId);
+    if (!item && itemId) return false;
     if (item) {
         item.status = 'success';
         item.image = imageBlobOrUrl || null;
@@ -4777,6 +4838,7 @@ function markImgGenPreviewSuccess(task, itemId, imageBlobOrUrl, costTimeSec = nu
         });
     }
     recalcImgGenTaskStatus(task);
+    return true;
 }
 
 function normalizeImgGenErrorReason(errorLike) {
@@ -4795,6 +4857,7 @@ function markImgGenPreviewFailed(task, itemId, reason = '') {
     normalizeImgGenPreviewHistory(task);
     const errorReason = normalizeImgGenErrorReason(reason);
     const item = task.state.previewHistory.find((entry) => entry && entry.id === itemId);
+    if (!item && itemId) return false;
     if (item) {
         item.status = 'failed';
         item.remoteTaskId = '';
@@ -4816,6 +4879,7 @@ function markImgGenPreviewFailed(task, itemId, reason = '') {
         });
     }
     recalcImgGenTaskStatus(task);
+    return true;
 }
 
 function buildImgGenHeaders() {
@@ -5305,10 +5369,21 @@ async function removeImgGenPreviewItem(e, taskId, itemId) {
         if (!baseTask) return;
         const task = cloneTaskDeep(baseTask) || { ...baseTask };
         ensureImgGenState(task);
+        const removedItem = Array.isArray(task.state.previewHistory)
+            ? task.state.previewHistory.find((item) => item && item.id === itemId)
+            : null;
         task.state.previewHistory = Array.isArray(task.state.previewHistory)
             ? task.state.previewHistory.filter((item) => item && item.id !== itemId)
             : [];
         recalcImgGenTaskStatus(task);
+        if (removedItem && removedItem.status === 'pending' && getImgGenPendingCount(task) === 0) {
+            task.genTaskId = null;
+            task.retryCount = 0;
+            task.state.startTime = null;
+        }
+        if (removedItem && removedItem.remoteTaskId && task.genTaskId === removedItem.remoteTaskId) {
+            task.genTaskId = null;
+        }
         task.timestamp = Date.now();
         setTaskShadow(task);
         renderCard(taskId, task);
@@ -5637,6 +5712,7 @@ async function submitImgGen(taskId) {
     const imagesBase64 = await blobsToBase64Sequential(task.state.images, { mode: 'network', maxBytes: 8 * 1024 * 1024, maxEdge: 2048 });
     const maskSource = task.state.maskBlob || task.state.maskImage || null;
     const maskBase64 = maskSource ? await blobToBase64(maskSource, { mode: 'network', maxBytes: 8 * 1024 * 1024, maxEdge: 2048 }) : null;
+    const imagePayloadFields = buildImgGenImagePayloadFields(imagesBase64, maskBase64);
     const nValue = 1;
     const route = normalizeImgGenRoute(task.state.providerSort);
     const imageModel = version === 'pro' ? `gpt-image-2${route.suffix}` : 'legacy-image';
@@ -5659,8 +5735,7 @@ async function submitImgGen(taskId) {
         background: task.state.background || 'auto',
         moderation: task.state.moderation || 'auto',
         n: nValue,
-        images: imagesBase64,
-        mask: maskBase64,
+        ...imagePayloadFields,
         custom_ratio: trialCustomRatio || undefined,
         custom_w: trialCustomRatio ? trialCustomW : undefined,
         custom_h: trialCustomRatio ? trialCustomH : undefined
@@ -5668,9 +5743,7 @@ async function submitImgGen(taskId) {
 
     const unifiedPayload = {
         body: { ...unifiedPayloadCore },
-        ...unifiedPayloadCore,
-        inputImages: imagesBase64,
-        maskImage: maskBase64
+        ...unifiedPayloadCore
     };
 
     const legacyPayload = {
@@ -5688,7 +5761,7 @@ async function submitImgGen(taskId) {
         background: task.state.background || 'auto',
         moderation: task.state.moderation || 'auto',
         providerSort: route.key,
-        images: imagesBase64,
+        ...imagePayloadFields,
         custom_ratio: trialCustomRatio || undefined,
         custom_w: trialCustomRatio ? trialCustomW : undefined,
         custom_h: trialCustomRatio ? trialCustomH : undefined
@@ -5760,6 +5833,11 @@ async function submitImgGen(taskId) {
             const resData = resultPack.resData;
             const returnedUrls = resultPack.returnedUrls;
 
+            if (!(await isImgGenPreviewItemStillPending(taskId, previewItemId))) {
+                clearImgGenPolling(taskId, previewItemId);
+                return;
+            }
+
             if (returnedUrls.length > 0) {
                 let output = returnedUrls[0];
                 try {
@@ -5768,7 +5846,14 @@ async function submitImgGen(taskId) {
                 } catch (fetchErr) {}
                 const costTime = Math.floor((Date.now() - task.state.startTime) / 1000);
                 const imageMeta = await readImageMeta(output);
-                markImgGenPreviewSuccess(task, previewItemId, output, costTime, imageMeta);
+                if (!(await isImgGenPreviewItemStillPending(taskId, previewItemId))) {
+                    clearImgGenPolling(taskId, previewItemId);
+                    return;
+                }
+                if (!markImgGenPreviewSuccess(task, previewItemId, output, costTime, imageMeta)) {
+                    clearImgGenPolling(taskId, previewItemId);
+                    return;
+                }
                 task.state.costTime = costTime;
                 task.timestamp = Date.now();
                 task.genTaskId = null;
@@ -5794,6 +5879,10 @@ async function submitImgGen(taskId) {
                 const asyncTaskId = extractImgGenTaskId(resData);
                 const status = extractImgGenStatus(resData);
                 if (asyncTaskId) {
+                    if (!(await isImgGenPreviewItemStillPending(taskId, previewItemId))) {
+                        clearImgGenPolling(taskId, previewItemId);
+                        return;
+                    }
                     const item = task.state.previewHistory.find((entry) => entry && entry.id === previewItemId);
                     if (item) item.remoteTaskId = asyncTaskId;
                     task.genTaskId = asyncTaskId;
@@ -5812,8 +5901,16 @@ async function submitImgGen(taskId) {
         } catch (err) {
             lastError = err;
             if (attempts >= maxAttempts) {
+                if (!(await isImgGenPreviewItemStillPending(taskId, previewItemId))) {
+                    clearImgGenPolling(taskId, previewItemId);
+                    return;
+                }
                 markImgGenPreviewFailed(task, previewItemId, err);
             } else {
+                if (!(await isImgGenPreviewItemStillPending(taskId, previewItemId))) {
+                    clearImgGenPolling(taskId, previewItemId);
+                    return;
+                }
                 task.retryCount = attempts;
                 await saveTaskDB(task);
                 renderCard(taskId, task);

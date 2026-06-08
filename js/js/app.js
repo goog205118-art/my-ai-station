@@ -322,6 +322,7 @@ const API_SUBMIT = 'https://api.wallyai.top/webhook/proxy-submit';
 const API_POLL = 'https://api.wallyai.top/webhook/proxy-poll';
 const API_IMAGE_GEN = (window.VEO_IMAGE_UNIFIED_WEBHOOK && String(window.VEO_IMAGE_UNIFIED_WEBHOOK).trim()) || 'https://api.wallyai.top/webhook/proxy-image-unified';
 const API_IMAGE_GEN_LEGACY = (window.VEO_IMAGE_LEGACY_WEBHOOK && String(window.VEO_IMAGE_LEGACY_WEBHOOK).trim()) || 'https://api.wallyai.top/webhook/proxy-image-gen';
+const API_IMAGE_POLL = (window.VEO_IMAGE_POLL_WEBHOOK && String(window.VEO_IMAGE_POLL_WEBHOOK).trim()) || '';
 const API_IMAGE_AUTH = (window.VEO_WEBHOOK_AUTH && String(window.VEO_WEBHOOK_AUTH).trim()) || '';
 const IMG_GEN_PRO_INPUT_PRICE_PER_1M = 5;
 const IMG_GEN_PRO_OUTPUT_PRICE_PER_1M = 30;
@@ -330,6 +331,37 @@ const IMG_GEN_PRO_FALLBACK_COST = 0.12;
 const IMG_GEN_PREVIEW_LIMIT = 6;
 const IMG_GEN_CLICK_COOLDOWN_MS = 3000;
 const IMG_GEN_VARIATION_COUNT = 4;
+function normalizeWebhookEndpointForCompare(rawUrl) {
+    const raw = String(rawUrl || '').trim();
+    if (!raw) return '';
+    try {
+        const url = new URL(raw, window.location.href);
+        return `${url.origin}${url.pathname.replace(/\/+$/, '')}`.toLowerCase();
+    } catch (err) {
+        return raw.split('?')[0].replace(/\/+$/, '').toLowerCase();
+    }
+}
+
+function isSameWebhookEndpoint(a, b) {
+    const left = normalizeWebhookEndpointForCompare(a);
+    const right = normalizeWebhookEndpointForCompare(b);
+    return !!left && !!right && left === right;
+}
+
+function isImageGenerationWebhookEndpoint(rawUrl) {
+    const endpoint = normalizeWebhookEndpointForCompare(rawUrl);
+    return endpoint.endsWith('/proxy-image-unified') || endpoint.endsWith('/proxy-image-gen');
+}
+
+function resolveImgGenPollEndpoint() {
+    const url = String(API_IMAGE_POLL || '').trim();
+    if (!url) return { url: '', reason: 'missing' };
+    if (isImageGenerationWebhookEndpoint(url) || isSameWebhookEndpoint(url, API_IMAGE_GEN) || isSameWebhookEndpoint(url, API_IMAGE_GEN_LEGACY)) {
+        return { url: '', reason: 'points_to_generation' };
+    }
+    return { url, reason: '' };
+}
+
 const IMG_GEN_REF_INTENTS = [
     { value: 'structure', label: '结构', hint: '产品轮廓 / 深度 / 构图' },
     { value: 'style', label: '风格', hint: '影调 / 氛围 / 电影感' },
@@ -338,14 +370,14 @@ const IMG_GEN_REF_INTENTS = [
     { value: 'layout', label: '版式', hint: '海报排版 / 留白' }
 ];
 const IMG_GEN_PROMPT_TAGS = [
-    { group: '环境', text: 'rugged alpine terrain, weathered rocks, expedition campsite' },
-    { group: '环境', text: 'remote desert plateau, dust in the air, hard sunlight' },
-    { group: '光影', text: 'cinematic golden hour lighting, long shadows, premium outdoor commercial look' },
-    { group: '光影', text: 'dramatic overcast sky, high contrast rim light, volumetric atmosphere' },
-    { group: '镜头', text: '35mm product hero shot, shallow depth of field, realistic perspective' },
-    { group: '镜头', text: 'macro detail shot, tactile material texture, crisp industrial design' },
-    { group: '材质', text: 'matte black anodized aluminum, reinforced nylon, rugged utilitarian finish' },
-    { group: '社媒', text: 'clean negative space for headline, premium e-commerce hero composition' }
+    { group: '环境', label: '高山岩地', text: 'rugged alpine terrain, weathered rocks, expedition campsite' },
+    { group: '环境', label: '沙漠硬光', text: 'remote desert plateau, dust in the air, hard sunlight' },
+    { group: '光影', label: '金色电影光', text: 'cinematic golden hour lighting, long shadows, premium outdoor commercial look' },
+    { group: '光影', label: '阴天轮廓光', text: 'dramatic overcast sky, high contrast rim light, volumetric atmosphere' },
+    { group: '镜头', label: '35mm 主视觉', text: '35mm product hero shot, shallow depth of field, realistic perspective' },
+    { group: '镜头', label: '微距细节', text: 'macro detail shot, tactile material texture, crisp industrial design' },
+    { group: '材质', label: '硬核工业材质', text: 'matte black anodized aluminum, reinforced nylon, rugged utilitarian finish' },
+    { group: '社媒', label: '海报留白', text: 'clean negative space for headline, premium e-commerce hero composition' }
 ];
 let activeTasks = [], activeRetries = new Set();
 const taskPollControllers = new Map();
@@ -1855,6 +1887,43 @@ document.addEventListener('mouseout', (e) => { const target = e.target.closest('
 function openHelpModal() { const modal = document.getElementById('help-modal'); modal.style.display = 'flex'; modal.offsetHeight; modal.classList.add('show'); }
 function closeHelpModal() { const modal = document.getElementById('help-modal'); modal.classList.remove('show'); setTimeout(() => modal.style.display = 'none', 300); }
 
+const FRAME_SAFE_PADDING = 36;
+
+function fitTaskInsideFrameBounds(task, frame, padding = FRAME_SAFE_PADDING) {
+    if (!task || !frame || task.type === 'frame') return { taskChanged: false, frameChanged: false };
+    normalizeTaskPosition(task);
+    normalizeTaskPosition(frame);
+    const safePad = Math.max(20, toFiniteNumber(padding, FRAME_SAFE_PADDING));
+    const size = measureTaskAABB(task);
+    let taskChanged = false;
+    let frameChanged = false;
+    const minFrameW = Math.max(340, size.width + safePad * 2);
+    const minFrameH = Math.max(160, size.height + safePad * 2);
+    if (toFiniteNumber(frame.width, 0) < minFrameW) {
+        frame.width = minFrameW;
+        frameChanged = true;
+    }
+    if (toFiniteNumber(frame.height, 0) < minFrameH) {
+        frame.height = minFrameH;
+        frameChanged = true;
+    }
+    const minX = frame.x + safePad;
+    const minY = frame.y + safePad;
+    const maxX = Math.max(minX, frame.x + frame.width - safePad - size.width);
+    const maxY = Math.max(minY, frame.y + frame.height - safePad - size.height);
+    const nextX = clampWorldValue(toFiniteNumber(task.x, 0), minX, maxX);
+    const nextY = clampWorldValue(toFiniteNumber(task.y, 0), minY, maxY);
+    if (Math.abs(nextX - task.x) > 0.1) {
+        task.x = nextX;
+        taskChanged = true;
+    }
+    if (Math.abs(nextY - task.y) > 0.1) {
+        task.y = nextY;
+        taskChanged = true;
+    }
+    return { taskChanged, frameChanged };
+}
+
 async function createFrame() {
     if (selectedTasks.size === 0) return showToast("请先按住 Shift 框选需要打组的卡片", "error");
     const tasks = await getAllTasksDB();
@@ -1873,7 +1942,10 @@ async function createFrame() {
     const frameId = 'frame_' + Date.now(), padding = 60;
     const newFrame = { id: frameId, type: 'frame', x: minX - padding, y: minY - padding, width: maxX - minX + padding * 2, height: maxY - minY + padding * 2, title: '未命名项目组', isCollapsed: false, timestamp: Date.now() };
 
-    selected.forEach((t) => { t.parentId = frameId; });
+    selected.forEach((t) => {
+        t.parentId = frameId;
+        fitTaskInsideFrameBounds(t, newFrame, FRAME_SAFE_PADDING);
+    });
     if (typeof saveTaskBatchDB === 'function') await saveTaskBatchDB([newFrame].concat(selected));
     else {
         await saveTaskDB(newFrame);
@@ -1895,7 +1967,8 @@ async function removeFrame(id) {
 async function checkGroupDrop(draggedInfo) {
     const task = draggedInfo.task;
     if (task.type === 'frame') return;
-    const cardCenter = { x: task.x + (task.width || 340)/2, y: task.y + (task.height || 400)/2 };
+    const taskSize = measureTaskAABB(task);
+    const cardCenter = { x: task.x + taskSize.width / 2, y: task.y + taskSize.height / 2 };
 
     const frames = Array.from(document.querySelectorAll('.frame-box')).map(el => el.__veoTask).filter(t => t && t.type === 'frame' && !t.isCollapsed);
     let validFrames = [];
@@ -1919,10 +1992,16 @@ async function checkGroupDrop(draggedInfo) {
     }
 
     if (droppedIntoFrame) {
-        if (task.parentId !== droppedIntoFrame) {
-            task.parentId = droppedIntoFrame; await saveTaskDB(task);
-            showToast("📦 卡片已移入项目组", "success");
-        }
+        const frame = await getTaskDB(droppedIntoFrame) || validFrames.find((f) => f.id === droppedIntoFrame);
+        const prevParent = task.parentId;
+        task.parentId = droppedIntoFrame;
+        const fitState = fitTaskInsideFrameBounds(task, frame, FRAME_SAFE_PADDING);
+        const saveList = [task];
+        if (fitState.frameChanged && frame) saveList.push(frame);
+        if (typeof saveTaskBatchDB === 'function') await saveTaskBatchDB(saveList);
+        else for (const item of saveList) await saveTaskDB(item);
+        if (fitState.taskChanged || fitState.frameChanged) await renderBoard();
+        if (prevParent !== droppedIntoFrame) showToast("📦 卡片已移入项目组", "success");
     } else {
         if (task.parentId) {
             task.parentId = null; await saveTaskDB(task);
@@ -1936,6 +2015,8 @@ const viewport = document.getElementById('canvas-viewport'), board = document.ge
 let transform = { x: window.innerWidth / 2, y: 100, scale: 1 }, isPanning = false, startPanX = 0, startPanY = 0, ticking = false;
 let draggingCardInfo = null, highestZIndex = 10, scrollTimeout;
 let selectedTasks = new Set(), isSelecting = false, startSelX = 0, startSelY = 0;
+let selectionCandidates = [];
+let selectionToolbarFrame = 0;
 let activeCrop = null, activeFrameResize = null;
 let isPrimaryPointerDown = false;
 let lastPointerClientX = 0;
@@ -2034,6 +2115,98 @@ function measureTaskAABB(task) {
         width: Math.max(1, w || fallback.width),
         height: Math.max(1, h || fallback.height)
     };
+}
+
+function getVisibleWorldRect(screenPadding = 80) {
+    const scaleSafe = Math.max(0.1, toFiniteNumber(transform && transform.scale, 1));
+    const viewportRect = (viewport && typeof viewport.getBoundingClientRect === 'function')
+        ? viewport.getBoundingClientRect()
+        : { width: window.innerWidth, height: window.innerHeight };
+    const pad = Math.max(0, toFiniteNumber(screenPadding, 80));
+    return {
+        left: (pad - toFiniteNumber(transform.x, 0)) / scaleSafe,
+        top: (pad - toFiniteNumber(transform.y, 0)) / scaleSafe,
+        right: (Math.max(1, viewportRect.width) - pad - toFiniteNumber(transform.x, 0)) / scaleSafe,
+        bottom: (Math.max(1, viewportRect.height) - pad - toFiniteNumber(transform.y, 0)) / scaleSafe
+    };
+}
+
+function clampWorldValue(value, min, max) {
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return value;
+    return Math.max(min, Math.min(max, value));
+}
+
+function resolveLinkedNodePosition(sourceTask, targetSize = {}, options = {}) {
+    const sourceSize = measureTaskAABB(sourceTask);
+    const targetW = Math.max(240, toFiniteNumber(targetSize.width, 340));
+    const targetH = Math.max(180, toFiniteNumber(targetSize.height, 420));
+    const gap = Math.max(20, toFiniteNumber(options.gap, 36));
+    const sourceX = toFiniteNumber(sourceTask && sourceTask.x, 0);
+    const sourceY = toFiniteNumber(sourceTask && sourceTask.y, 0);
+    const sourceBounds = {
+        left: sourceX,
+        top: sourceY,
+        right: sourceX + sourceSize.width,
+        bottom: sourceY + sourceSize.height
+    };
+    const visible = getVisibleWorldRect(96);
+    const yBase = sourceY + toFiniteNumber(options.yOffset, 0);
+    const xBase = sourceX + toFiniteNumber(options.xOffset, 0);
+    const visibleCenterX = (visible.left + visible.right) / 2;
+    const preferLeft = sourceX + sourceSize.width / 2 > visibleCenterX;
+    const rightX = sourceBounds.right + gap;
+    const leftX = sourceBounds.left - targetW - gap;
+    const belowY = sourceBounds.bottom + gap;
+    const aboveY = sourceBounds.top - targetH - gap;
+    const clampY = (value) => clampWorldValue(value, visible.top, visible.bottom - targetH);
+    const clampX = (value) => clampWorldValue(value, visible.left, visible.right - targetW);
+    const candidates = [
+        { x: rightX, y: clampY(yBase), side: 'right' },
+        { x: leftX, y: clampY(yBase), side: 'left' },
+        { x: clampX(xBase), y: belowY, side: 'below' },
+        { x: clampX(xBase), y: aboveY, side: 'above' }
+    ];
+    if (preferLeft) candidates.splice(0, 2, candidates[1], candidates[0]);
+
+    const fitsVisible = (pos) => (
+        pos.x >= visible.left &&
+        pos.y >= visible.top &&
+        pos.x + targetW <= visible.right &&
+        pos.y + targetH <= visible.bottom
+    );
+    const isOutsideSource = (pos) => (
+        pos.x + targetW <= sourceBounds.left ||
+        pos.x >= sourceBounds.right ||
+        pos.y + targetH <= sourceBounds.top ||
+        pos.y >= sourceBounds.bottom
+    );
+    const visibleHit = candidates.find((pos) => fitsVisible(pos) && isOutsideSource(pos));
+    if (visibleHit) return { x: visibleHit.x, y: visibleHit.y };
+
+    // If the source card fills the screen, still spawn outside its real bounds,
+    // then camera focus will track the new linked node into view.
+    const fallback = preferLeft && leftX >= visible.left - targetW * 1.4
+        ? { x: leftX, y: clampY(yBase) }
+        : { x: rightX, y: clampY(yBase) };
+    return fallback;
+}
+
+function selectAndFocusTaskIds(taskIds) {
+    const ids = Array.isArray(taskIds) ? taskIds.filter(Boolean) : [];
+    if (!ids.length) return;
+    clearSelection();
+    ids.forEach((id) => {
+        selectedTasks.add(id);
+        const el = document.getElementById('card-' + id);
+        if (el) {
+            el.classList.add('selected');
+            el.classList.remove('is-viewport-culled');
+            highestZIndex++;
+            el.style.zIndex = highestZIndex;
+        }
+    });
+    updateSelectionToolbar();
+    focusSelectedTasks();
 }
 
 function detectToolPluginType(el) {
@@ -2330,6 +2503,25 @@ function updateSelectionToolbar() {
     toolbar.classList.add('show');
 }
 
+function requestSelectionToolbarUpdate() {
+    if (selectionToolbarFrame) return;
+    selectionToolbarFrame = requestAnimationFrame(() => {
+        selectionToolbarFrame = 0;
+        updateSelectionToolbar();
+    });
+}
+
+function buildSelectionCandidates() {
+    return Array.from(document.querySelectorAll('.canvas-board > .video-card, .canvas-board > .frame-box'))
+        .filter((card) => card && !card.classList.contains('hidden-in-frame') && !card.classList.contains('is-viewport-culled'))
+        .map((card) => ({
+            el: card,
+            id: card.id ? card.id.replace('card-', '') : '',
+            rect: card.getBoundingClientRect()
+        }))
+        .filter((item) => item.id && item.rect && item.rect.width > 0 && item.rect.height > 0);
+}
+
 window.addEventListener('mousedown', (e) => {
     if (e.button === 0) isPrimaryPointerDown = true;
     if (Number.isFinite(e.clientX)) lastPointerClientX = e.clientX;
@@ -2337,6 +2529,7 @@ window.addEventListener('mousedown', (e) => {
 }, true);
 
 function clearSelection() {
+    selectionCandidates = [];
     selectedTasks.clear();
     document.querySelectorAll('.video-card.selected, .frame-box.selected').forEach(c => c.classList.remove('selected'));
     updateSelectionToolbar();
@@ -2366,16 +2559,17 @@ window.addEventListener('mousemove', (e) => {
                     marquee.classList.toggle('is-window', !isCrossing);
                 }
                 const selRect = { left, top, right: left + width, bottom: top + height };
-                document.querySelectorAll('.video-card, .frame-box').forEach(card => {
-                    const rect = card.getBoundingClientRect();
-                    if(card.classList.contains('hidden-in-frame')) return;
+                const candidates = selectionCandidates.length ? selectionCandidates : buildSelectionCandidates();
+                candidates.forEach((candidate) => {
+                    const card = candidate.el;
+                    const rect = candidate.rect;
                     const intersects = rect.left < selRect.right && rect.right > selRect.left && rect.top < selRect.bottom && rect.bottom > selRect.top;
                     const contains = rect.left >= selRect.left && rect.right <= selRect.right && rect.top >= selRect.top && rect.bottom <= selRect.bottom;
                     const hit = isCrossing ? intersects : contains;
-                    if (hit) { card.classList.add('selected'); selectedTasks.add(card.id.replace('card-', '')); }
-                    else { card.classList.remove('selected'); selectedTasks.delete(card.id.replace('card-', '')); }
+                    if (hit) { card.classList.add('selected'); selectedTasks.add(candidate.id); }
+                    else { card.classList.remove('selected'); selectedTasks.delete(candidate.id); }
                 });
-                updateSelectionToolbar();
+                requestSelectionToolbarUpdate();
             }
             else if (draggingCardInfo) {
                 const dx = (e.clientX - draggingCardInfo.startMouseX) / transform.scale, dy = (e.clientY - draggingCardInfo.startMouseY) / transform.scale;
@@ -2391,7 +2585,7 @@ window.addEventListener('mousemove', (e) => {
                         child.el.style.transform = `translate3d(${child.task.x}px, ${child.task.y}px, 0)`;
                     });
                 }
-                updateSelectionToolbar();
+                requestSelectionToolbarUpdate();
             }
             else if (activeFrameResize) {
                 const dx = (e.clientX - activeFrameResize.startX) / transform.scale, dy = (e.clientY - activeFrameResize.startY) / transform.scale;
@@ -2400,7 +2594,7 @@ window.addEventListener('mousemove', (e) => {
                 activeFrameResize.el.style.width = newW + 'px'; activeFrameResize.el.style.height = newH + 'px';
                 activeFrameResize.task.width = newW; activeFrameResize.task.height = newH;
                 syncCardViewportMetrics(activeFrameResize.el, activeFrameResize.task);
-                updateSelectionToolbar();
+                requestSelectionToolbarUpdate();
             }
             ticking = false;
         });
@@ -2428,6 +2622,7 @@ viewport.addEventListener('mousedown', (e) => {
             isSelecting = true;
             startSelX = e.clientX;
             startSelY = e.clientY;
+            selectionCandidates = buildSelectionCandidates();
             if(marquee) {
                 marquee.style.left = startSelX + 'px';
                 marquee.style.top = startSelY + 'px';
@@ -2453,6 +2648,7 @@ window.addEventListener('mouseup', async () => {
     if (wasPanning) startCanvasInertia();
     if (isSelecting) {
         isSelecting = false;
+        selectionCandidates = [];
         if(marquee) {
             marquee.style.display = 'none';
             marquee.classList.remove('is-crossing', 'is-window');
@@ -2486,10 +2682,31 @@ window.addEventListener('mouseup', async () => {
     }
 });
 
+function consumeNestedCanvasWheel(e) {
+    const target = e && e.target && typeof e.target.closest === 'function' ? e.target : null;
+    if (!target) return false;
+    const promptRail = target.closest('.img-gen-prompt-chip-row');
+    if (promptRail) {
+        const modeFactor = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? window.innerHeight : 1);
+        const deltaX = toFiniteNumber(e.deltaX, 0) * modeFactor;
+        const deltaY = toFiniteNumber(e.deltaY, 0) * modeFactor;
+        const amount = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+        if (amount !== 0) {
+            e.preventDefault();
+            promptRail.scrollLeft += amount;
+        }
+        return true;
+    }
+    if (target.closest('.img-gen-input-body, .img-gen-preview-panel, .img-gen-preview-body, .img-gen-help-body')) {
+        return true;
+    }
+    return false;
+}
+
 viewport.addEventListener('wheel', (e) => {
     const wheelTarget = e.target && typeof e.target.closest === 'function' ? e.target : null;
-    if (wheelTarget && wheelTarget.closest('.img-gen-preview-panel')) return;
     if (e.target.tagName === 'TEXTAREA' || e.target.closest('textarea')) return;
+    if (consumeNestedCanvasWheel(e)) return;
     if (draggingCardInfo) return;
     e.preventDefault();
     cancelCameraAnimation();
@@ -2538,8 +2755,9 @@ function startFrameResize(e, id) {
         document.querySelectorAll('.video-card, .frame-box').forEach(childEl => {
             if (childEl.__veoTask && childEl.__veoTask.parentId === id) {
                 const childTask = childEl.__veoTask;
-                const childRight = (childTask.x - task.x) + (childTask.width || 340) + 40;
-                const childBottom = (childTask.y - task.y) + (childTask.height || 400) + 40;
+                const childSize = measureTaskAABB(childTask);
+                const childRight = (childTask.x - task.x) + childSize.width + FRAME_SAFE_PADDING;
+                const childBottom = (childTask.y - task.y) + childSize.height + FRAME_SAFE_PADDING;
                 if (childRight > minW) minW = childRight;
                 if (childBottom > minH) minH = childBottom;
             }
@@ -2754,6 +2972,8 @@ function focusTaskById(taskId) {
     selectedTasks.add(taskId);
     el.classList.add('selected');
     el.classList.remove('is-viewport-culled');
+    highestZIndex++;
+    el.style.zIndex = highestZIndex;
     updateSelectionToolbar();
     focusSelectedTasks();
 }
@@ -3245,6 +3465,7 @@ function applyImgGenCardFrame(cardEl, task) {
     if (!cardEl || !task || task.type !== 'tool_image_gen') return;
     ensureImgGenState(task);
     const isOpen = task.state.previewCollapsed !== true;
+    cardEl.classList.toggle('is-img-variant-node', !!task.state.variantGroupId);
     const collapsedWidth = Math.max(320, Math.min(760, toFiniteNumber(task.state.cardWidthCollapsed, 360)));
     const expandedWidth = Math.max(560, Math.min(1200, toFiniteNumber(task.state.cardWidthOpen, 680)));
     const cardHeight = Math.max(420, Math.min(1100, toFiniteNumber(task.state.cardHeight, 520)));
@@ -4051,16 +4272,19 @@ function buildImgGenRefControlPayload(task) {
 }
 
 function renderImgGenPromptChips(task) {
-    const chips = IMG_GEN_PROMPT_TAGS.map((tag, index) => `
-        <button class="img-gen-prompt-chip" type="button" onclick="appendImgGenPromptTag(event, '${task.id}', ${index})" data-tip="${escapeAttr(tag.text)}">
-            <span>${escapeHtml(tag.group)}</span>${escapeHtml(tag.text.split(',')[0])}
+    const chips = IMG_GEN_PROMPT_TAGS.map((tag, index) => {
+        const label = tag.label || tag.text.split(',')[0] || tag.text;
+        return `
+        <button class="img-gen-prompt-chip" type="button" onclick="appendImgGenPromptTag(event, '${task.id}', ${index})" data-tip="${escapeAttr(`点击填入英文提示词：${tag.text}`)}">
+            <span>${escapeHtml(tag.group)}</span>${escapeHtml(label)}
         </button>
-    `).join('');
+    `;
+    }).join('');
     return `
         <div class="img-gen-prompt-assist">
             <div class="img-gen-prompt-assist-head">
                 <span class="material-symbols-outlined">auto_awesome</span>
-                Prompt Tags
+                快捷提示词
             </div>
             <div class="img-gen-prompt-chip-row">${chips}</div>
         </div>
@@ -4581,6 +4805,8 @@ function renderImgGenCardHTML(task) {
     const isPro = task.state.version === 'pro';
     const isChannel2 = task.state.channel === 'channel_2';
     const previewCollapsed = task.state.previewCollapsed === true;
+    const isVariantNode = !!task.state.variantGroupId;
+    const variantIndex = Math.max(1, Math.min(99, parseInt(task.state.variantIndex, 10) || 1));
     const resolvedSize = resolveImgGenSize(task.state);
     const lastUsageCost = isPro ? toFiniteNumber(task.state.lastUsageCost, NaN) : NaN;
     const currentCost = isPro
@@ -4618,7 +4844,7 @@ function renderImgGenCardHTML(task) {
     const dockToggleIcon = previewCollapsed ? 'keyboard_arrow_right' : 'keyboard_arrow_left';
     const dockToggleTip = previewCollapsed ? '展开右侧预览面板' : '收纳右侧预览面板';
 
-    return `<div class="card-header img-gen-card-header"><span class="img-gen-card-title"><span class="material-symbols-outlined">brush</span> AI 多模生图</span><div class="img-gen-card-actions"><button class="img-gen-help-trigger" type="button" onclick="openImgGenHelp(event, '${task.id}')" data-tip="用于生成、重绘和变体图像的 AI 节点"><span class="material-symbols-outlined">info</span></button><button class="img-gen-card-close" onclick="removeTask('${task.id}')" data-tip="删除该组件"><span class="material-symbols-outlined">close</span></button></div></div>
+    return `<div class="card-header img-gen-card-header"><span class="img-gen-card-title"><span class="material-symbols-outlined">brush</span> AI 多模生图 ${isVariantNode ? `<span class="img-gen-variant-chip">V${variantIndex}</span>` : ''}</span><div class="img-gen-card-actions"><button class="img-gen-help-trigger" type="button" onclick="openImgGenHelp(event, '${task.id}')" data-tip="用于生成、重绘和变体图像的 AI 节点"><span class="material-symbols-outlined">info</span></button><button class="img-gen-card-close" onclick="removeTask('${task.id}')" data-tip="删除该组件"><span class="material-symbols-outlined">close</span></button></div></div>
     <div class="img-gen-shell">
         <div class="img-gen-split ${previewCollapsed ? 'preview-collapsed' : ''}">
             <div class="img-gen-left">
@@ -4631,6 +4857,7 @@ function renderImgGenCardHTML(task) {
                 <div class="img-gen-input-body">
                     <div class="img-gen-statusbar">
                         <span class="img-gen-status-badge ${isPro ? 'is-pro' : 'is-trial'}">${isPro ? 'PRO · GPT IMAGE 2' : 'TRIAL · LEGACY'}</span>
+                        ${isVariantNode ? `<span class="img-gen-status-badge is-variant">VARIANT ${variantIndex}</span>` : ''}
                         <span class="img-gen-size-chip">${isPro ? `${(task.state.proRatio === 'custom') ? `${task.state.customW}:${task.state.customH}` : task.state.proRatio} / ${(task.state.proResolution || '1k').toUpperCase()}` : `${(task.state.trialRatio === 'custom') ? `${task.state.customW}:${task.state.customH}` : (task.state.trialRatio || '1:1')} / 1K`}</span>
                     </div>
                     ${renderImgGenSlots(task)}
@@ -5570,17 +5797,38 @@ async function createImgGenVariations(event, taskId, itemId) {
         ? parseInt(sourceTask.state.seed, 10)
         : Math.floor(Math.random() * 2147483647);
     const clones = [];
+    const groupId = `var_group_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const variantW = 330;
+    const variantH = 440;
+    const variantGap = 18;
+    const clusterSize = {
+        width: variantW * 2 + variantGap,
+        height: variantH * 2 + variantGap
+    };
+    const clusterOrigin = resolveLinkedNodePosition(sourceTask, clusterSize, { gap: 42, yOffset: -8 });
+    const framePadding = 34;
+    const variantFrame = {
+        id: `frame_img_var_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'frame',
+        x: clusterOrigin.x - framePadding,
+        y: clusterOrigin.y - framePadding,
+        width: clusterSize.width + framePadding * 2,
+        height: clusterSize.height + framePadding * 2,
+        title: 'V1-4 变体组',
+        isCollapsed: false,
+        timestamp: Date.now()
+    };
     for (let i = 0; i < IMG_GEN_VARIATION_COUNT; i++) {
         const clone = cloneTaskDeep(sourceTask) || { ...sourceTask, state: { ...(sourceTask.state || {}) } };
         clone.id = `tool_img_var_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
-        clone.x = toFiniteNumber(sourceTask.x, 0) + 420 + (i % 2) * 380;
-        clone.y = toFiniteNumber(sourceTask.y, 0) + Math.floor(i / 2) * 560;
+        clone.x = clusterOrigin.x + (i % 2) * (variantW + variantGap);
+        clone.y = clusterOrigin.y + Math.floor(i / 2) * (variantH + variantGap);
         clone.timestamp = Date.now() + i;
         clone.status = 'idle';
         clone.retryCount = 0;
         clone.genTaskId = null;
         clone.isBilled = false;
-        clone.parentId = null;
+        clone.parentId = variantFrame.id;
         clone.state = cloneTaskDeep(sourceTask.state) || { ...(sourceTask.state || {}) };
         ensureImgGenState(clone);
         clone.state.images = [item.image, ...(Array.isArray(sourceTask.state.images) ? sourceTask.state.images.slice(0, 4) : [])].slice(0, 5);
@@ -5597,15 +5845,27 @@ async function createImgGenVariations(event, taskId, itemId) {
         clone.state.maskBlob = null;
         clone.state.maskImage = null;
         clone.state.maskEditMode = false;
+        clone.state.previewCollapsed = true;
+        clone.state.paramsCollapsed = true;
+        clone.state.cardWidthCollapsed = variantW;
+        clone.state.cardWidthOpen = 650;
+        clone.state.cardHeight = variantH;
+        clone.state.variantGroupId = groupId;
+        clone.state.variantIndex = i + 1;
+        clone.state.variantSourceTaskId = sourceTask.id;
+        clone.state.variantSourcePreviewId = itemId;
         clone.state.seedLocked = true;
         clone.state.seed = seedBase + i;
         recalcImgGenTaskStatus(clone);
         clones.push(clone);
     }
 
-    for (const clone of clones) await saveTaskDB(clone);
+    const saveList = [variantFrame].concat(clones);
+    if (typeof saveTaskBatchDB === 'function') await saveTaskBatchDB(saveList);
+    else for (const task of saveList) await saveTaskDB(task);
     await renderBoard();
-    showToast(`已分裂 ${IMG_GEN_VARIATION_COUNT} 个变体节点`, 'success');
+    setTimeout(() => selectAndFocusTaskIds([variantFrame.id]), 60);
+    showToast(`已创建 ${IMG_GEN_VARIATION_COUNT} 个紧凑变体节点，并收纳为便携变体组`, 'success');
 }
 
 async function sendImgGenPreviewToMask(event, taskId, itemId) {
@@ -5643,11 +5903,12 @@ async function sendImgGenPreviewToCropper(event, taskId, itemId) {
     ensureImgGenState(sourceTask);
     const item = findImgGenPreviewItem(sourceTask, itemId);
     if (!item || !item.image) return showToast('没有可裁切的图片', 'warning');
+    const dock = resolveLinkedNodePosition(sourceTask, { width: 340, height: 420 }, { gap: 42, yOffset: 10 });
     const cropTask = {
         id: `tool_crop_from_img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         type: 'tool_cropper',
-        x: toFiniteNumber(sourceTask.x, 0) + 420,
-        y: toFiniteNumber(sourceTask.y, 0) + 40,
+        x: dock.x,
+        y: dock.y,
         timestamp: Date.now(),
         state: {
             sourceBlob: item.image,
@@ -5657,6 +5918,7 @@ async function sendImgGenPreviewToCropper(event, taskId, itemId) {
     };
     await saveTaskDB(cropTask);
     await renderBoard();
+    setTimeout(() => focusTaskById(cropTask.id), 60);
     showToast('已创建局部裁切器', 'success');
 }
 
@@ -5905,6 +6167,13 @@ function buildImgGenPollPayload(task, remoteTaskId) {
     };
 }
 
+function isLocalImgGenFallbackTaskId(remoteTaskId, taskId = '') {
+    const id = String(remoteTaskId || '').trim();
+    if (!id) return true;
+    if (taskId && id === taskId) return true;
+    return /^tool_img_/i.test(id) || /_img_item_/i.test(id);
+}
+
 function startImgGenTaskPolling(taskId, remoteTaskId, previewItemId = '') {
     const itemId = previewItemId || remoteTaskId || createImgGenPreviewId();
     const pollKey = buildImgGenPollKey(taskId, itemId);
@@ -5950,16 +6219,41 @@ function startImgGenTaskPolling(taskId, remoteTaskId, previewItemId = '') {
         const pollPayload = buildImgGenPollPayload(task, remoteId);
         const headers = buildImgGenHeaders();
         const attemptsList = [];
-        const useTrialLegacyFirst = task.state.version !== 'pro';
+        const pollEndpoint = resolveImgGenPollEndpoint();
 
-        if (useTrialLegacyFirst) {
-            if (API_IMAGE_GEN_LEGACY) attemptsList.push({ url: API_IMAGE_GEN_LEGACY, body: pollPayload.legacy });
-            if (API_IMAGE_GEN) attemptsList.push({ url: API_IMAGE_GEN, body: pollPayload.unified });
-        } else {
-            if (API_IMAGE_GEN) attemptsList.push({ url: API_IMAGE_GEN, body: pollPayload.unified });
-            if (API_IMAGE_GEN_LEGACY && API_IMAGE_GEN_LEGACY !== API_IMAGE_GEN) attemptsList.push({ url: API_IMAGE_GEN_LEGACY, body: pollPayload.legacy });
+        if (isLocalImgGenFallbackTaskId(remoteId, taskId)) {
+            markImgGenPreviewFailed(task, itemId, '后端未返回真实图片任务 ID，已停止无效轮询');
+            task.timestamp = Date.now();
+            clearImgGenPolling(taskId, itemId);
+            await saveTaskDB(task);
+            renderCard(taskId, task);
+            forceRenderImgGenPreviewPanel(task, itemId);
+            showToast('后端未返回真实任务ID，已停止轮询避免刷屏', 'warning');
+            return;
         }
-        attemptsList.push({ url: API_POLL, body: pollPayload.fallback });
+
+        if (!pollEndpoint.url) {
+            const reason = pollEndpoint.reason === 'points_to_generation'
+                ? '图片轮询接口误指向生图生成入口，已停止轮询，避免 n8n 空 prompt 刷屏'
+                : '未配置图片轮询接口，已停止轮询；请让 n8n 生成入口直接返回图片，或配置 VEO_IMAGE_POLL_WEBHOOK';
+            markImgGenPreviewFailed(task, itemId, reason);
+            task.genTaskId = null;
+            task.timestamp = Date.now();
+            clearImgGenPolling(taskId, itemId);
+            await saveTaskDB(task);
+            renderCard(taskId, task);
+            forceRenderImgGenPreviewPanel(task, itemId);
+            console.warn('[img-poll] stopped invalid image polling:', {
+                reason: pollEndpoint.reason,
+                imagePollWebhook: API_IMAGE_POLL || '',
+                imageGenWebhook: API_IMAGE_GEN,
+                legacyWebhook: API_IMAGE_GEN_LEGACY,
+                remoteId
+            });
+            showToast('图片轮询已熔断：请检查 VEO_IMAGE_POLL_WEBHOOK，不要填生成入口', 'warning');
+            return;
+        }
+        attemptsList.push({ url: pollEndpoint.url, body: pollPayload.unified });
 
         let rawData = null;
         let lastHttpError = null;
@@ -6831,7 +7125,17 @@ async function submitImgGen(taskId) {
                         clearImgGenPolling(taskId, previewItemId);
                         return;
                     }
-                    const fallbackTaskId = asyncTaskId || clientRequestId;
+                    if (!asyncTaskId) {
+                        markImgGenPreviewFailed(task, previewItemId, '后端未返回图片或真实任务ID');
+                        task.genTaskId = null;
+                        task.timestamp = Date.now();
+                        await saveTaskDB(task);
+                        renderCard(taskId, task);
+                        forceRenderImgGenPreviewPanel(task, previewItemId);
+                        showToast('后端未返回图片或真实任务ID，请检查 n8n Respond 输出', 'warning');
+                        return;
+                    }
+                    const fallbackTaskId = asyncTaskId;
                     const item = task.state.previewHistory.find((entry) => entry && entry.id === previewItemId);
                     if (item) {
                         item.remoteTaskId = fallbackTaskId;

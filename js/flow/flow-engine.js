@@ -190,6 +190,19 @@ flowStyleInj.innerHTML = `
     }
     .node-image-upload-overlay:hover { filter: brightness(1.06); }
     .node-image-upload-overlay .material-symbols-outlined { font-size: 14px; }
+    .veo-node.is-frozen { border-color: rgba(245,158,11,0.55) !important; box-shadow: 0 0 24px rgba(245,158,11,0.16), 0 4px 15px rgba(0,0,0,0.35) !important; }
+    .veo-node.is-running { box-shadow: 0 0 30px 5px rgba(56, 189, 248, 0.4) !important; border-color: #38bdf8 !important; }
+    .veo-node.is-error { box-shadow: 0 0 30px 5px rgba(239, 68, 68, 0.3) !important; border-color: #ef4444 !important; }
+    .veo-node.is-success { box-shadow: 0 0 30px 5px rgba(34, 197, 94, 0.3) !important; border-color: #22c55e !important; }
+    .node-header-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+    .node-header-tools { display: inline-flex; align-items: center; gap: 4px; }
+    .node-freeze-btn {
+        width: 22px; height: 22px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.04); color: #8a8a8a; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; transition: 0.2s ease;
+    }
+    .node-freeze-btn .material-symbols-outlined { font-size: 14px; }
+    .node-freeze-btn.is-frozen { color: #f59e0b; border-color: rgba(245,158,11,0.45); background: rgba(245,158,11,0.12); }
 
     :root[data-theme='light'] .flow-tool-btn.danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.25); }
     :root[data-theme='light'] .node-image-upload-large { background: rgba(14, 116, 144, 0.07); border-color: rgba(14, 116, 144, 0.28); }
@@ -198,6 +211,29 @@ flowStyleInj.innerHTML = `
     :root[data-theme='light'] .node-image-upload-overlay { color: #f8fafc; }
 `; 
 document.head.appendChild(flowStyleInj);
+
+function escapeFlowHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeFlowAttr(value) {
+    return escapeFlowHtml(value);
+}
+
+function escapeFlowJsString(value) {
+    return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
 
 const viewport = document.getElementById('flow-viewport');
 const canvas = document.getElementById('flow-canvas');
@@ -401,10 +437,11 @@ function getRelatedLinkIds(nodeIds) {
 // ==========================================
 function renderPreview(node) {
     if (!node.result || !node.result.data) return '';
+    const safeSrc = escapeFlowAttr(node.result.data);
     if (node.result.type === 'image') {
-        return `<img src="${node.result.data}" style="width:100%; height:auto; display:block; border-radius: 4px;" />`;
+        return `<img src="${safeSrc}" style="width:100%; height:auto; display:block; border-radius: 4px;" />`;
     } else if (node.result.type === 'video') {
-        return `<video src="${node.result.data}" style="width:100%; height:auto; display:block; border-radius: 4px;" autoplay loop muted controls></video>`;
+        return `<video src="${safeSrc}" style="width:100%; height:auto; display:block; border-radius: 4px;" autoplay loop muted controls></video>`;
     }
     return '';
 }
@@ -423,7 +460,7 @@ function renderImageUploadInput(node, inp, val) {
              ondrop="handleNodeImageDrop(event, '${node.id}', '${inp.id}'); this.classList.remove('node-image-drag-over');">
             <input id="${uploadId}" type="file" accept="image/*" style="display:none;" onchange="handleNodeImageUpload(event, '${node.id}', '${inp.id}')">
             ${hasImage
-                ? `<img src="${val}" class="img-preview-large" onmousedown="event.stopPropagation()" data-tip="已挂载图片，支持再次拖入覆盖">`
+                ? `<img src="${escapeFlowAttr(val)}" class="img-preview-large" onmousedown="event.stopPropagation()" data-tip="已挂载图片，支持再次拖入覆盖">`
                 : `<div class="node-image-upload-empty"><span class="material-symbols-outlined">image</span><span>拖入图片或点击上传</span></div>`}
             <label for="${uploadId}" class="node-image-upload-overlay" onmousedown="event.stopPropagation()">
                 <span class="material-symbols-outlined">upload</span>
@@ -441,7 +478,7 @@ function renderImageUploadInput(node, inp, val) {
             <input type="file" accept="image/*" style="display:none;" onchange="handleNodeImageUpload(event, '${node.id}', '${inp.id}')">
             <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">upload</span> <span class="img-upload-text">${hasImage ? '更换图片' : '点击 / 拖入图片'}</span>
         </label>
-        ${hasImage ? `<img src="${val}" class="img-preview-thumb" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()" data-tip="已挂载本地内存">` : ''}
+        ${hasImage ? `<img src="${escapeFlowAttr(val)}" class="img-preview-thumb" style="width:28px; height:28px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.2);" onmousedown="event.stopPropagation()" data-tip="已挂载本地内存">` : ''}
     </div>`;
 }
 
@@ -475,19 +512,19 @@ function renderNodes() {
                     
                 node.inputs.forEach(inp => {
                     const val = node.data && node.data[inp.id] !== undefined ? node.data[inp.id] : inp.default;
-                    inputsHtml += `<div class="node-input-group" id="group-${node.id}-${inp.id}"><div class="node-input-label">${inp.label}</div>`;
+                    inputsHtml += `<div class="node-input-group" id="group-${node.id}-${inp.id}"><div class="node-input-label">${escapeFlowHtml(inp.label)}</div>`;
                     
                     if (inp.type === 'textarea') {
                         inputsHtml += `<textarea class="node-input" rows="3" 
                             onmousedown="event.stopPropagation()" 
                             oninput="updateNodeData('${node.id}', '${inp.id}', this.value); window.AutocompleteController.listen(event, '${node.id}');"
-                            onkeydown="window.AutocompleteController.handleKeyDown(event);">${val}</textarea>`;
+                            onkeydown="window.AutocompleteController.handleKeyDown(event);">${escapeFlowHtml(val)}</textarea>`;
                     } else if (inp.type === 'select') {
                         inputsHtml += `<select class="node-input" onmousedown="event.stopPropagation()" onchange="updateNodeData('${node.id}', '${inp.id}', this.value); evaluateNodeConditions('${node.id}');">
-                            ${inp.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                            ${inp.options.map(opt => `<option value="${escapeFlowAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeFlowHtml(opt)}</option>`).join('')}
                         </select>`;
                     } else if (inp.type === 'number') {
-                        inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${val}" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
+                        inputsHtml += `<input type="number" class="node-input" onmousedown="event.stopPropagation()" value="${escapeFlowAttr(val)}" oninput="updateNodeData('${node.id}', '${inp.id}', this.value)" style="font-family: monospace; color: var(--accent);" />`;
                     } else if (inp.type === 'image_upload') {
                         inputsHtml += renderImageUploadInput(node, inp, val);
                     }
@@ -498,7 +535,14 @@ function renderNodes() {
 
             nodeEl.innerHTML = `
                 <div class="node-header" style="background: ${node.type === 'tool_image_gen' ? 'rgba(192,132,252,0.1)' : 'rgba(56,189,248,0.1)'};">
-                    ${node.title}
+                    <div class="node-header-main">
+                        <span>${escapeFlowHtml(node.title)}</span>
+                        <span class="node-header-tools">
+                            <button class="node-freeze-btn ${node._frozen ? 'is-frozen' : ''}" type="button" onclick="toggleNodeFreeze(event, '${node.id}')" onmousedown="event.stopPropagation()" data-tip="${node._frozen ? '解冻节点' : '冻结节点并复用缓存'}">
+                                <span class="material-symbols-outlined">${node._frozen ? 'ac_unit' : 'lock_open'}</span>
+                            </button>
+                        </span>
+                    </div>
                 </div>
                 <div class="node-body">
                     ${inputsHtml}
@@ -508,12 +552,12 @@ function renderNodes() {
                                  onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')" 
                                  onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'in')"
                                  ondblclick="disconnectPort(event, '${node.id}', '${p.id}')"></div>
-                            <span style="margin-left: 12px;">${p.label}</span>
+                            <span style="margin-left: 12px;">${escapeFlowHtml(p.label)}</span>
                         </div>
                     `).join('')}
                     ${(node.ports.out || []).map(p => `
                         <div class="port-row" style="justify-content: flex-end;">
-                            <span style="margin-right: 12px;">${p.label}</span>
+                            <span style="margin-right: 12px;">${escapeFlowHtml(p.label)}</span>
                             <div class="port port-out port-${p.type}" id="${node.id}-${p.id}" 
                                  onmousedown="startDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
                                  onmouseup="finishDrawLink(event, '${node.id}', '${p.id}', '${p.type}', 'out')"
@@ -531,6 +575,7 @@ function renderNodes() {
             nodeBoard.appendChild(nodeEl);
         }
 
+        nodeEl.classList.toggle('is-frozen', !!node._frozen);
         nodeEl.style.transform = `translate(${node.x}px, ${node.y}px)`;
         evaluateNodeConditions(node.id);
     });
@@ -575,6 +620,39 @@ window.toggleNodeInputs = function(nodeId) {
     }
     if (typeof saveFlowToDB === 'function') saveFlowToDB();
     if (typeof renderMinimap === 'function') renderMinimap();
+};
+
+window.toggleNodeFreeze = function(event, nodeId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    node._frozen = !node._frozen;
+    const el = document.getElementById(nodeId);
+    if (el) {
+        el.classList.toggle('is-frozen', !!node._frozen);
+        const btn = el.querySelector('.node-freeze-btn');
+        if (btn) {
+            btn.classList.toggle('is-frozen', !!node._frozen);
+            btn.setAttribute('data-tip', node._frozen ? '解冻节点' : '冻结节点并复用缓存');
+            const icon = btn.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = node._frozen ? 'ac_unit' : 'lock_open';
+        }
+    }
+    if (typeof saveFlowToDB === 'function') saveFlowToDB();
+};
+
+window.clearNodeCache = function(nodeId) {
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    node.result = null;
+    node._lastInputHash = '';
+    const preview = document.getElementById(`preview-${nodeId}`);
+    if (preview) preview.innerHTML = '';
+    setNodeStatus(nodeId, 'idle');
+    if (typeof saveFlowToDB === 'function') saveFlowToDB();
 };
 
 // ==========================================
@@ -1390,6 +1468,8 @@ let menuClickWorldPos = { x: 0, y: 0 };
 window.showNodeMenu = function(e, nodeId) {
     e.preventDefault(); e.stopPropagation();
     menuTargetNodeId = nodeId;
+    const node = flowState.nodes.find(n => n.id === nodeId);
+    const freezeLabel = node && node._frozen ? '解冻节点' : '冻结并复用缓存';
     ctxMenu.innerHTML = `
         <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; color: #38bdf8;"
              onmouseover="this.style.background='rgba(56,189,248,0.12)'" onmouseout="this.style.background='transparent'"
@@ -1400,6 +1480,17 @@ window.showNodeMenu = function(e, nodeId) {
              onmouseover="this.style.background='rgba(167,139,250,0.12)'" onmouseout="this.style.background='transparent'"
              onclick="runFlow({mode:'single', startNodeId:'${nodeId}'})">
             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">bolt</span> 仅执行该节点
+        </div>
+        <div style="height:1px; background: rgba(255,255,255,0.08); margin: 6px 0;"></div>
+        <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; color: #f59e0b;"
+             onmouseover="this.style.background='rgba(245,158,11,0.12)'" onmouseout="this.style.background='transparent'"
+             onclick="toggleNodeFreeze(event, '${nodeId}')">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">ac_unit</span> ${freezeLabel}
+        </div>
+        <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; color: #94a3b8;"
+             onmouseover="this.style.background='rgba(148,163,184,0.12)'" onmouseout="this.style.background='transparent'"
+             onclick="clearNodeCache('${nodeId}')">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">cached</span> 清除该节点缓存
         </div>
         <div style="height:1px; background: rgba(255,255,255,0.08); margin: 6px 0;"></div>
         <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; color: #ef4444;" 
@@ -1429,11 +1520,12 @@ viewport.addEventListener('contextmenu', (e) => {
 
     let html = `<div style="padding: 4px 8px; font-size: 11px; color: #666; border-bottom: 1px solid #333; margin-bottom: 4px;">添加节点</div>`;
     PluginManager.getAllSchemas().forEach(schema => {
+        const safeSchemaTypeJs = escapeFlowJsString(schema.type);
         html += `
             <div style="padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;" 
                  onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'"
-                 onclick="spawnNode('${schema.type}')">
-                ${schema.title}
+                 onclick="spawnNode('${safeSchemaTypeJs}')">
+                ${escapeFlowHtml(schema.title)}
             </div>
         `;
     });
@@ -1477,13 +1569,14 @@ window.initNodePalette = function() {
     
     let html = '';
     for (let cat in groups) {
-        html += `<div class="palette-group-title">${cat}</div>`;
+        html += `<div class="palette-group-title">${escapeFlowHtml(cat)}</div>`;
         groups[cat].forEach(s => {
+            const safeTypeJs = escapeFlowJsString(s.type);
             html += `
                 <div class="palette-item" draggable="true" 
-                     ondragstart="event.dataTransfer.setData('veo-node-type', '${s.type}')">
+                     ondragstart="event.dataTransfer.setData('veo-node-type', '${safeTypeJs}')">
                     <span class="material-symbols-outlined" style="font-size:16px;">drag_indicator</span>
-                    ${s.title}
+                    ${escapeFlowHtml(s.title)}
                 </div>
             `;
         });
@@ -2160,8 +2253,8 @@ window.AutocompleteController = {
         }
         this.dropdownEl.innerHTML = this.candidates.map((c, i) => `
             <div class="autocomplete-item ${i === this.activeIndex ? 'is-active' : ''}" 
-                 onmousedown="window.AutocompleteController.inject('${c.code}'); event.stopPropagation();">
-                <span>${c.label}</span>
+                 onmousedown="window.AutocompleteController.inject('${escapeFlowJsString(c.code)}'); event.stopPropagation();">
+                <span>${escapeFlowHtml(c.label)}</span>
                 <span class="autocomplete-tag ${c.type === 'local' ? 'tag-local' : 'tag-cross'}">${c.type === 'local' ? '引脚' : '跨节点'}</span>
             </div>
         `).join('');
@@ -2324,7 +2417,6 @@ async function executeNode(nodeId) {
     const node = flowState.nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    setNodeStatus(nodeId, 'running');
     const nodeStartTime = Date.now();
     
     try {
@@ -2332,9 +2424,19 @@ async function executeNode(nodeId) {
         const incomingLinks = flowState.links.filter(l => l.target === nodeId);
         for (let link of incomingLinks) {
             const sourceNode = flowState.nodes.find(n => n.id === link.source);
-            if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result; 
+            if (sourceNode && sourceNode.result) upstreamInputs[link.targetPort] = sourceNode.result;
         }
 
+        if (node._frozen) {
+            if (node.result) {
+                setNodeStatus(nodeId, 'cached', { label: 'Frozen Cache' });
+                return;
+            }
+            setNodeStatus(nodeId, 'error');
+            throw new Error(`节点 [${node.title || node.id}] 已冻结，但没有可复用缓存`);
+        }
+
+        setNodeStatus(nodeId, 'running');
         const executor = PluginManager.getExecutor(node.type);
         if (!executor) throw new Error(`引擎未找到节点类型 [${node.type}] 的执行器`);
 
@@ -2342,8 +2444,7 @@ async function executeNode(nodeId) {
         const compiledData = compileExpressionTemplate(node.data || {}, upstreamInputs, flowState.nodes);
         const inputHash = computeNodeExecutionHash(node, compiledData, upstreamInputs);
         if (node.result && node._lastInputHash && node._lastInputHash === inputHash) {
-            const costTimeCached = ((Date.now() - nodeStartTime) / 1000).toFixed(2);
-            setNodeStatus(nodeId, 'success', { costTime: `${costTimeCached} (cache)` });
+            setNodeStatus(nodeId, 'cached', { label: 'Cache Hit' });
             return;
         }
 
@@ -2394,6 +2495,11 @@ function setNodeStatus(nodeId, status, meta = {}) {
     const el = document.getElementById(nodeId);
     if (!el) return;
     el.style.transition = 'all 0.3s ease';
+    el.classList.remove('is-running', 'is-success', 'is-error', 'is-auto-retrying');
+    if (status === 'running') el.classList.add('is-running');
+    if (status === 'success' || status === 'cached') el.classList.add('is-success');
+    if (status === 'error') el.classList.add('is-error');
+    if (status === 'running' && meta.retryCount) el.classList.add('is-auto-retrying');
 
     let statusBar = el.querySelector('.node-status-bar');
     if (!statusBar) {
@@ -2440,7 +2546,7 @@ function setNodeStatus(nodeId, status, meta = {}) {
         const timerId = setInterval(renderStatusUI, 1000); 
         el.dataset.timerId = timerId;
 
-    } else if (status === 'success') {
+    } else if (status === 'success' || status === 'cached') {
         el.style.boxShadow = '0 0 30px 5px rgba(34, 197, 94, 0.3)';
         el.style.borderColor = '#22c55e';
         statusBar.style.background = 'rgba(34, 197, 94, 0.15)';
@@ -2449,7 +2555,9 @@ function setNodeStatus(nodeId, status, meta = {}) {
         statusBar.style.opacity = '1';
         statusBar.style.pointerEvents = 'none'; 
         const costTime = meta.costTime || 0;
-        statusBar.innerHTML = `✅ 跑通完毕 ⏱️ <span style="font-weight:bold;">${costTime}s</span>`;
+        statusBar.innerHTML = status === 'cached'
+            ? `🧊 ${escapeFlowHtml(meta.label || 'Cache Hit')}`
+            : `✅ 跑通完毕 ⏱️ <span style="font-weight:bold;">${escapeFlowHtml(costTime)}s</span>`;
         setTimeout(() => { statusBar.style.opacity = '0'; statusBar.style.bottom = '-24px'; }, 4000);
 
     } else if (status === 'error') {

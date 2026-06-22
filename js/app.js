@@ -332,6 +332,7 @@ const IMG_GEN_PREVIEW_LIMIT = 6;
 const IMG_GEN_CLICK_COOLDOWN_MS = 3000;
 const IMG_GEN_VARIATION_COUNT = 4;
 const IMG_GEN_STAGE_DOCK_MIN_TRAVEL = 96;
+const IMG_GEN_TRIAL_AVAILABLE = false;
 function normalizeWebhookEndpointForCompare(rawUrl) {
     const raw = String(rawUrl || '').trim();
     if (!raw) return '';
@@ -5167,7 +5168,7 @@ function renderImgGenParams(task) {
             <label class="img-gen-field">
                 <span>模型</span>
                 <select class="img-gen-select" onchange="updateImgGenState('${task.id}', 'version', this.value)" data-tip="试用版走旧模型双通道，专业版走 GPT Image 2">
-                    <option value="trial" ${state.version === 'trial' ? 'selected' : ''}>试用版 Legacy</option>
+                    <option value="trial" ${state.version === 'trial' ? 'selected' : ''} ${IMG_GEN_TRIAL_AVAILABLE ? '' : 'disabled'}>试用版 Legacy${IMG_GEN_TRIAL_AVAILABLE ? '' : '（服务关闭）'}</option>
                     <option value="pro" ${state.version === 'pro' ? 'selected' : ''}>专业版 GPT Image 2</option>
                 </select>
             </label>
@@ -6107,7 +6108,7 @@ function ensureImgGenState(task) {
     if (!task || task.type !== 'tool_image_gen') return;
     if (!task.state || typeof task.state !== 'object') task.state = {};
     if (!Array.isArray(task.state.images)) task.state.images = [];
-    if (!task.state.version) task.state.version = 'trial';
+    if (!task.state.version || (task.state.version === 'trial' && !IMG_GEN_TRIAL_AVAILABLE)) task.state.version = 'pro';
     const route = normalizeImgGenRoute(task.state.providerSort || task.state.modelSuffix || task.state.routeMode || 'stable');
     task.state.providerSort = route.key;
     task.state.modelSuffix = route.suffix;
@@ -7509,14 +7510,20 @@ async function updateImgGenState(taskId, key, val) {
             task.state.size = resolveImgGenSize(task.state);
         } else if (key === 'version') {
             const nextVersion = val === 'pro' ? 'pro' : 'trial';
-            task.state.version = nextVersion;
-            if (nextVersion === 'pro') {
-                const detected = detectProPresetFromSize(task.state.size);
-                if (detected.proRatio && detected.proRatio !== 'auto') task.state.proRatio = detected.proRatio;
-                if (detected.proResolution) task.state.proResolution = detected.proResolution;
+            if (nextVersion === 'trial' && !IMG_GEN_TRIAL_AVAILABLE) {
+                task.state.version = 'pro';
                 task.state.size = resolveImgGenSize(task.state);
+                showToast('试用版服务通道已关闭，已保持专业版', 'warning');
             } else {
-                task.state.size = resolveImgGenSize(task.state);
+                task.state.version = nextVersion;
+                if (nextVersion === 'pro') {
+                    const detected = detectProPresetFromSize(task.state.size);
+                    if (detected.proRatio && detected.proRatio !== 'auto') task.state.proRatio = detected.proRatio;
+                    if (detected.proResolution) task.state.proResolution = detected.proResolution;
+                    task.state.size = resolveImgGenSize(task.state);
+                } else {
+                    task.state.size = resolveImgGenSize(task.state);
+                }
             }
         } else if (key === 'size') {
             task.state.size = val;
@@ -7715,6 +7722,16 @@ async function submitImgGen(taskId) {
     if (!task) return;
     ensureImgGenState(task);
     if (!task.state.prompt) return showToast("请输入生图提示词", "error");
+    const version = task.state.version === 'pro' ? 'pro' : 'trial';
+    if (version !== 'pro' && !IMG_GEN_TRIAL_AVAILABLE) {
+        task.state.version = 'pro';
+        task.state.size = resolveImgGenSize(task.state);
+        task.timestamp = Date.now();
+        setTaskShadow(task);
+        await renderCard(taskId, task);
+        await saveTaskDB(task).catch(() => {});
+        return showToast('试用版服务通道已关闭，请使用专业版 GPT Image 2', 'warning');
+    }
     const now = Date.now();
     const nextSubmitAt = toFiniteNumber(task.state.nextSubmitAt, 0);
     if (now < nextSubmitAt) {
@@ -7755,7 +7772,6 @@ async function submitImgGen(taskId) {
         } catch (err) {}
     }, IMG_GEN_CLICK_COOLDOWN_MS + 40);
 
-    const version = task.state.version === 'pro' ? 'pro' : 'trial';
     let resolvedSize = resolveImgGenSize(task.state);
     let finalPrompt = task.state.prompt;
     const trialCustomW = task.state.customW || 9;
